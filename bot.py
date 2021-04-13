@@ -19,6 +19,11 @@ os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
 os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
 client.load_extension('jishaku')
 
+client.session = aiohttp.ClientSession()
+client.socket_receive = 0
+client.socket_stats = Counter()
+client.start_time = time.time()
+
 for filename in os.listdir('./cogs'):
   if filename.endswith('.py'):
     client.load_extension(f'cogs.{filename[:-3]}')
@@ -30,10 +35,7 @@ async def create_db_pool():
     client.pg_con = await asyncpg.create_pool(database="postgres", user="postgres", password="postgres")
 
 
-client.session = aiohttp.ClientSession()
-client.socket_receive = 0
-client.socket_stats = Counter()
-client.start_time = time.time()
+
 
 client.codes = {
       1: "HEARTBEAT",
