@@ -1,6 +1,6 @@
 import os
 import discord
-from discord import client
+import aiohttp
 from discord.ext import commands, ipc
 import asyncpg
 import logging
@@ -30,6 +30,7 @@ async def create_db_pool():
     client.pg_con = await asyncpg.create_pool(database="postgres", user="postgres", password="postgres")
 
 
+client.session = aiohttp.ClientSession()
 client.socket_receive = 0
 client.socket_stats = Counter()
 client.start_time = time.time()
