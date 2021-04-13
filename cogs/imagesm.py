@@ -28,7 +28,7 @@ class Imagesm(commands.Cog):
 
     @commands.command(help="Get an achievement", aliases = ["ach"])
     async def achievment(self, ctx, *,text: str, icon = None):
-        image = await alex_api.achievement(text=text, icon=icon)
+        image = await self.alex_api.achievement(text=text, icon=icon)
         embed = discord.Embed(color=0xffcff1).set_image(url="attachment://achievement.png")
         image = discord.File(await (await alex_api.achievement(text=text)).read(), "achievement.png")
         await ctx.send(embed=embed, file=image)
@@ -36,7 +36,7 @@ class Imagesm(commands.Cog):
 
     @commands.command(help="Make a text in supreme font/style", aliases = ["sup"])
     async def supreme(self, ctx, *,text, dark=False, light=False):
-        image = await alex_api.supreme(text, dark, light)
+        image = await self.alex_api.supreme(text, dark, light)
         embed = discord.Embed(color=0xffcff1).set_image(url="attachment://supreme.png")
         image = discord.File(await (await alex_api.supreme(text=text)).read(), "supreme.png")
         await ctx.send(embed=embed, file=image)
@@ -48,7 +48,7 @@ class Imagesm(commands.Cog):
         else:
             impostor = False
 
-        image = await vac_api.ejected(name, crewmate, impostor)
+        image = await self.vac_api.ejected(name, crewmate, impostor)
         image_out = discord.File(fp = await image.read(), filename = "ejected.png")
         await ctx.send(file = image_out)
 
@@ -57,7 +57,7 @@ class Imagesm(commands.Cog):
         if user == None:
             user = ctx.author
 
-        image = await vac_api.wide(user.avatar_url)
+        image = await self.vac_api.wide(user.avatar_url)
         image_out = discord.File(fp = await image.read(), filename = "wide.png")
         await ctx.send(file = image_out)
 
@@ -76,7 +76,7 @@ class Imagesm(commands.Cog):
         if not_stonks == "false":
             not_stonks = True
 
-        image = await vac_api.stonks(user.avatar_url, not_stonks)
+        image = await self.vac_api.stonks(user.avatar_url, not_stonks)
         image_out = discord.File(fp = await image.read(), filename = "stonks.png")
         await ctx.send(file = image_out)
 
@@ -98,7 +98,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.pixel(), url)
+        img = await self.dagpi.image_process(ImageFeatures.pixel(), url)
         file = discord.File(fp=img.image,filename=f"pixel.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://pixel.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -120,7 +120,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.polaroid(), url)
+        img = await self.dagpi.image_process(ImageFeatures.polaroid(), url)
         file = discord.File(fp=img.image,filename=f"polaroid.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://polaroid.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -142,7 +142,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.ascii(), url)
+        img = await self.dagpi.image_process(ImageFeatures.ascii(), url)
         file = discord.File(fp=img.image,filename=f"ascii.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://ascii.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -164,7 +164,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.angel(), url)
+        img = await self.dagpi.image_process(ImageFeatures.angel(), url)
         file = discord.File(fp=img.image,filename=f"angel.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://angel.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -185,7 +185,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.paint(), url)
+        img = await self.dagpi.image_process(ImageFeatures.paint(), url)
         file = discord.File(fp=img.image,filename=f"paint.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://paint.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -207,7 +207,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.colors(), url)
+        img = await self.dagpi.image_process(ImageFeatures.colors(), url)
         file = discord.File(fp=img.image,filename=f"colors.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://colors.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -229,7 +229,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.triangle(), url)
+        img = await self.dagpi.image_process(ImageFeatures.triangle(), url)
         file = discord.File(fp=img.image,filename=f"triangle.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://triangle.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -251,7 +251,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.satan(), url)
+        img = await self.dagpi.image_process(ImageFeatures.satan(), url)
         file = discord.File(fp=img.image,filename=f"satan.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://satan.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -273,7 +273,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.wasted(), url)
+        img = await self.dagpi.image_process(ImageFeatures.wasted(), url)
         file = discord.File(fp=img.image,filename=f"wasted.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://wasted.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -295,7 +295,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.solar(), url)
+        img = await self.dagpi.image_process(ImageFeatures.solar(), url)
         file = discord.File(fp=img.image,filename=f"solar.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://solar.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -317,7 +317,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.jail(), url)
+        img = await self.dagpi.image_process(ImageFeatures.jail(), url)
         file = discord.File(fp=img.image,filename=f"jail.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://jail.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -339,7 +339,7 @@ class Imagesm(commands.Cog):
             else:
                 return await ctx.send("Image not found.")
 
-        img = await dagpi.image_process(ImageFeatures.charcoal(), url)
+        img = await self.dagpi.image_process(ImageFeatures.charcoal(), url)
         file = discord.File(fp=img.image,filename=f"charcoal.{img.format}")
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://charcoal.{img.format}")
         return await ctx.send(embed=embed, file=file)
@@ -353,7 +353,7 @@ class Imagesm(commands.Cog):
         if member.id == self.bot.user.id:
             return await ctx.send("Nah, roast someone else.")
 
-        roast = await dagpi.roast()
+        roast = await self.dagpi.roast()
         await ctx.send(f"**{member.name}**, " + roast)
 
     @commands.command(help="Get the rainbow effect with a member avatar.", aliases = ["rnbw"])
