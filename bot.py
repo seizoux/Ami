@@ -1,13 +1,7 @@
-# There is an amateur and simple python source to config a really useful discord bot.
-# Contact me con Telegram for any issues ↪ @fyjxre.
-# Discord Server : https://discord.gg/8ppmk2MyM4
-
-
-# Requirements, Command Prefix & Start Console Message
 import os
-import discord # library
-from discord import client  # library
-from discord.ext import commands, ipc  # library
+import discord
+from discord import client
+from discord.ext import commands, ipc
 import asyncpg
 import logging
 from collections import Counter
@@ -17,7 +11,6 @@ import os
 import discord
 
 
-# THIS IS THE TRIGGER PREFIX OF UR COMMANDS, LIKE ".BAN" "/BAN" "!BAN" "?BAN" "$BAN"
 intents=discord.Intents.default()
 client = commands.AutoShardedBot(command_prefix=["ami ", "Ami ", "a!"], intents=intents)
 start_time = datetime.datetime.utcnow()
@@ -64,13 +57,10 @@ async def on_ready():
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=f"amidiscord.xyz"))
 
 
-# WARNING: HERE PUT THE TOKEN OF UR BOT!!
-token="Ami Token Omitted"
-
 
 @client.command(help="See the ami uptime from the last reboot", pass_context=True)
 async def uptime(ctx: commands.Context):
-    now = datetime.datetime.utcnow() # Timestamp of when uptime function is run
+    now = datetime.datetime.utcnow()
     delta = now - start_time
     hours, remainder = divmod(int(delta.total_seconds()), 3600)
     minutes, seconds = divmod(remainder, 60)
@@ -84,6 +74,6 @@ async def uptime(ctx: commands.Context):
     await ctx.send(embed=em)
 
 
-# RUN CLIENT -- IF U DELETE THIS, THE BOT DON'T WORK!!
 client.loop.run_until_complete(create_db_pool())
+token="Ami Token Omitted"
 client.run(token)
