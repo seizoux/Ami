@@ -12,8 +12,8 @@ from urllib.request import urlretrieve
 import datetime
 from discord.ext import tasks
 
-zane = aiozaneapi.Client('MTM=.99huoz8VxWkhWQ-q8wPe-4WlTuxpP-l2SCy4F0aC9fBCR0Hj')
-alex_api = alexflipnote.Client("TTkXZ5zOW5pEWnvZxfxQ2DUtYkdZyYOl9Kel_hoK")
+zane = aiozaneapi.Client('TOKEN')
+alex_api = alexflipnote.Client("TOKEN")
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
