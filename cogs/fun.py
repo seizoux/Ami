@@ -308,6 +308,21 @@ class Fun(commands.Cog):
         em = discord.Embed(description=f"**{link}**\n**{link2}**\nThanks if you vote! <3", color = 0xffcff1)
         await ctx.send(embed=em)
 
+    @commands.command(help='Catch the pie within the time')
+    async def catch(self, ctx):
+        embed = discord.Embed(title='Catch the Pie!', color=discord.Color.green(), description='3')
+        msg = await ctx.send(embed=embed)
+        for x in ['2', '1']:
+            await asyncio.sleep(1)
+            embed.description = x
+            await msg.edit(embed=embed)
+        await asyncio.sleep(1)
+        embed.description = 'NOW'
+        await msg.edit(embed=embed)
+        await msg.add_reaction('\U0001f967')
+        time_perf = time.perf_counter()
+        def check(reaction, user):
+            return str(reaction.emoji) == '🥧' and user.name != self.bot.user.name        
 
     @commands.command(help="See the humor of a member")
     async def humor(self, ctx, member: discord.Member = None):
