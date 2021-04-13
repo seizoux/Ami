@@ -12,13 +12,14 @@ import cv2 as cv
 from urllib.request import Request, urlopen
 import numpy as np
 
-dagpi = Client("t35iaK4gi36TH3N2q0zd95A1h9m4TeInrLP6oyibSaK97q9SCRggzMUlCMWLkklU")
-vac_api = vacefron.Client()
-alex_api = alexflipnote.Client("TTkXZ5zOW5pEWnvZxfxQ2DUtYkdZyYOl9Kel_hoK")
+
 
 class Imagesm(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.dagpi = Client("no token", session=self.bot.session)
+        self.vac_api = vacefron.Client(session=self.bot.session)
+        self.alex_api = alexflipnote.Client("no token again", session=self.bot.session)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -366,7 +367,7 @@ class Imagesm(commands.Cog):
             url = member
         else:
             if member.startswith('https'):
-                async with aiohttp.ClientSession().get(member) as resp:
+                async with self.bot.session.get(member) as resp:
                     av = await resp.read()
                     im = Image(av)
                     im.apply_gradient()
