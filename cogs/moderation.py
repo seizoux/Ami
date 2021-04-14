@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-import datetime
 
 
 class Moderation(commands.Cog):
@@ -18,16 +17,13 @@ class Moderation(commands.Cog):
         await toleave.leave()
         print("Left Server")
 
-
-
-# Clear Command
+    # Clear Command
     @commands.command(help="Delete X messages")
     @commands.has_permissions(manage_messages=True)
     async def clear(self, ctx, amount: int):
         await ctx.channel.purge(limit=amount)
-        
 
-# Ban Command
+    # Ban Command
     @commands.command(help="Ban a member from the guild")
     @commands.has_permissions(ban_members=True)
     async def ban(self, ctx, member: discord.Member, *, reason=None):
@@ -35,7 +31,7 @@ class Moderation(commands.Cog):
         await ctx.send(f":no_entry_sign: **Banned** {member.mention} by {ctx.author.mention}.")
         return
 
-# Unban Command
+    # Unban Command
     @commands.command(help="Unban a member from the guild (name#0000)")
     @commands.has_permissions(ban_members=True)
     async def unban(self, ctx, *, member):
@@ -50,7 +46,7 @@ class Moderation(commands.Cog):
                 await ctx.send(":free: **Unbanned**" + member_name + f"by {ctx.author.mention}")
                 return
 
-# Kick Command
+    # Kick Command
     @commands.command(help="Kick a member from the guild")
     @commands.has_permissions(kick_members=True)
     async def kick(self, ctx, member: discord.Member, *, reason=None):
@@ -58,7 +54,7 @@ class Moderation(commands.Cog):
         await ctx.send(f":raised_back_of_hand: **Kicked** {member.mention}")
         return
 
-# Mute Command
+    # Mute Command
     @commands.command(help="Mute someone in the guild")
     @commands.has_permissions(kick_members=True)
     async def mute(self, ctx, member: discord.Member):
@@ -69,7 +65,8 @@ class Moderation(commands.Cog):
             muted_role = await guild.create_role(name="Muted")
 
         for channel in guild.channels:
-            await channel.set_permissions(muted_role, speak=False, send_messages=False, read_message_history=True, read_messages=False)
+            await channel.set_permissions(muted_role, speak=False, send_messages=False, read_message_history=True,
+                                          read_messages=False)
 
             await member.edit(roles=[])
             await member.add_roles(muted_role)
@@ -77,8 +74,7 @@ class Moderation(commands.Cog):
             await ctx.send(f":no_bell: {member.mention} muted by {ctx.author.mention}.")
             return
 
-
-# Unmute Command
+    # Unmute Command
     @commands.command(help="Unmute someone in the guild")
     @commands.has_permissions(kick_members=True)
     async def unmute(self, ctx, member: discord.Member):
@@ -89,7 +85,7 @@ class Moderation(commands.Cog):
 
         await ctx.send(f":bell: **Unmuted** {member.mention} by {ctx.author.mention}")
         return
-    
+
 
 def setup(bot):
     bot.add_cog(Moderation(bot))

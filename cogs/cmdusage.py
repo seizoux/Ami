@@ -2,8 +2,7 @@ from collections import Counter
 
 import discord
 from discord.ext import commands
-
-from jishaku.paginators import WrappedPaginator, PaginatorInterface
+from jishaku.paginators import PaginatorInterface, WrappedPaginator
 
 
 class commandsusage(commands.Cog):
@@ -24,8 +23,7 @@ class commandsusage(commands.Cog):
     @commands.command(help="See the commands usage")
     @commands.is_owner()
     async def cmdus(self, ctx):
-        lists = []
-        lists.append(f"Total usages » {self.bot.command_counter}")
+        lists = [f"Total usages » {self.bot.command_counter}"]
         for i, (n, v) in enumerate(self.bot.commandsusages.most_common()):
             lists.append(f"{n:<30} {v:<15}")
         paginator = WrappedPaginator(max_size=1024, prefix="```coffeescript", suffix="```")

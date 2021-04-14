@@ -1,6 +1,4 @@
 import discord
-import asyncio
-import requests
 from discord.ext import commands
 
 
@@ -8,17 +6,16 @@ class Covid(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Covid19 Loaded")
 
-
     @commands.command(help="Take a look on Covid-19 stats")
-    async def covid(self, ctx, *, countryName = None):
+    async def covid(self, ctx, *, countryName=None):
         try:
             if countryName is None:
-                embed=discord.Embed(title="Whoops! Be sure to select a country! ```ami covid [country]```", colour=0xff0000, timestamp=ctx.message.created_at)
+                embed = discord.Embed(title="Whoops! Be sure to select a country! ```ami covid [country]```",
+                                      colour=0xff0000, timestamp=ctx.message.created_at)
                 await ctx.send(embed=embed)
 
 
@@ -39,7 +36,8 @@ class Covid(commands.Cog):
                     totalTests = json_stats["totalTests"]
                     testsPerOneMillion = json_stats["testsPerOneMillion"]
 
-                    embed2 = discord.Embed(title=f"**COVID-19 Status Of {country}**!", colour=0xffcff1, timestamp=ctx.message.created_at)
+                    embed2 = discord.Embed(title=f"**COVID-19 Status Of {country}**!", colour=0xffcff1,
+                                           timestamp=ctx.message.created_at)
                     embed2.add_field(name="**Total Cases**", value=totalCases, inline=True)
                     embed2.add_field(name="**Today Cases**", value=todayCases, inline=True)
                     embed2.add_field(name="**Total Deaths**", value=totalDeaths, inline=True)
@@ -52,7 +50,8 @@ class Covid(commands.Cog):
                     embed2.add_field(name="**Total Tests**", value=totalTests, inline=True)
                     embed2.add_field(name="**Tests Per One Million**", value=testsPerOneMillion, inline=True)
 
-                    embed2.set_thumbnail(url="https://cdn.discordapp.com/attachments/564520348821749766/701422183217365052/2Q.png")
+                    embed2.set_thumbnail(
+                        url="https://cdn.discordapp.com/attachments/564520348821749766/701422183217365052/2Q.png")
                     await ctx.send(embed=embed2)
 
         except:

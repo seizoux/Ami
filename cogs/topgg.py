@@ -1,15 +1,16 @@
-import discord
-from discord.ext import commands, tasks
-import dbl
-import asyncio
 import logging
+
+import dbl
+import discord
+from discord.ext import commands
 
 
 class Top(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjgwMTc0Mjk5MTE4NTkzNjM4NCIsImJvdCI6dHJ1ZSwiaWF0IjoxNjEzMzM5NjQwfQ.Ue9swnBhbYZ6x8NFQy7tTj-cZIwcmwakrI3ov9sekzY'  # set this to your DBL token
-        self.dblpy = dbl.DBLClient(bot, self.token, webhook_path='/dblwebhook', webhook_auth='password', webhook_port=5000)
+        self.dblpy = dbl.DBLClient(bot, self.token, webhook_path='/dblwebhook', webhook_auth='password',
+                                   webhook_port=5000)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -29,7 +30,9 @@ class Top(commands.Cog):
         user3 = user_id[2]["username"]
         user4 = user_id[3]["username"]
         user5 = user_id[4]["username"]
-        em = discord.Embed(title="Last votes on top.gg!", description = f"------------------------------\n<:upvote:596577438461591562> ⁄ *{user1}* **(#1)**\n<:upvote:596577438461591562> ⁄ *{user2}* **(#2)**\n<:upvote:596577438461591562> ⁄ *{user3}* **(#3)**\n<:upvote:596577438461591562> ⁄ *{user4}* **(#4)**\n<:upvote:596577438461591562> ⁄ *{user5}* **(#5)**\n------------------------------", color = 0xffcff1)
+        em = discord.Embed(title="Last votes on top.gg!",
+                           description=f"------------------------------\n<:upvote:596577438461591562> ⁄ *{user1}* **(#1)**\n<:upvote:596577438461591562> ⁄ *{user2}* **(#2)**\n<:upvote:596577438461591562> ⁄ *{user3}* **(#3)**\n<:upvote:596577438461591562> ⁄ *{user4}* **(#4)**\n<:upvote:596577438461591562> ⁄ *{user5}* **(#5)**\n------------------------------",
+                           color=0xffcff1)
         await ctx.send(embed=em)
 
 
