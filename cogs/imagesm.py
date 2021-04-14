@@ -320,6 +320,7 @@ class Imagesm(commands.Cog):
         embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://charcoal.{img.format}")
         return await ctx.send(embed=embed, file=file)
 
+    """
     @commands.command(help="Roast someone")
     async def roast(self, ctx, member: discord.Member = None):
         if member is None:
@@ -330,7 +331,18 @@ class Imagesm(commands.Cog):
 
         roast = await self.dagpi.roast()
         await ctx.send(f"**{member.name}**, " + roast)
-
+"""
+    @commands.command(help="Roast someone")
+    async def roast(self, ctx, member: discord.Member = None):
+        if member is None:
+            await ctx.send(f'{ctx.author.mention} do you think i am stupid or what?')
+        elif member is not None:
+            obj = req()
+            x = await obj.magic('https://evilinsult.com/generate_insult.php?lang=en&type=json')    
+            x = x.decode("utf-8")
+            j = json.loads(x)          
+            await ctx.send(j['insult'])
+    
     @commands.command(help="Get the rainbow effect with a member avatar.", aliases=["rnbw"])
     async def rainbow(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
         author_id = str(ctx.author.id)
