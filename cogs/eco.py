@@ -29,8 +29,7 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        if member == None:
-            member = ctx.author if not member else member
+        member = member or ctx.author
 
         if member:
             member_id = str(member.id)
@@ -58,40 +57,6 @@ class Eco(commands.Cog):
                 phrase = f'You also have a companion of mine called <:doggo:820992892515778650> **`{petse}`**'
 
             z = f"You actually have <:money:819700505147342900> **`{user[0]['wallet']} coins`** in the **pocket** and <:money:819700505147342900> **`{user[0]['bank']} coins`** in the **bank**. You've got <:stats:819702267850260480> **`{invest} investments`** with a profit and you've earned <:money:819700505147342900> **`{earned} coins`** from when you opened your balance. {phrase}"
-            user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
-            em=discord.Embed(color=0xffcff1)
-            em.add_field(name="<a:9123_red_circle:819689872821583960> Balance", value =f"{z}", inline = False)
-            em.set_author(name=f"{member.name}", icon_url=f"{member.avatar_url}")
-            em.set_thumbnail(url=member.avatar_url)
-            em.set_footer(text="Ami S.R.L Bank ®", icon_url=self.bot.user.avatar_url)
-            await ctx.send(embed=em)
-        else:
-            member_id = str(member.id)
-            user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
-
-            invest = user[0]['investments']
-            if not invest:
-                invest = "0"
-
-            earned = user[0]['total_earn']
-            if not earned:
-                earned = "0"
-
-            petsd = user[0]["pet_name"]
-            petse = user[0]["pet_tag"]
-
-            phrase = ''
-            
-            if petse == None:
-                petse = petsd
-
-            if petsd == None:
-                phrase = "Seems you don't have **`a pet`**, hurry up, and go to buy one to get __useful__ mining boosts!"
-            else:
-                phrase = f'You also have a companion of mine called <:doggo:820992892515778650> **`{petse}`**'
-
-
-            z = f"You actually have <:money:819700505147342900> **`{user[0]['wallet']} coins`** in the **pocket** and <:money:819700505147342900> **`{user[0]['bank']} coins`** in the **bank**. You've got <:stats:819702267850260480> **`{invest} investments`** with a profit and you've earned <:money:819700505147342900> **`{earned} coins`** from when you opened your balance. {petse}"
             user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
             em=discord.Embed(color=0xffcff1)
             em.add_field(name="<a:9123_red_circle:819689872821583960> Balance", value =f"{z}", inline = False)
