@@ -2,6 +2,7 @@ import typing
 from io import BytesIO
 
 import alexflipnote
+import random
 import discord
 import vacefron
 from asyncdagpi import Client, ImageFeatures
@@ -335,13 +336,14 @@ class Imagesm(commands.Cog):
     @commands.command(help="Roast someone")
     async def roast(self, ctx, member: discord.Member = None):
         if member is None:
-            await ctx.send(f'{ctx.author.mention} do you think i am stupid or what?')
-        elif member is not None:
-            obj = req()
-            x = await obj.magic('https://evilinsult.com/generate_insult.php?lang=en&type=json')    
-            x = x.decode("utf-8")
-            j = json.loads(x)          
-            await ctx.send(j['insult'])
+            return await ctx.send(f'{ctx.author.mention} do you think i am stupid or what?')
+        if random.randint(1, 2) == 1:
+            roast = await self.dagpi.roast()
+            await ctx.send(f"**{member.name}**, " + roast)
+        else:
+            async with self.bot.session.get('https://evilinsult.com/generate_insult.php?lang=en&type=json') as resp:
+                js = await resp.json()
+                await ctx.send(f"**{member.name}**, " + js['insult'])
     
     @commands.command(help="Get the rainbow effect with a member avatar.", aliases=["rnbw"])
     async def rainbow(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
