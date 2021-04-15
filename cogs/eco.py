@@ -177,8 +177,7 @@ class Eco(commands.Cog):
             em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
             await ctx.send(embed=em)
 
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + 1*earning, author_id)
-            await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + 1*earning, author_id)
+            await self.bot.pg_con.execute("UPDATE users SET wallet = wallet + $1, total_earn = total_earn + $1 WHERE user_id = $2", 1*earning, author_id)
 
         else:
             if level < 10:
