@@ -361,7 +361,7 @@ class Music(commands.Cog):
         if ctx.author.voice.channel != ctx.guild.me.voice.channel:
             return await ctx.send("You aren't in my voice channel.")
 
-        if volume > 150:
+        if volume > 150 or volume < 0:
             return await ctx.send(':x: Volume must be between **0 and 150**')
 
         ctx.voice_client.source.volume = volume / 150
