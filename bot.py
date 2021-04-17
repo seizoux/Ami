@@ -32,8 +32,11 @@ for filename in os.listdir('./cogs'):
 
 async def create_db_pool():
     client.pg_con = await asyncpg.create_pool(database="postgres", user="postgres", password="postgres")
-
-
+    
+@tasks.loop(minutes=1)
+async def status(bot):
+    await bot.change_presence(status=discord.Status.online,activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)}/500 | amidiscord.xyz | {round(bot.latency*1000, 2)}ms"))  
+    
 client.codes = {
     1: "HEARTBEAT",
     2: "IDENTIFY",
@@ -55,7 +58,7 @@ logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 @client.event
 async def on_ready():
     print(f"Name : {client.user.name}\nID : {client.user.id}\nLoading all cogs...")
-    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=f"amidiscord.xyz"))
+    status.start()
 
 
 @client.command(help="See the ami uptime from the last reboot", pass_context=True)
