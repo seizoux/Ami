@@ -29,7 +29,7 @@ class Funny(commands.Cog):
         await self.bot.pg_con.execute("UPDATE numbers SET hugs = $1 WHERE user_id = $2", data['hugs'] + 1,
                                       str(member.id))
 
-        
+ # Already exists (did not exist in the repo)       
     @commands.command(help="Be good and pat a members!")
     async def pat(self, ctx, member: discord.Member):
         async with self.bot.session.get('https://some-random-api.ml/animu/pat') as resp:
@@ -49,7 +49,7 @@ class Funny(commands.Cog):
         await self.bot.pg_con.execute("UPDATE numbers SET pat = $1 WHERE user_id = $2", data['pat'] + 1,
                                       str(member.id))        
 
-        
+# Create winks in db        
     @commands.command(help="Be good and wink at a members!")
     async def wink(self, ctx, member: discord.Member):
         async with self.bot.session.get('https://some-random-api.ml/animu/wink') as resp:
