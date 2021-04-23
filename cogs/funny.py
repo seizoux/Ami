@@ -67,8 +67,27 @@ class Funny(commands.Cog):
             await ctx.send(embed=em)
 
         await self.bot.pg_con.execute("UPDATE numbers SET winks = $1 WHERE user_id = $2", data['winks'] + 1,
-                                      str(member.id))  
+                                      str(member.id))
+
         
+    @commands.command(help="Be good and wink at a members!")
+    async def face_palm(self, ctx, member: discord.Member):
+        async with self.bot.session.get('https://some-random-api.ml/animu/face-palm') as resp:
+            d = (await resp.json())["link"]
+            data = await self.bot.pg_con.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.pg_con.execute("INSERT INTO numbers (user_id, face_palm) VALUES ($1, 0)", str(member.id))
+                return await ctx.reply("Just a little check, now this member can be hugged, kissed and other stuff :)")
+            times = data['face_palm']
+            if not times:
+                times = 0
+            em = discord.Embed(description=f"❤ **{ctx.author.name}** sowed face palm to **{member.name}**!", color=0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} winked at {times + 1} times from people globally! 💫")
+            await ctx.send(embed=em)
+
+        await self.bot.pg_con.execute("UPDATE numbers SET face_palm = $1 WHERE user_id = $2", data['face_palm'] + 1,
+                                      str(member.id))          
 
     @commands.command(help="When someone make you angry, slap him!")
     async def slap(self, ctx, member: discord.Member):
