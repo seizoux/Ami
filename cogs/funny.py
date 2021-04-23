@@ -29,6 +29,27 @@ class Funny(commands.Cog):
         await self.bot.pg_con.execute("UPDATE numbers SET hugs = $1 WHERE user_id = $2", data['hugs'] + 1,
                                       str(member.id))
 
+        
+    @commands.command(help="Be good and pat a members!")
+    async def pat(self, ctx, member: discord.Member):
+        async with self.bot.session.get('https://some-random-api.ml/animu/pat') as resp:
+            d = (await resp.json())["link"]
+            data = await self.bot.pg_con.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.pg_con.execute("INSERT INTO numbers (user_id, pat) VALUES ($1, 0)", str(member.id))
+                return await ctx.reply("Just a little check, now this member can be hugged, kissed and other stuff :)")
+            times = data['pat']
+            if not times:
+                times = 0
+            em = discord.Embed(description=f"❤ **{ctx.author.name}** pat **{member.name}**!", color=0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got pat {times + 1} times from people globally! 💫")
+            await ctx.send(embed=em)
+
+        await self.bot.pg_con.execute("UPDATE numbers SET pat = $1 WHERE user_id = $2", data['pat'] + 1,
+                                      str(member.id))        
+        
+
     @commands.command(help="When someone make you angry, slap him!")
     async def slap(self, ctx, member: discord.Member):
         async with self.bot.session.get('https://waifu.pics/api/sfw/slap') as resp:
