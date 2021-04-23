@@ -48,6 +48,26 @@ class Funny(commands.Cog):
 
         await self.bot.pg_con.execute("UPDATE numbers SET pat = $1 WHERE user_id = $2", data['pat'] + 1,
                                       str(member.id))        
+
+        
+    @commands.command(help="Be good and wink at a members!")
+    async def wink(self, ctx, member: discord.Member):
+        async with self.bot.session.get('https://some-random-api.ml/animu/wink') as resp:
+            d = (await resp.json())["link"]
+            data = await self.bot.pg_con.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.pg_con.execute("INSERT INTO numbers (user_id, winks) VALUES ($1, 0)", str(member.id))
+                return await ctx.reply("Just a little check, now this member can be hugged, kissed and other stuff :)")
+            times = data['winks']
+            if not times:
+                times = 0
+            em = discord.Embed(description=f"❤ **{ctx.author.name}** winked at **{member.name}**!", color=0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} winked at {times + 1} times from people globally! 💫")
+            await ctx.send(embed=em)
+
+        await self.bot.pg_con.execute("UPDATE numbers SET winks = $1 WHERE user_id = $2", data['winks'] + 1,
+                                      str(member.id))  
         
 
     @commands.command(help="When someone make you angry, slap him!")
