@@ -152,13 +152,68 @@ class Moderation(commands.Cog):
         elif toggle == "off":
             return await ctx.send(f"Antispam was succesfully set on **`{toggle}`**, now no messages will be deleted.")
 
+    @commands.command(help="Enable or disable the anti in the guild! \"toogle\" must be 'on' or 'off'")
+    @commands.has_permissions(manage_messages=True)
+    async def antispam(self, ctx, toggle):
+        guild_id = str(ctx.message.channel.id)
+        data = await self.bot.pg_con.fetchrow("SELECT * FROM antiabuse WHERE channel_id = $1", guild_id)
+
+        if not data:
+            s = "off"
+            await self.bot.pg_con.execute("INSERT INTO antiabuse (channel_id, toggle) VALUES ($1, $2)", guild_id, s)
+            return await ctx.send("This channel was not found in the database, so i've automatically added it, now you can set the antiabuse!")
+
+        toggles = ["On", "on", "Off", "off"]
+        if toggle not in toggles:
+            return await ctx.send("Only `on` or `off` are accepted.")
+
+        tg = data["toggle"]
+        if toggle == tg:
+            return await ctx.send(f"The antispam for this guild is already on `{toggle}`.")
+
+        await self.bot.pg_con.execute("UPDATE antiabuse SET toggle = $1 WHERE channel_id = $2", toggle, guild_id)
+        if toggle == "on":
+            return await ctx.send(f"Antiabuse was succesfully set on **`{toggle}`**, from now all messages containing vulgar language will be deleted.")
+        elif toggle == "off":
+            return await ctx.send(f"Antiabuse was succesfully set off **`{toggle}`**, now no messages will be deleted.")        
+        
     @commands.Cog.listener()
     async def on_message(self, message):
+        curse_words = ['fuck', 'bitch', 'nigga', 'dick', 'pussy', 'whore', 'twat', 'fucking', 'anal', 'anus', 'arse', 'ass',
+               'ballsack', 'balls', 'bastard', 'bitch', 'biatch', 'bloody', 'blowjob', 'blow job', 'bollock', 'bollok',
+               'boner', 'boob', 'bugger', 'bum', 'butt', 'buttplug', 'clitoris', 'cock', 'coon', 'crap', 'cunt', 'dick',
+               'dildo', 'dyke', 'fag', 'feck', 'fellate', 'fellatio', 'felching', 'fuck', 'f u c k', 'fudgepacker',
+               'fudge packer', 'flange', 'homo', 'jerk', 'jizz', 'knobend', 'knob end', 'labia', 'muff', 'nigger',
+               'nigga', 'penis', 'piss', 'poop', 'prick', 'pube', 'pussy', 'queer', 'scrotum', 'sex', 'shit', 's hit',
+               'sh1t', 'slut', 'smegma', 'spunk', 'tit', 'tosser', 'turd', 'twat', 'vagina', 'wank', 'whore']
         if message.guild == None:
             return
         guild_id = str(message.guild.id)
+        channel_id = str(message.channel.id)
         data = await self.bot.pg_con.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", guild_id)
+        antiabuse_data = await self.bot.pg_con.fetchrow("SELECT * FROM antiabuse WHERE channel_id = $1", guild_id)
         if not data:
+            return
+        
+        if not antiabuse_data:
+            return
+        
+        antiabuse_data_toggle = antiabuse_data["toggle"]
+        # Checking if toggle is on in certain channel
+        if antiabuse_data_toggle == "on":
+            if message.author == bot.user:
+                return
+            content_split = message.content.split()
+            if any(bad_word in content_split for bad_word in curse_words):
+                try:
+                    await message.delete()
+                    await message.channel.send(f'{message.author.mention} please do not swear')
+                    return
+                except Exception:
+                    # Permission issues
+                    pass
+        
+        elif antiabuse_data_toggle != "on":
             return
         
         tg = data["toggle"]
@@ -186,7 +241,7 @@ class Moderation(commands.Cog):
                         await message.channel.send(f"{message.author.mention}, you can't send links in this guild while the **antispam** is __on__.")
                     except Exception:
                         pass
-        else:
+        elif tg != "on":
             return
 
 
