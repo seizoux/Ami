@@ -155,12 +155,12 @@ class Moderation(commands.Cog):
     @commands.command(help="Enable or disable the anti in the guild! \"toogle\" must be 'on' or 'off'")
     @commands.has_permissions(manage_messages=True)
     async def antiabuse(self, ctx, toggle):
-        guild_id = str(ctx.message.channel.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM antiabuse WHERE channel_id = $1", guild_id)
+        channel_id = str(ctx.message.channel.id)
+        data = await self.bot.pg_con.fetchrow("SELECT * FROM antiabuse WHERE channel_id = $1", channel_id)
 
         if not data:
             s = "off"
-            await self.bot.pg_con.execute("INSERT INTO antiabuse (channel_id, toggle) VALUES ($1, $2)", guild_id, s)
+            await self.bot.pg_con.execute("INSERT INTO antiabuse (channel_id, toggle) VALUES ($1, $2)", channel_id, s)
             return await ctx.send("This channel was not found in the database, so i've automatically added it, now you can set the antiabuse!")
 
         toggles = ["On", "on", "Off", "off"]
@@ -171,7 +171,7 @@ class Moderation(commands.Cog):
         if toggle == tg:
             return await ctx.send(f"The antispam for this guild is already on `{toggle}`.")
 
-        await self.bot.pg_con.execute("UPDATE antiabuse SET toggle = $1 WHERE channel_id = $2", toggle, guild_id)
+        await self.bot.pg_con.execute("UPDATE antiabuse SET toggle = $1 WHERE channel_id = $2", toggle, channel_id)
         if toggle == "on":
             return await ctx.send(f"Antiabuse was succesfully set on **`{toggle}`**, from now all messages containing vulgar language will be deleted.")
         elif toggle == "off":
