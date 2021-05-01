@@ -12,9 +12,9 @@ import cv2 as cv
 from urllib.request import Request, urlopen
 import numpy as np
 
-dagpi = Client("t35iaK4gi36TH3N2q0zd95A1h9m4TeInrLP6oyibSaK97q9SCRggzMUlCMWLkklU")
+dagpi = Client("token")
 vac_api = vacefron.Client()
-alex_api = alexflipnote.Client("TTkXZ5zOW5pEWnvZxfxQ2DUtYkdZyYOl9Kel_hoK")
+alex_api = alexflipnote.Client("token")
 
 class Imagesm(commands.Cog):
     def __init__(self, bot):
