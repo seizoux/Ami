@@ -154,7 +154,7 @@ class Moderation(commands.Cog):
 
     @commands.command(help="Enable or disable the anti in the guild! \"toogle\" must be 'on' or 'off'")
     @commands.has_permissions(manage_messages=True)
-    async def antispam(self, ctx, toggle):
+    async def antiabuse(self, ctx, toggle):
         guild_id = str(ctx.message.channel.id)
         data = await self.bot.pg_con.fetchrow("SELECT * FROM antiabuse WHERE channel_id = $1", guild_id)
 
