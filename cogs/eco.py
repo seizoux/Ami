@@ -121,7 +121,7 @@ class Eco(commands.Cog):
         user1 = await self.bot.pg_con.fetchrow("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", author_id, guild_id)
         await self.bot.pg_con.execute("UPDATE users SET wallet = 1 WHERE user_id = $1", author_id)
 
-        earnings=random.randrange(400, 1000)
+        earnings=random.randrange(100, 700)
         pickaxe=random.randrange(1, 100)
 
         pet = user["pet_name"]
@@ -268,13 +268,20 @@ class Eco(commands.Cog):
 
         if not data:
             self.bot.get_command("invest").reset_cooldown(ctx)
-            return await ctx.send("Seems you don't have a balance: open one with `ami bal` to can trade coins.")
+            return await ctx.send("Seems you don't have a balance: open one with `ami bal` to can invest coins.")
 
         if not amount:
             return self.bot.get_command("invest").reset_cooldown(ctx)
 
         if amount == "all":
+            if wallet > 1000000:
+                await ctx.reply("You have more than **`1 million`** coins in your wallet, max invest is **`1 million`**.")
+                return self.bot.get_command("invest").reset_cooldown(ctx)
             amount = wallet
+
+        if int(amount) > 1000000:
+            await ctx.reply("You can't invest more than **`1 million`**.")
+            return self.bot.get_command("invest").reset_cooldown(ctx)
 
         if int(amount) > wallet:
             self.bot.get_command("invest").reset_cooldown(ctx)
@@ -462,7 +469,7 @@ class Eco(commands.Cog):
         await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, author_id)
 
 
-        em = discord.Embed(description=f"You've sent `{amount}` coins at {member.name}!", color = 0xffcff1)
+        em = discord.Embed(description=f"You've sent **`{amount}`** coins at **{member.name}**!", color = 0xffcff1)
         em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
         await ctx.send(embed=em)
         await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user1["wallet"] + amount, member_id)
@@ -485,7 +492,7 @@ class Eco(commands.Cog):
 
 
         if bal < 100:
-                em = discord.Embed(description=f"No profit, {member.name} is really poor.")
+                em = discord.Embed(description=f"No profit, **`{member.name}`** is really poor.")
                 em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 await ctx.send(embed=em)
                 return
@@ -499,7 +506,7 @@ class Eco(commands.Cog):
         await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] - earnings, member_id)
         await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
 
-        em = discord.Embed(description=f"You've robbed {earnings} coins at {member.name}!")
+        em = discord.Embed(description=f"You've robbed **`{earnings}`** coins at **{member.name}**!")
         em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
         await ctx.send(embed=em)
 
@@ -544,7 +551,7 @@ class Eco(commands.Cog):
             return await ctx.send("You don't have a pet, buy one before try to set a name to it.")
 
         await self.bot.pg_con.execute("UPDATE users SET pet_tag = $1 WHERE user_id = $2", petname, author_id)
-        await ctx.send(f"Perfect! Your pet (**`{petn}`**) from now have the name **{petname}**")
+        await ctx.send(f"Perfect! Your pet (**`{petn}`**) now has the name **{petname}**")
 
     @commands.command(help="Check your current pet and what boost gave to you!")
     async def mypet(self, ctx):
@@ -601,6 +608,29 @@ class Eco(commands.Cog):
         if pet == None:
             return await ctx.send("I didn't found you in my database: try to send `ami bal` and see if you have a balance.")
 
+        if petname == "artic husky":
+            petname = "Artic Husky"
+        elif petname == "white ocelot":
+            petname = "White Ocelot"
+        elif petname == "baby dragon":
+            petname = "Baby Dragon"
+        elif petname == "black rabbit":
+            petname = "Black Rabbit"
+        elif petname == "ice golem":
+            petname = "Ice Golem"
+        elif petname == "super roo":
+            petname = "Super Roo"
+        elif petname == "silver cat":
+            petname = "Silver Cat"
+        elif petname == "iron turtle":
+            petname = "Iron Turtle"
+        elif petname == "primordial butterfly":
+            petname = "Primordial Butterfly"
+        elif petname == "mystic pig":
+            petname == "Mystic Pig"
+        elif petname == "gold crocodile":
+            petname = "Gold Crocodile"
+
         pets = ["Artic Husky", "White Ocelot", "Baby Dragon", "Black Rabbit", "Ice Golem", "Super Roo", "Silver Cat", "Iron Turtle", "Primordial Butterfly", "Mystic Pig", "Gold Crocodile"]
         if petname in pets:
             if petname == "Artic Husky":
@@ -609,7 +639,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", n, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 3000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+5%** coins in `ami mine`!")
 
             if petname == "White Ocelot":
                 if pet[0]["wallet"] < 20000:
@@ -617,7 +647,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", n, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 20000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+20%** coins in `ami mine`!")
             
             if petname == "Baby Dragon":
                 if pet[0]["wallet"] < 35000:
@@ -625,7 +655,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 35000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+25%** coins in `ami mine`!")
             
             if petname == "Black Rabbit":
                 if pet[0]["wallet"] < 50000:
@@ -633,7 +663,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 50000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+30%** coins in `ami mine`!")
             
             if petname == "Ice Golem":
                 if pet[0]["wallet"] < 75000:
@@ -641,7 +671,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 75000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+50%** coins in `ami mine`!")
 
             if petname == "Super Roo":
                 if pet[0]["wallet"] < 125000:
@@ -649,7 +679,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 125000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+55%** coins in `ami mine`!")
 
             if petname == "Silver Cat":
                 if pet[0]["wallet"] < 150000:
@@ -657,7 +687,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 150000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+60%** coins in `ami mine`!")
 
             if petname == "Iron Turtle":
                 if pet[0]["wallet"] < 200000:
@@ -665,7 +695,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 200000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+65%** coins in `ami mine`!")
 
             if petname == "Primordial Butterfly":
                 if pet[0]["wallet"] < 300000:
@@ -673,7 +703,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 300000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+70%** coins in `ami mine`!")
 
             if petname == "Mystic Pig":
                 if pet[0]["wallet"] < 350000:
@@ -681,7 +711,7 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 350000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+75%** coins in `ami mine`!")
 
             if petname == "Gold Crocodile":
                 if pet[0]["wallet"] < 400000:
@@ -689,9 +719,9 @@ class Eco(commands.Cog):
 
                 await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 400000, author_id)
-                await ctx.send(f"Congratulations! You've bought **{petname}**!")
+                await ctx.send(f"Congratulations! You've bought **{petname}**! This pet will make you gain **+80%** coins in `ami mine`!")
         else:
-            return await ctx.send("The pet isn't in the shop.")
+            return await ctx.reply("Dude, idk what are you searching but this pet isn't in the petshop", mention_author=False)
 
     @commands.command(help="Check how many coins ami has stored")
     async def glbc(self,ctx,x = 5):
@@ -977,8 +1007,14 @@ class Eco(commands.Cog):
                     await asyncio.sleep(2)
                     await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + r, author_id)
                 else:
-                    await ctx.reply(f"You drinked a <:redrum:831182405444173855> **RedRum**, you got a little bit drunky and you get sleep.", mention_author=False)
+                    tot = data["wallet"] + data["bank"]
+                    await ctx.reply(f"You drinked a <:redrum:831182405444173855> **RedRum**, you got a little bit drunky and you get sleep, losing **__all__** your balance (**`{tot} coins`**).", mention_author=False)
                     await self.bot.pg_con.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", ite['redrums'] - 1, author_id)
+                    await asyncio.sleep(1)
+                    await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", 0, author_id)
+                    await asyncio.sleep(1)
+                    await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", 0, author_id)
+
 
     @commands.command(help="Go hunt with your hunting rifle")
     @commands.cooldown(1, 30, commands.BucketType.user)
