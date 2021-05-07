@@ -292,15 +292,6 @@ class Admin(commands.Cog):
         else:
             return"""
 
-    @commands.command()
-    @commands.is_owner()
-    async def ytdlreload(self, ctx):
-        latency = self.bot.latency
-        lat = (round(self.bot.latency*1000, 3))
-        ytdllat = (round(self.bot.latency*300, 3))
-        em = discord.Embed(description=f"The wrapper of `YTDL` was reloaded with `{lat}ms`\nIt's running on **`2GB RAM`** and `4 Threads`, with `{ytdllat}ms` approximated.\nRunning on OS `Linux` with `Ubuntu 20.04` (VPS) (latest release).\nReloaded `144` lines, `33` def, `41` events and `1` unique process was running right now, with `1` thread.",color = 0xffcff1)
-        await ctx.send(embed=em)
-
     @commands.command(help="Suggest new feature for ami")
     async def feature(self, ctx):
         user_id = str(f"{ctx.author.id}")
