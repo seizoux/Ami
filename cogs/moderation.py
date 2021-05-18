@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
-import datetime
-import re
+import asyncio
 
 
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.category = "Moderation"
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -65,66 +65,133 @@ class Moderation(commands.Cog):
         await ctx.send(f"<:slowmode:585790802979061760> Channel slowmode set to **{time}!**")
 
 # Clear Command
-    @commands.command(help="Delete X messages")
     @commands.has_permissions(manage_messages=True)
-    async def clear(self, ctx, amount: int):
-        await ctx.channel.purge(limit=amount)
+    @commands.command(description="Clear x messages from the channel sent by the member specified.")
+    async def cleanup(self, ctx, amount: int, target: discord.Member=None):
+        if amount > 500 or amount < 0:
+            return await ctx.send("<:redTick:596576672149667840> Maximum is `500` due to __Discord API Limitations__.")
+
+        def msgcheck(amsg):
+            if target:
+                return amsg.author.id == target.id
+            else:
+                return amsg.author.id == self.bot.user.id
+
+
+        await ctx.message.delete()
+        deleted = await ctx.channel.purge(limit=amount, check=msgcheck)
+        await ctx.send(f'<:greenTick:596576670815879169> Cleared **{len(deleted)}/{amount}** messages.', delete_after=10)
         
 
 # Ban Command
-    @commands.command(help="Ban a member from the guild")
+    @commands.command(help="Ban a member from the guild.\nThis supports multiple mentions.")
     @commands.has_permissions(ban_members=True)
-    async def ban(self, ctx, member: discord.Member, *, reason=None):
-        await member.ban(reason=reason)
-        await ctx.send(f":no_entry_sign: Banned.")
-        return
+    async def ban(self, ctx, members: commands.Greedy[discord.Member], *, reason):
+        for i in members:
+            if isinstance(i, discord.Member):
+                if i.top_role >= ctx.author.top_role:
+                    await ctx.reply(f"<:redTick:596576672149667840> You can't ban {i.name} (Higher Role).")
+            id = i.id
+            try:
+                await ctx.send(f'<:greenTick:596576670815879169> Successfully banned {i.mention} for `{reason}`.')
+                await ctx.guild.ban(discord.Object(id=id), reason=reason)
+            except discord.NotFound:
+                await ctx.send(f"<:redTick:596576672149667840> Member(s) **{i.name}** not found.")
 
 # Unban Command
-    @commands.command(help="Unban a member from the guild (name#0000)")
+    @commands.command(help="Unban a member banned in this guild using their IDs.\nThis supports also multiple members at the same time.\n")
     @commands.has_permissions(ban_members=True)
-    async def unban(self, ctx, *, member):
-        banned_users = await ctx.guild.bans()
-        member_name, member_disc = member.split('#')
-
-        for banned_entry in banned_users:
-            user = banned_entry.user
-
-            if (user.name, user.discriminator) == (member_name, member_disc):
-                await ctx.guild.unban(user)
-                await ctx.repy(":free: Unbanned.")
-                return
+    async def unban(self, ctx, members: commands.Greedy[discord.User]):
+        for i in members:
+            try:
+              await ctx.guild.unban(discord.Object(id=i.id))
+            except discord.NotFound:
+              #don't have to stop all other bans
+              return await ctx.send(f"<:redTick:596576672149667840> Member(s) **{i.name}** not found / not banned.")
+        
+        await ctx.send(f'<:greenTick:596576670815879169> Successfully unbanned **{", ".join([i.name for i in members])}**.')
 
 # Kick Command
-    @commands.command(help="Kick a member from the guild")
+    @commands.command(help="Kick a member from the guild.\nThis supports also multiple mentions.")
     @commands.has_permissions(kick_members=True)
-    async def kick(self, ctx, member: discord.Member, *, reason=None):
-        await member.kick(reason=reason)
-        await ctx.send(f":raised_back_of_hand: **Kicked** {member.mention}")
-        return
+    async def kick(self, ctx, members: commands.Greedy[discord.Member], *, reason):
+        for i in members:
+            id = i.id
+            try:
+                await ctx.send(f'<:greenTick:596576670815879169> Successfully kicked {i.mention} for `{reason}`.')
+                await ctx.guild.kick(discord.Object(id=id))
+            except discord.NotFound:
+                await ctx.send(f"<:redTick:596576672149667840> Member(s) {i.name} not found.")
 
-    @commands.command()
+    @commands.command(help="Set the role i need to use when you invoke `ami mute`.\nThis role will be set to the members you send in `ami mute` as muted role, so be sure to have set the right permissions on this role.")
+    @commands.has_permissions(manage_guild=True)
+    async def muterole(self, ctx, role: discord.Role):
+        role = discord.utils.get(ctx.guild.roles, id=role.id)
+        if not role:
+            return await ctx.reply(f"<:redTick:596576672149667840> {role} was not found in the guild roles.")
+
+        guild_id = str(ctx.guild.id)
+        db = await self.bot.pg_con.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
+        if not db:
+            await self.bot.pg_con.execute("INSERT INTO moderation (guild_id, muted_role) VALUES ($1, $2)", guild_id, role.id)
+            return await ctx.reply(f"<:greenTick:596576670815879169> {role.mention} set as muted role. This role will be used for `ami mute`, so check out if this role have the permissions you want muted members have.")
+
+        await self.bot.pg_con_execute("UPDATE moderation SET muted_role = $1 WHERE guild_id = $2", role.id, guild_id)
+        await ctx.reply(f"<:greenTick:596576670815879169> {role.mention} set as the new muted role.")
+
+    @commands.command(help="Mute a member in the guild giving to him/her the muted role set with `ami muterole`.\nThis supports also multiple members provied.")
     @commands.has_permissions(manage_messages=True)
-    async def mute(self, ctx, member: discord.Member):
-        guild = ctx.guild
-        muted_role = discord.utils.get(guild.roles, name="Muted")
+    async def mute(self, ctx, members: commands.Greedy[discord.Member]):
+        guild_id = str(ctx.guild.id)
+        db = await self.bot.pg_con.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
+        if not db:
+            return await ctx.reply("<:redTick:596576672149667840> This guild has no muted role set up yet, use `ami muterole` to set the muted role and can use this command.")
+
+        id = db[0]["muted_role"]
+        muted_role = discord.utils.get(ctx.guild.roles, id=id)
 
         if not muted_role:
-            muted_role = await guild.create_role(name="Muted")
+            return await ctx.reply("<:redTick:596576672149667840> The muted role set before for this guild was not found, re-set it.")
 
-        await member.edit(send_messages = False, read_messages=False)
-        await member.add_roles(muted_role)
-        await ctx.reply("Successfully Muted.", mention_author=False)
+        for i in members:
+            if isinstance(i, discord.Member):
+                if i.top_role >= ctx.author.top_role:
+                    return await ctx.reply(f"<:redTick:596576672149667840> You can't mute {i.mention} (Higher Role).")
+            id = i.id
+            try:
+                await ctx.send(f'<:greenTick:596576670815879169> Successfully muted {i.name}.')
+                await i.add_roles(muted_role)
+            except discord.NotFound:
+                await ctx.send(f"<:redTick:596576672149667840> Member(s) **{i.name}** not found.")
 
-    @commands.command()
+
+    @commands.command(help="Unmute a muted member in the guild, removing them the muted role.\nThis supports also multiple members at the same time.")
     @commands.has_permissions(manage_messages=True)
-    async def unmute(self, ctx, member: discord.Member):
-        mutedRole = discord.utils.get(ctx.guild.roles, name="Muted")
-        if mutedRole in member.roles:
-            await member.remove_roles(mutedRole)
-        else:
-            return await ctx.reply("This member isn't muted.", mention_author = False)
-        await member.edit(send_messages = True, read_messages=True)
-        await ctx.reply("Successfully unmuted.", mention_author = False)
+    async def unmute(self, ctx, members: commands.Greedy[discord.Member]):
+        guild_id = str(ctx.guild.id)
+        db = await self.bot.pg_con.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
+        if not db:
+            return await ctx.reply("<:redTick:596576672149667840> This guild has no muted role set up yet, use `ami muterole` to set the muted role and can use this command.")
+
+        muted_id = db[0]["muted_role"]
+        muted_role = discord.utils.get(ctx.guild.roles, id=muted_id)
+
+        if not muted_role:
+            return await ctx.reply("<:redTick:596576672149667840> The muted role set before for this guild was not found, re-set it.")
+    
+
+        for i in members:
+            if isinstance(i, discord.Member):
+                if i.top_role >= ctx.author.top_role:
+                    await ctx.reply(f"<:redTick:596576672149667840> You can't unmute {i.mention} (Higher Role).")
+            mutedRole = discord.utils.get(ctx.guild.roles, id=muted_id)
+            if not mutedRole in i.roles:
+                await ctx.reply(f"<:redTick:596576672149667840> {i.mention} is not muted, skipping.")
+            try:
+                await ctx.send(f'<:greenTick:596576670815879169> Successfully unmuted {i.mention}.')
+                await i.remove_roles(mutedRole)
+            except discord.NotFound:
+                return await ctx.send(f"<:redTick:596576672149667840> Member(s) **{i.name}** not found.")
     
 
     @commands.command(help="Enable or disable the antispam in the guild! \"toogle\" must be 'on' or 'off'")
@@ -152,68 +219,13 @@ class Moderation(commands.Cog):
         elif toggle == "off":
             return await ctx.send(f"Antispam was succesfully set on **`{toggle}`**, now no messages will be deleted.")
 
-    @commands.command(help="Enable or disable the anti in the guild! \"toogle\" must be 'on' or 'off'")
-    @commands.has_permissions(manage_messages=True)
-    async def antiabuse(self, ctx, toggle):
-        channel_id = str(ctx.message.channel.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM antiabuse WHERE channel_id = $1", channel_id)
-
-        if not data:
-            s = "off"
-            await self.bot.pg_con.execute("INSERT INTO antiabuse (channel_id, toggle) VALUES ($1, $2)", channel_id, s)
-            return await ctx.send("This channel was not found in the database, so i've automatically added it, now you can set the antiabuse!")
-
-        toggles = ["On", "on", "Off", "off"]
-        if toggle not in toggles:
-            return await ctx.send("Only `on` or `off` are accepted.")
-
-        tg = data["toggle"]
-        if toggle == tg:
-            return await ctx.send(f"The antispam for this guild is already on `{toggle}`.")
-
-        await self.bot.pg_con.execute("UPDATE antiabuse SET toggle = $1 WHERE channel_id = $2", toggle, channel_id)
-        if toggle == "on":
-            return await ctx.send(f"Antiabuse was succesfully set on **`{toggle}`**, from now all messages containing vulgar language will be deleted.")
-        elif toggle == "off":
-            return await ctx.send(f"Antiabuse was succesfully set off **`{toggle}`**, now no messages will be deleted.")        
-        
     @commands.Cog.listener()
     async def on_message(self, message):
-        curse_words = ['fuck', 'bitch', 'nigga', 'dick', 'pussy', 'whore', 'twat', 'fucking', 'anal', 'anus', 'arse', 'ass',
-               'ballsack', 'balls', 'bastard', 'bitch', 'biatch', 'bloody', 'blowjob', 'blow job', 'bollock', 'bollok',
-               'boner', 'boob', 'bugger', 'bum', 'butt', 'buttplug', 'clitoris', 'cock', 'coon', 'crap', 'cunt', 'dick',
-               'dildo', 'dyke', 'fag', 'feck', 'fellate', 'fellatio', 'felching', 'fuck', 'f u c k', 'fudgepacker',
-               'fudge packer', 'flange', 'homo', 'jerk', 'jizz', 'knobend', 'knob end', 'labia', 'muff', 'nigger',
-               'nigga', 'penis', 'piss', 'poop', 'prick', 'pube', 'pussy', 'queer', 'scrotum', 'sex', 'shit', 's hit',
-               'sh1t', 'slut', 'smegma', 'spunk', 'tit', 'tosser', 'turd', 'twat', 'vagina', 'wank', 'whore']
         if message.guild == None:
             return
         guild_id = str(message.guild.id)
-        channel_id = str(message.channel.id)
         data = await self.bot.pg_con.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", guild_id)
-        antiabuse_data = await self.bot.pg_con.fetchrow("SELECT * FROM antiabuse WHERE channel_id = $1", guild_id)
         if not data:
-            return
-        
-        if not antiabuse_data:
-            return
-        
-        antiabuse_data_toggle = antiabuse_data["toggle"]
-        # Checking if toggle is on in certain channel
-        if antiabuse_data_toggle == "on":
-            if message.author == bot.user:
-                return
-            content_split = message.content.split()
-            if any(bad_word in content_split for bad_word in curse_words):
-                try:
-                    await message.delete()
-                    await message.channel.send(f'{message.author.mention} please do not swear')
-                    return
-                except Exception:
-                    # Permission issues
-                    pass
-        
-        elif antiabuse_data_toggle != "on":
             return
         
         tg = data["toggle"]
@@ -241,7 +253,7 @@ class Moderation(commands.Cog):
                         await message.channel.send(f"{message.author.mention}, you can't send links in this guild while the **antispam** is __on__.")
                     except Exception:
                         pass
-        elif tg != "on":
+        else:
             return
 
 
