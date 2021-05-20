@@ -40,17 +40,23 @@ class Handler(commands.Cog):
             await ctx.send(embed=em)
 
         elif isinstance(error, commands.MissingRequiredArgument):
-            em = discord.Embed(description=f"<:alert:819704994612904017> **`{error.param.name}`** is an argument that is __missing__.", color = 0x2F3136)
+            em = discord.Embed(description=f"<:alert:819704994612904017> Missing the **`{error.param.name}`** argument.", color = 0x2F3136)
             await ctx.send(embed=em)
 
         elif isinstance(error, commands.MissingPermissions):
-            d = ", ".join(error.missing_perms)
-            em = discord.Embed(description=f"<:alert:819704994612904017> You don't have **`{d}`** permission to do this command.", color = 0x2F3136)
+            d = ", ".join(error.missing_perms).replace("_", " ")
+            s = d.title()
+            em = discord.Embed(title="⚠ | Missing Permissions!", description=f"<:alert:819704994612904017> You don't have **`{s}`** permission to do this command.", color = 0x2F3136)
             await ctx.send(embed=em)
 
         elif isinstance(error, commands.BotMissingPermissions):
-                d = ", ".join(error.missing_perms)
-                await ctx.send(f"I'm missing the **`{d}`** permission to run this command")
+            d = ", ".join(error.missing_perms).replace("_", " ")
+            s = d.title()
+            try:
+                em = discord.Embed(title="⚠ | Missing Permissions!", description=f"I'm missing the **`{s}`** permission to run this command", color = 0x2F3136)
+                await ctx.send(embed=em)
+            except Exception:
+                await ctx.send(f"I'm missing the **`{s}`** permission to run this command")
 
         elif isinstance(error, discord.Forbidden):
             try:
@@ -59,16 +65,14 @@ class Handler(commands.Cog):
                 pass
 
         elif isinstance(error, commands.CommandOnCooldown):
-            em = discord.Embed(description="<a:cless:819712309919744000> Dude chill, you can use this command again in **{}**.".format(humanize.precisedelta(error.retry_after)), color = 0x2F3136)
+            em = discord.Embed(description="<a:cless:819712309919744000> You're on cooldown, retry in **{}**.".format(humanize.precisedelta(error.retry_after)), color = 0x2F3136)
             await ctx.reply(embed=em)
 
         elif isinstance(error, commands.BadArgument):
-            d = ", ".join(error.args)
-            em = discord.Embed(description=f"<:alert:819704994612904017> **`{d}`**", color = 0x2F3136)
-            await ctx.send(embed=em)
+            pass
 
         elif isinstance(error, commands.NotOwner):
-            return await ctx.reply("<:alert:819704994612904017> This command is restricted to developer only.")
+            return
 
         elif isinstance(ctx.channel, discord.DMChannel):
             pass
@@ -80,8 +84,6 @@ class Handler(commands.Cog):
             pass
         else:
             raise error
-
-
 
 def setup(bot):
     bot.add_cog(Handler(bot))
