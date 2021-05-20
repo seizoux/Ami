@@ -12,20 +12,21 @@ import humanize
 class Eco(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.category = "Economy"
 
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Eco Loaded")
 
     # Economy system commands
-    @commands.command(help="See/Open your/a balance")
-    async def bal(self, ctx, member: discord.User = None):
+    @commands.command(help="See/Open your/a balance", aliases=["bal"])
+    async def balance(self, ctx, member: discord.User = None):
         author_id = str(ctx.author.id)
         user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not user:
             await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
-            em = discord.Embed(description="Ayo, i've open a balance for you: have fun!", color = 0xffcff1)
+            em = discord.Embed(description="Dude, your balance is now ready to store coins! Start doing `ami bal` again to see your actual balance.", color = 0xffcff1)
             await ctx.send(embed=em)
             return
 
@@ -60,7 +61,7 @@ class Eco(commands.Cog):
             else:
                 phrase = f'You also have a companion of mine called <:doggo:820992892515778650> **`{petse}`**'
 
-            z = f"You actually have <:money:819700505147342900> **`{user[0]['wallet']} coins`** in the **pocket** and <:money:819700505147342900> **`{user[0]['bank']} coins`** in the **bank**. You've got <:stats:819702267850260480> **`{invest} investments`** with a profit and you've earned <:money:819700505147342900> **`{earned} coins`** from when you opened your balance. {phrase}"
+            z = f"You have <:money:819700505147342900> **`{user[0]['wallet']} coins`** in your **pocket** and <:money:819700505147342900> **`{user[0]['bank']} coins`** in your **bank**. You've profited with <:stats:819702267850260480> **`{invest} investments`** and you've earned <:money:819700505147342900> **`{earned} coins`** since you've started. {phrase}"
             user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
             em=discord.Embed(color=0xffcff1)
             em.add_field(name="<a:9123_red_circle:819689872821583960> Balance", value =f"{z}", inline = False)
@@ -94,7 +95,7 @@ class Eco(commands.Cog):
                 phrase = f'You also have a companion of mine called <:doggo:820992892515778650> **`{petse}`**'
 
 
-            z = f"You actually have <:money:819700505147342900> **`{user[0]['wallet']} coins`** in the **pocket** and <:money:819700505147342900> **`{user[0]['bank']} coins`** in the **bank**. You've got <:stats:819702267850260480> **`{invest} investments`** with a profit and you've earned <:money:819700505147342900> **`{earned} coins`** from when you opened your balance. {petse}"
+            z = f"You have <:money:819700505147342900> **`{user[0]['wallet']} coins`** in your **pocket** and <:money:819700505147342900> **`{user[0]['bank']} coins`** in your **bank**. You've profited with <:stats:819702267850260480> **`{invest} investments`** and you've earned <:money:819700505147342900> **`{earned} coins`** since you've started. {petse}"
             user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
             em=discord.Embed(color=0xffcff1)
             em.add_field(name="<a:9123_red_circle:819689872821583960> Balance", value =f"{z}", inline = False)
@@ -109,7 +110,6 @@ class Eco(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def mine(self, ctx):
         author_id = str(ctx.author.id)
-        guild_id = str(ctx.guild.id)
         users = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not users:
@@ -118,19 +118,14 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
 
         user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
-        user1 = await self.bot.pg_con.fetchrow("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", author_id, guild_id)
-        await self.bot.pg_con.execute("UPDATE users SET wallet = 1 WHERE user_id = $1", author_id)
 
         earnings=random.randrange(100, 700)
         pickaxe=random.randrange(1, 100)
 
         pet = user["pet_name"]
-        level = user1["level"]
         earning = 0
         earning1 = 0
         perc = ""
-        perclvl = ""
-        s = (0/100)*earnings
 
         if pet:
             if pet == "Artic Husky":
@@ -177,41 +172,12 @@ class Eco(commands.Cog):
                 perc = "+80%"
                 e = (80/100)*earnings
                 earning = earnings + e
-
-            if level < 10:
-                perclvl = "0%"
-                s = (0/100)*earnings
-                earning1 = earnings + s
-            elif level >= 10 and level <= 20:
-                perclvl = "5%"
-                s = (5/100)*earnings
-                earning1 = earnings + s
-            elif level >= 20 and level <= 50:
-                perclvl = "10%"
-                s = (10/100)*earnings
-                earning1 = earnings + s
-            elif level >= 50 and level <= 100:
-                perclvl = "15%"
-                s = (15/100)*earnings
-                earning1 = earnings + s
-            elif level >= 100 and level <= 150:
-                perclvl = "20%"
-                s = (20/100)*earnings
-                earning1 = earnings + s
-            elif level >= 150 and level <= 300:
-                perclvl = "30%"
-                s = (30/100)*earnings
-                earning1 = earnings + s
-            elif level > 300:
-                perclvl = "50%"
-                s = (50/100)*earnings
-                earning1 = earnings + s
     
 
             pett = users[0]["pet_tag"]
             if pett == None:
                 pett = pet
-            em = discord.Embed(description=f"⛏️ You used the **{pickaxe}%** of your pickaxe power, and earned **{earnings}** coins!\n<:maeHeart:820992680808939520> Thanks to **`{pett}`**, you've got **{perc}** of coins (**`{round(e)} coins`**)!\n<a:thankyou:820999194907115541> You are **`Lvl. {level}`**, so you got **+{perclvl}** of mined coins (**`{round(s)} coins`**)", color = 0xffcff1)
+            em = discord.Embed(description=f"⛏️ You used **{pickaxe}%** of your pickaxe's power, and earned **{earnings}** coins!\n<:maeHeart:820992680808939520> Thanks to **`{pett}`**, you've got **{perc}** of coins (**`{round(e)} coins`**)!", color = 0xffcff1)
             em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
             await ctx.send(embed=em)
 
@@ -219,35 +185,7 @@ class Eco(commands.Cog):
             await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + 1*earning, author_id)
 
         else:
-            if level < 10:
-                perclvl = "0%"
-                s = (0/100)*earnings
-                earning1 = earnings + s
-            elif level >= 10 and level <= 20:
-                perclvl = "5%"
-                s = (5/100)*earnings
-                earning1 = earnings + s
-            elif level >= 20 and level <= 50:
-                perclvl = "10%"
-                s = (10/100)*earnings
-                earning1 = earnings + s
-            elif level >= 50 and level <= 100:
-                perclvl = "15%"
-                s = (15/100)*earnings
-                earning1 = earnings + s
-            elif level >= 100 and level <= 150:
-                perclvl = "20%"
-                s = (20/100)*earnings
-                earning1 = earnings + s
-            elif level >= 150 and level <= 300:
-                perclvl = "30%"
-                s = (30/100)*earnings
-                earning1 = earnings + s
-            elif level > 300:
-                perclvl = "50%"
-                s = (50/100)*earnings
-                earning1 = earnings + s
-            em = discord.Embed(description=f"⛏️ You used the **{pickaxe}%** of your pickaxe power, and earned **{earnings}** coins!\n(Seems you didn't have a pet.. why not? Check it in `ami petshop`!)\n<a:thankyou:820999194907115541> You are **`Lvl. {level}`**, so you got **+{perclvl}** of the coins (**`{round(s)} coins`**)", color = 0xffcff1)
+            em = discord.Embed(description=f"⛏️ You used **{pickaxe}%** of your pickaxe's power, and earned **{earnings}** coins!\n(Seems you didn't have a pet.. why not? Check it in `ami petshop`!)", color = 0xffcff1)
             em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
             await ctx.send(embed=em)
 
@@ -259,7 +197,7 @@ class Eco(commands.Cog):
     async def invest(self, ctx, amount=None):
         if amount == None:
             self.bot.get_command("invest").reset_cooldown(ctx)
-            return await ctx.send("Argument `<amount>` required. Example: `ami trade 100`")
+            return await ctx.send("Argument `<amount>` required. Example: `ami invest 100`")
 
         author_id = str(ctx.author.id)
         data = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
@@ -329,11 +267,13 @@ class Eco(commands.Cog):
 
         user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
 
-        earnings=random.randrange(1500, 20000)
+        earnings=random.randrange(1500, 15000)
         await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
         await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
 
-        await ctx.send(f"<a:Coin:819701071630958602>{ctx.author.mention}, you've earned **{earnings}** coins from the daily gift!\n<:statisticicon8546:819702267850260480> I added them to your balance, you can redeem your next gift in **24h!**")
+        em = discord.Embed(description=f"<a:Coin:819701071630958602>You've earned **{earnings}** coins from the daily gift, next is in **24h!**", color = 0xffcff1)
+        em.set_footer(text="cool, you got that", icon_url=ctx.author.avatar_url)
+        await ctx.reply(embed=em)
 
 
 
@@ -521,7 +461,7 @@ class Eco(commands.Cog):
         user = await self.bot.pg_con.fetch("SELECT user_id, sum(wallet+bank) AS total, RANK() OVER (ORDER BY sum(bank+wallet) DESC) FROM users GROUP BY user_id LIMIT $1", limit)
         top = []
         for i in user:
-            users = await self.bot.fetch_user(i["user_id"])
+            users = self.bot.get_user(i["user_id"]) or (await self.bot.fetch_user(i["user_id"]))
             userst = i["total"]
             top.append("{}) {} - {}".format(i['rank'], str(users.name), humanize.intword(str(userst))))
 
@@ -599,7 +539,6 @@ class Eco(commands.Cog):
     @commands.command(help="Buy a pet (must be inside 'ami petshop')")
     async def buypet(self, ctx, *, petname):
         author_id = str(ctx.author.id)
-        n = str(petname)
         pet = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if petname == None:
@@ -630,6 +569,8 @@ class Eco(commands.Cog):
             petname == "Mystic Pig"
         elif petname == "gold crocodile":
             petname = "Gold Crocodile"
+        
+        n = str(petname)
 
         pets = ["Artic Husky", "White Ocelot", "Baby Dragon", "Black Rabbit", "Ice Golem", "Super Roo", "Silver Cat", "Iron Turtle", "Primordial Butterfly", "Mystic Pig", "Gold Crocodile"]
         if petname in pets:
@@ -725,7 +666,6 @@ class Eco(commands.Cog):
 
     @commands.command(help="Check how many coins ami has stored")
     async def glbc(self,ctx,x = 5):
-        user = await self.bot.pg_con.fetch("SELECT * FROM users")
         gblcs = await self.bot.pg_con.fetchval("SELECT SUM(COALESCE(wallet,0) + COALESCE(bank,0)) FROM users")
         em = discord.Embed(title=f"<a:Coin:819701071630958602> Coins storage!", description = f"```py\n! Coins stored » {gblcs}\n```", color = 0xffcff1)
         em.set_footer(text=f"Global data, means the total data stored!")
@@ -745,18 +685,18 @@ class Eco(commands.Cog):
 
         if page == str(1):
             em = discord.Embed(title="Items Shop", description="Use `ami buyitem <itemname> / <itemnumber>` to buy something.\n`<itemname>` must be also with capital letters.\nYou can buy more at once, like `ami buyitem Weed 5` to buy `5g` of weed" , color = 0xffcff1)
-            em.add_field(name="1) <:waterbottle:831186859056562277> Water Bottle (25000 coins)", value="Drink a water bottle can't be dangerous.. right? ^^\n`Usage` : **ami drink 1**", inline = False)
+            em.add_field(name="1) <:waterbottle:831186859056562277> Water Bottle (25000 coins)", value="Drink a water bottle would be drinking a water bottle? ^^\n`Usage` : **ami drink 1**", inline = False)
             em.add_field(name="2) <:redrum:831182405444173855> RedRum (75000 coins)", value="This rum will make you a little bit drunky ^^\n`Usage` : **ami drink 2**", inline = False)
             em.add_field(name="3) <:huntingrifle:831182405686657034> Hunting Rifle (125000 coins)", value="Buy this and go hunt!\n`Usage` : **ami hunt**", inline = False)
-            em.add_field(name="4) <:8680_Weed_shinier:819689872750280775> Weed (150000 coins)", value="Smoke is bad, don't buy this weed.\n`Usage` : **ami smoke weed**", inline = False)
+            em.add_field(name="4) <:8680_Weed_shinier:819689872750280775> Weed (150000 coins)", value="Smoking is bad, don't buy weed.\n`Usage` : **ami smoke weed**", inline = False)
             em.set_footer(text="Page Index 1/2", icon_url=ctx.author.avatar_url)
             em.timestamp = datetime.datetime.utcnow()
             await ctx.reply(embed=em, mention_author=False)
         elif page == str(2):
             em = discord.Embed(title="Items Shop", description="Use `ami buyitem <itemname> / <itemnumber>` to buy something.\n`<itemname>` must be also with capital letters.\nYou can buy more at once, like `ami buyitem Weed 5` to buy `5g` of weed" , color = 0xffcff1)
-            em.add_field(name="5) <:fishingpole:831182405717065729> Fishing Rod (200000 coins)", value="Fishing is the chillness.\n`Usage` : **ami fish**", inline = False)
+            em.add_field(name="5) <:fishingpole:831182405717065729> Fishing Rod (200000 coins)", value="Go fishing with this super-rare fishing rod..\n`Usage` : **ami fish**", inline = False)
             em.add_field(name="6) <:computer:831186859287642122> Computer (400000 coins)", value="Want to hack the bank of someone? Use this pc!\n`Usage` : **ami bankrob @member**", inline = False)
-            em.add_field(name="7) <:pixel_flower:831186859055906847> Ami Flower (10000000 coins)", value="Ami favourite flower, just a trophy.\n`Usage` : **No usages for this item**", inline = False)
+            em.add_field(name="7) <:pixel_flower:831186859055906847> Ami's Flower (10000000 coins)", value="Ami's favourite flower, just a trophy.\n`Usage` : **No usages for this item**", inline = False)
             em.set_footer(text="Page Index 2/2", icon_url=ctx.author.avatar_url)
             em.timestamp = datetime.datetime.utcnow()
             await ctx.reply(embed=em, mention_author=False)
@@ -768,7 +708,7 @@ class Eco(commands.Cog):
         d = await self.bot.pg_con.fetchrow("SELECT user_id FROM items WHERE user_id = $1", author_id)
         if not d:
             await self.bot.pg_con.execute("INSERT INTO items (user_id, water_bottles, redrums, rifles, weed, fish_rods, computers, ami_flowers, common_chests, rare_chests, epic_chests) VALUES ($1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)", author_id)
-            await ctx.reply("Your garage is now ready! You can now buy and store items from the shop.", mention_author=False)
+            await ctx.reply("Your garage is now ready! You can now buy and store items from the shop. Use `ami garage` to take a look on your garage!", mention_author=False)
         else:
             return await ctx.reply("You already have a garage dude, go sleep.", mention_author=False)
 
@@ -1032,7 +972,7 @@ class Eco(commands.Cog):
         if not data:
             return await ctx.reply("You don't have a balance, open one with `ami bal` to can store coins.", mention_author=False)
 
-        animals = ['bird', 'lion', 'penguin', 'mouse', 'tiger', 'deer', 'bear', 'nothing']
+        animals = ['🕊 bird', '🦁 lion', '🐧 penguin', '🐀 mouse', '🐯 tiger', '🦌 deer', '🐻 bear', 'nothing']
         animals2 = random.choice(animals)
         reward = 0
         if animals2 == 'nothing':
@@ -1040,7 +980,7 @@ class Eco(commands.Cog):
             await ctx.reply("You went hunting with your <:huntingrifle:831182405686657034> **rifle** but you shoot on a tree, you didn't got any animal.", mention_author=False)
         else:
             reward = random.randint(1, 10000)
-            await ctx.reply(f"You went hunting with your <:huntingrifle:831182405686657034> **hunting rifle** and you got a **{animals2}**, you got **`{reward}`** coins as a reward!", mention_author=False)
+            await ctx.reply(f"You went hunting with your <:huntingrifle:831182405686657034> **hunting rifle** and you shot a **{animals2}**, you got **`{reward}`** coins as a reward!", mention_author=False)
             await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + reward, author_id)
 
 
@@ -1124,21 +1064,21 @@ class Eco(commands.Cog):
             d = random.choice(crates)
 
             if d == "<:common_chest:838028933920325633> Common Chest":
-                await ctx.reply(f"You went to fish with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __so lucky__! You found a **{d}**! You can open it with `ami openchest common`!", mention_author=False)
+                await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __so lucky__! You found a **{d}**! You can open it with `ami openchest common`!", mention_author=False)
                 await self.bot.pg_con.execute("UPDATE items SET common_chests = $1 WHERE user_id = $2", ite['common_chests'] + 1, author_id)
             
             if d == "<:rare_chest:838028934598885417> Rare Chest":
-                await ctx.reply(f"You went to fish with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __fucking lucky__! You found a **{d}**! You can open it with `ami openchest rare`!", mention_author=False)
+                await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __fucking lucky__! You found a **{d}**! You can open it with `ami openchest rare`!", mention_author=False)
                 await self.bot.pg_con.execute("UPDATE items SET rare_chests = $1 WHERE user_id = $2", ite['rare_chests'] + 1, author_id)
 
             if d == "<:epic_chest:838028935479820319> Epic Chest":
-                await ctx.reply(f"You went to fish with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __extremely lucky__! You found a **{d}**! You can open it with `ami openchest epic`!", mention_author=False)
+                await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __extremely lucky__! You found a **{d}**! You can open it with `ami openchest epic`!", mention_author=False)
                 await self.bot.pg_con.execute("UPDATE items SET epic_chests = $1 WHERE user_id = $2", ite['epic_chests'] + 1, author_id)
 
         else:
             d = random.choice(fishes)
             earn = random.randint(1, 300)
-            await ctx.reply(f"You went to fish with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __so **`unlucky`**__! You found a **{d}** and you sold it for **{earn}** coins O.o/", mention_author=False)
+            await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __so **`unlucky`**__! You found a **{d}** and you sold it for **{earn}** coins O.o/", mention_author=False)
             await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + earn, author_id)
 
 
@@ -1200,9 +1140,9 @@ class Eco(commands.Cog):
             return await ctx.reply("You don't have a balance, open one with `ami bal` to can store coins.", mention_author=False)
 
         chests = ['common', 'rare', 'epic']
-        common_coins = random.randint(10000, 200000)
-        rare_coins = random.randint(35000, 350000)
-        epic_coins = random.randint(65000, 1000000)
+        common_coins = random.randint(10000, 35000)
+        rare_coins = random.randint(35000, 75000)
+        epic_coins = random.randint(75000, 200000)
 
         coins = 0
         if chest in chests:
@@ -1216,7 +1156,7 @@ class Eco(commands.Cog):
                 await asyncio.sleep(1)
                 await msg.edit(content="<a:chest_opening:838028934708592650> Opening a <:common_chest:838028933920325633> **Common Chest**...", mention_author=False)
                 await asyncio.sleep(1)
-                await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:common_chest:838028933920325633> **Common Chest**!\n\n× **`{coins} coins`** founded!", mention_author=False)
+                await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:common_chest:838028933920325633> **Common Chest**!\n\n× **`{coins} coins`** found!", mention_author=False)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
                 await asyncio.sleep(2)
                 await self.bot.pg_con.execute("UPDATE items SET common_chests = $1 WHERE user_id = $2", ite['common_chests'] - 1, author_id)
@@ -1231,7 +1171,7 @@ class Eco(commands.Cog):
                 await asyncio.sleep(1)
                 await msg.edit(content="<a:chest_opening:838028934708592650> Opening a <:rare_chest:838028934598885417> **Rare Chest**...", mention_author=False)
                 await asyncio.sleep(1)
-                await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:rare_chest:838028934598885417> **Rare Chest**!\n\n× **`{coins} coins`** founded!", mention_author=False)
+                await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:rare_chest:838028934598885417> **Rare Chest**!\n\n× **`{coins} coins`** found!", mention_author=False)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
                 await asyncio.sleep(2)
                 await self.bot.pg_con.execute("UPDATE items SET rare_chests = $1 WHERE user_id = $2", ite['rare_chests'] - 1, author_id)
@@ -1268,7 +1208,7 @@ class Eco(commands.Cog):
                 await asyncio.sleep(1)
                 await msg.edit(content="<a:chest_opening:838028934708592650> Opening a <:epic_chest:838028935479820319> **Epic Chest**...", mention_author=False)
                 await asyncio.sleep(1)
-                await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:epic_chest:838028935479820319> **Epic Chest**!\n\n× **`{coins} coins`** founded!\n**x1** {eee}", mention_author=False)
+                await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:epic_chest:838028935479820319> **Epic Chest**!\n\n× **`{coins} coins`** found!\n**x1** {eee}", mention_author=False)
                 await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
                 await asyncio.sleep(2)
                 await self.bot.pg_con.execute("UPDATE items SET epic_chests = $1 WHERE user_id = $2", ite['epic_chests'] - 1, author_id)
@@ -1276,7 +1216,6 @@ class Eco(commands.Cog):
             return await ctx.reply("This chest doesn't exist. Chests avilable are:\n\n<:common_chest:838028933920325633> **Common Chest** (`ami openchest common`)\n<:rare_chest:838028934598885417> **Rare Chest** (`ami openchest rare`)\n<:epic_chest:838028935479820319> **Epic Chest** (`ami openchest epic`)", mention_author=False)
 
     @commands.command()
-    @commands.is_owner()
     async def givc(self,ctx,member:discord.Member,amount=None):
         if ctx.guild.id == 800176902765674496:
             rol = discord.utils.get(ctx.guild.roles, name = "Mods")
@@ -1305,7 +1244,6 @@ class Eco(commands.Cog):
 
 
     @commands.command()
-    @commands.is_owner()
     async def remc(self,ctx,member:discord.Member,amount=None):
         if ctx.guild.id == 800176902765674496:
             rol = discord.utils.get(ctx.guild.roles, name = "Mods")
@@ -1329,125 +1267,6 @@ class Eco(commands.Cog):
                 user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
                 await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, member_id)
                 await ctx.send(f"Removed {amount} coins at {member} balance!")
-        else:
-            return
-
-
-    @commands.command()
-    @commands.is_owner()
-    async def givxp(self,ctx,member:discord.Member,amount=None):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                member_id = str(member.id)
-                author_id = str(ctx.author.id)
-                guild_id = str(ctx.guild.id)
-                user = await self.bot.pg_con.fetch("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", author_id, guild_id)
-                amount=int(amount)
-
-                if member == None:
-                    member = ctx.author
-
-                if amount == None:
-                    em = discord.Embed(description="Specify an amount!")
-                    em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
-                    await ctx.send(embed=em)
-                    return
-
-                user = await self.bot.pg_con.fetchrow("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", member_id, guild_id)
-                await self.bot.pg_con.execute("UPDATE levels SET xp = $1 WHERE user_id = $2 AND guild_id = $3", user["xp"] + amount, member_id, guild_id)
-                await ctx.send(f"Added {amount} XP at {member}!")
-        else:
-            return
-
-
-    @commands.command()
-    @commands.is_owner()
-    async def remxp(self,ctx,member:discord.Member,amount=None):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                member_id = str(member.id)
-                author_id = str(ctx.author.id)
-                guild_id = str(ctx.guild.id)
-                user = await self.bot.pg_con.fetch("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", author_id, guild_id)
-                amount=int(amount)
-
-                if member == None:
-                    member = ctx.author
-
-                if amount == None:
-                    em = discord.Embed(description="Specify an amount!")
-                    em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
-                    await ctx.send(embed=em)
-                    return
-
-                user = await self.bot.pg_con.fetchrow("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", member_id, guild_id)
-                await self.bot.pg_con.execute("UPDATE levels SET xp = $1 WHERE user_id = $2 AND guild_id = $3", user["xp"] - amount, member_id, guild_id)
-                await ctx.send(f"Removed {amount} XP at {member}!")
-        else:
-            return
-
-    @commands.command()
-    @commands.is_owner()
-    async def givlvl(self,ctx,member:discord.Member,amount=None):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                member_id = str(member.id)
-                author_id = str(ctx.author.id)
-                guild_id = str(ctx.guild.id)
-                user = await self.bot.pg_con.fetch("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $3", author_id, guild_id)
-                amount=int(amount)
-
-                if member == None:
-                    member = ctx.author
-
-                if amount == None:
-                    em = discord.Embed(description="Specify an amount!")
-                    em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
-                    await ctx.send(embed=em)
-                    return
-
-                user = await self.bot.pg_con.fetchrow("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", member_id, guild_id)
-                await self.bot.pg_con.execute("UPDATE levels SET level = $1 WHERE user_id = $2 AND guild_id = $3", user["level"] + amount, member_id, guild_id)
-                await ctx.send(f"Added {amount} levels at {member}!")
-        else:
-            return
-
-
-    @commands.command()
-    @commands.is_owner()
-    async def remlvl(self,ctx,member:discord.Member,amount=None):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                member_id = str(member.id)
-                author_id = str(ctx.author.id)
-                guild_id = str(ctx.guild.id)
-                user = await self.bot.pg_con.fetch("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", author_id, guild_id)
-                amount=int(amount)
-
-                if member == None:
-                    member = ctx.author
-
-                if amount == None:
-                    em = discord.Embed(description="Specify an amount!")
-                    em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
-                    await ctx.send(embed=em)
-                    return
-
-                user = await self.bot.pg_con.fetchrow("SELECT * FROM levels WHERE user_id = $1 AND guild_id = $2", member_id, guild_id)
-                await self.bot.pg_con.execute("UPDATE levels SET level = $1 WHERE user_id = $2 AND guild_id = $3", user["level"] - amount, member_id, guild_id)
-                await ctx.send(f"Removed {amount} levels at {member}!")
         else:
             return
 
