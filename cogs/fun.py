@@ -9,74 +9,166 @@ import simpleeval
 import asyncio
 import pytz
 from pytz import all_timezones
-from jishaku.paginators import WrappedPaginator, PaginatorInterface
 import re
 from discord_markdown.discord_markdown import convert_to_html
-from mal import *
 from PIL import Image,ImageDraw, ImageFont
-import textwrap
-from wonderwords import RandomSentence
 from cogsf.fuzzy import finder
 import async_cleverbot as ac
 from urllib.parse import urlencode
 from urllib.request import urlretrieve
 import aiohttp
 import requests
+from io import BytesIO
+import kitsu
+
+
+kitsu_client = kitsu.Client()
+
+
+def ship_func(pfp: discord.Member, pfp2: discord.Member = None):
+    with Image.open("assets/bg.png") as bg:
+
+        with Image.open(pfp).convert("RGBA") as pfp_1:
+            image1 = pfp_1.resize((531,487))
+            bg.paste(image1,(24,572), image1)
+            image1.close()
+
+
+        with Image.open(pfp2).convert("RGBA") as pfp_2:
+            image2 = pfp_2.resize((537,461))
+            bg.paste(image2,(1359,18), image2)
+            image2.close()
+
+        with Image.open("assets/heart.png") as heart:
+            image3 = heart.resize((700, 500))
+            bg.paste(image3,(640, 350), image3)
+            image3.close()
+
+        font = ImageFont.truetype("fonts/love.ttf", 180)
+        draw = ImageDraw.Draw(bg)
+        perc = random.randint(1, 100)
+        text = f"{perc}%"
+        x, y = 840, 518
+        fillcolor = "pink"
+        shadowcolor = "black"
+
+        # thin border
+        draw.text((x-1, y), text, font=font, fill=shadowcolor)
+        draw.text((x+1, y), text, font=font, fill=shadowcolor)
+        draw.text((x, y-1), text, font=font, fill=shadowcolor)
+        draw.text((x, y+1), text, font=font, fill=shadowcolor)
+
+        # thicker border
+        draw.text((x-1, y-1), text, font=font, fill=shadowcolor)
+        draw.text((x+1, y-1), text, font=font, fill=shadowcolor)
+        draw.text((x-1, y+1), text, font=font, fill=shadowcolor)
+        draw.text((x+1, y+1), text, font=font, fill=shadowcolor)
+
+        draw.text((x, y), text, font=font, fill=fillcolor)
+
+        buffer = BytesIO()
+        bg.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        return buffer
 
 class Fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.afks = {}
+        self.category = "Fun"
+
 
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Fun Loaded")
 
-    @commands.command(help="Take a look on Covid-19 stats")
-    async def covid(self, ctx, *, countryName = None):
-        try:
-            if countryName is None:
-                embed=discord.Embed(title="Whoops! Be sure to select a country! ```ami covid [country]```", colour=0xff0000, timestamp=ctx.message.created_at)
-                await ctx.send(embed=embed)
+    @commands.command(help="Set a custom reminder, and get pinged when it's time!\nExample usage: **ami remind 1s hi** - 1s = <time>, 'hi' = [message]")
+    async def remind(self, ctx, time, *, message=None):
+        if message == None:
+            message = ". . ."
 
+        if message == "@everyone":
+            message = ". . ."
 
+        if message == "@here":
+            message = ". . ."
+            
+        def convert(time):
+            pos = ['s', 'm', 'h', 'd']
+
+            time_dict = {"s": 1, "m": 60, "h": 3600, "d": 3600*24}
+
+            unit = time[-1]
+
+            if unit not in pos:
+                return -1
+            try:
+                val = int(time[:-1])
+            except:
+                return -2
+            
+            return val * time_dict[unit]
+        
+        converted_time = convert(time)
+
+        if converted_time == -1:
+            return await ctx.reply("Time unit not valid, valid units are: `s`, `m`, `h`, `d`.")
+
+        if converted_time == -2:
+            return await ctx.reply("Time not valid.")
+
+        time_format = ""
+        ttt = time[-1]
+        abc = time[:-1]
+        if ttt == "s":
+            if int(abc) <= 1:
+                time_format = "second"
             else:
-                url = f"https://coronavirus-19-api.herokuapp.com/countries/{countryName}"
-                stats = requests.get(url)
-                json_stats = stats.json()
-                country = json_stats["country"]
-                totalCases = json_stats["cases"]
-                todayCases = json_stats["todayCases"]
-                totalDeaths = json_stats["deaths"]
-                todayDeaths = json_stats["todayDeaths"]
-                recovered = json_stats["recovered"]
-                active = json_stats["active"]
-                critical = json_stats["critical"]
-                casesPerOneMillion = json_stats["casesPerOneMillion"]
-                deathsPerOneMillion = json_stats["deathsPerOneMillion"]
-                totalTests = json_stats["totalTests"]
-                testsPerOneMillion = json_stats["testsPerOneMillion"]
+                time_format = "seconds"
+        elif ttt == "m":
+            if int(abc) <= 1:
+                time_format = "minute"
+            else:
+                time_format = "minutes"
+        elif ttt == "h":
+            if int(abc) <= 1:
+                time_format = "hour"
+            else:
+                time_format = "hours"
+        elif ttt == "d":
+            if int(abc) <= 1:
+                time_format = "day"
+            else:
+                time_format = "days"
 
-                embed2 = discord.Embed(title=f"**COVID-19 Status Of {country}**!", colour=0xffcff1, timestamp=ctx.message.created_at)
-                embed2.add_field(name="**Total Cases**", value=totalCases, inline=True)
-                embed2.add_field(name="**Today Cases**", value=todayCases, inline=True)
-                embed2.add_field(name="**Total Deaths**", value=totalDeaths, inline=True)
-                embed2.add_field(name="**Today Deaths**", value=todayDeaths, inline=True)
-                embed2.add_field(name="**Recovered**", value=recovered, inline=True)
-                embed2.add_field(name="**Active**", value=active, inline=True)
-                embed2.add_field(name="**Critical**", value=critical, inline=True)
-                embed2.add_field(name="**Cases Per One Million**", value=casesPerOneMillion, inline=True)
-                embed2.add_field(name="**Deaths Per One Million**", value=deathsPerOneMillion, inline=True)
-                embed2.add_field(name="**Total Tests**", value=totalTests, inline=True)
-                embed2.add_field(name="**Tests Per One Million**", value=testsPerOneMillion, inline=True)
+        final_time = f"{time[:-1]} " + time_format
 
-                embed2.set_thumbnail(url="https://cdn.discordapp.com/attachments/564520348821749766/701422183217365052/2Q.png")
-                await ctx.send(embed=embed2)
+        await ctx.reply(f"Alright {ctx.author.mention}, in {final_time}: {message}")
+        date_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=converted_time)
+        await discord.utils.sleep_until(date_time)
+        await ctx.send(f"{ctx.author.mention}, {final_time} ago: {message}\n{ctx.message.jump_url}")
 
-        except:
-            embed3 = discord.Embed(title="Invalid Country Name!", colour=0xffcff1, timestamp=ctx.message.created_at)
-            embed3.set_author(name="Error!")
-            await ctx.send(embed=embed3)
+
+    @commands.command(help="Start a simple counting game!")
+    @commands.max_concurrency(1, BucketType.channel)
+    async def count(self, ctx):
+        await ctx.send("Counting game started! First number is **`1`**!")
+        author_id = ""
+        num = 0
+        while True:
+            mex = await self.bot.wait_for('message', check=lambda m: not m.author.bot and m.channel == ctx.channel)
+            if mex.content.isdigit():
+                if mex.content == str(num+1):
+                    if str(mex.author.id) == author_id:
+                        await ctx.send(f"{mex.author.mention} has __cheated__, trying to count **two times** in row.")
+                        break
+                    num += 1
+                    author_id = str(mex.author.id)
+                    await mex.add_reaction("<a:pepesmoke:820747996106326047>")
+                else:
+                    await ctx.send(f"{mex.author.mention} failed! Stopped at **`{num}`**, send `ami count` to restart the game.")
+                    break
 
 
     @commands.command(help="Be good and give hugs to members!")
@@ -249,7 +341,10 @@ class Fun(commands.Cog):
         if reason == None:
             reason = "Not specified."
 
-        await ctx.send(f"<:KannaSip:819739316502134805> **{ctx.author.name}** i've set your afk for `{reason}`")
+        if len(reason) > 40:
+            return await ctx.reply(":x: The reason must be less than **40** letters.")
+
+        await ctx.send(f"<:KannaSip:819739316502134805> **{ctx.author.name}** i've set your afk for:  {reason}")
         self.afks[ctx.author.id] = reason
 
     @commands.command()
@@ -271,7 +366,7 @@ class Fun(commands.Cog):
 
         if message.author.id in self.afks.keys():
             ids = message.author.id
-            await message.channel.send(f"<:nezyay:819703490078834729> Welcome back {message.author.mention}, i removed your **AFK** status.")
+            await message.channel.send(f"<:nezyay:819703490078834729> Welcome back {message.author.mention}, i've removed your **AFK** status.")
             del self.afks[ids]
 
         try:
@@ -280,7 +375,7 @@ class Fun(commands.Cog):
             id2 = "None"
         if id2 in self.afks.keys():
             reasons = self.afks[id2]
-            return await message.channel.send(f'<:nani:819694934491004937> {message.author.mention}, **{str(message.mentions[0].name)}** is afk for `{reasons}`')
+            return await message.channel.send(f'<:nani:819694934491004937> {message.author.mention}, **{str(message.mentions[0].name)}** is afk for: {reasons}')
 
 
     @commands.command(help="Choose between multiple choiches")
@@ -325,13 +420,18 @@ class Fun(commands.Cog):
 
 
     @commands.command(help="Test your reaction timing",aliases=["rspeed"])
-    async def reactspeed(self, ctx, number:int):
-        if number > 20:
-            em = discord.Embed(description="<:alert:819704994612904017> Time can't be over 20 seconds.")
+    async def reactspeed(self, ctx, number:float):
+        if number > 20.0:
+            em = discord.Embed(description="<:alert:819704994612904017> Time can't be over 20.0 seconds.")
             em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
             await ctx.send(embed=em)
             return
             
+        if number < 0.1:
+            em = discord.Embed(description="<:alert:819704994612904017> Time can't be < 0.1 second.")
+            em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
+            await ctx.send(embed=em)
+            return
 
         embed=discord.Embed(description=f"Try to click on reaction at {number} seconds.", color=0xffcff1)
         embed.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar_url)
@@ -344,29 +444,64 @@ class Fun(commands.Cog):
             
         payload = await self.bot.wait_for("raw_reaction_add", check=check)
         end = time.time()
-        embed=discord.Embed(description=f"<:vea:819703490703523860> Your result is: `{round(end-start, 2)}` seconds", color=0xffcff1)
+        embed=discord.Embed(title=f"{number} second(s) reaction",description=f"<:vea:819703490703523860> Your result is: `{round(end-start, 5)}` seconds", color=0xffcff1)
         embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
         await message.edit(embed=embed)
 
 
     @commands.command(help="Get the invite link for ami")
-    async def invite(self, ctx):
-        em = discord.Embed(description="https://amidiscord.xyz/", color = 0xffcff1)
+    async def invite(self, ctx, perms=None):
+        link = ""
+        prms = ["basic", "advanced", "admin"]
+        s = ", ".join(prms)
+        if perms == None:
+            return await ctx.reply(f"`ami invite <perms>`: ehm dude, please specify with which perms, available perms are:\n{s}")
+
+        if perms in prms:
+            if perms == "basic":
+                link = "[click here to invite me with basic perms](https://discord.com/oauth2/authorize?client_id=801742991185936384&scope=bot&permissions=1077267521)"
+            elif perms == "advanced":
+                link = "[click here to invite me with advanced perms](https://discord.com/oauth2/authorize?client_id=801742991185936384&scope=bot&permissions=1345711607)"
+            elif perms == "admin":
+                link = "[click here to invite me with admin perms](https://discord.com/oauth2/authorize?client_id=801742991185936384&scope=bot&permissions=8)"
+
+        em = discord.Embed(description=f"{link}", color = 0xffcff1)
         await ctx.send(embed=em)
 
 
-    @commands.command(help="Ship 2 members")
-    async def ship(self, ctx, member: discord.Member):
-        ship = random.randint(1, 100)
-        comp = random.randint(1, 10)
-        types = ["Active", "Dangerous", "Total Love", "Usless", "More hot than me", "Netflix & Bed", "Extreme", "Super!"]
-        types1 = random.choice(types)
-        message = ctx.message
-        mention1 = message.mentions[0]
-        mention2 = message.mentions[1]
-        em = discord.Embed(title="<:thanks:739614671774154843> Ship Results!", description = f"<:gsarrow:819706480714055681> The ship » {mention1.mention} & {mention2.mention}\n\n<:gsarrow:819706480714055681> Compatibility » `{comp}/10`\n\n<:gsarrow:819706480714055681> Relation type » `{types1}`\n\n<:gsarrow:819706480714055681> Percent » `{ship}/100%`", color = 0xffcff1)
-        em.timestamp = datetime.datetime.utcnow()
-        await ctx.send(embed=em)
+
+    @commands.command(help="Ship two members between themself, and get the love percentage!\nYou can ship yourself with another member sending the `<member>`, without `[member2]`.")
+    async def ship(self, ctx, member: discord.Member, member2: discord.Member = None):
+        if member2:
+            pfp = member
+            pfp2 = member2
+        else:
+            pfp = ctx.author
+            pfp2 = member
+
+        if member == ctx.author:
+            return await ctx.reply(":x: **You can't ship you with yourself.**")
+
+        if member == member2:
+            return await ctx.reply(":x: **You can't ship a member with itself.**")
+
+        if member2 == member:
+            return await ctx.reply(":x: **You can't ship a member with itself.**")
+
+        #get the first mention avatar
+        asset1 = pfp.avatar_url_as(size=512)
+        pfp= BytesIO(await asset1.read())
+                
+        #get the second mention avatar
+        asset2 = pfp2.avatar_url_as(size=512)
+        pfp2= BytesIO(await asset2.read())
+        
+        buffer = await self.bot.loop.run_in_executor(None, ship_func, pfp, pfp2)
+        file=discord.File(fp=buffer, filename="ship.png")
+        em = discord.Embed(color=0xffcff1)
+        em.set_image(url="attachment://ship.png")
+        em.set_footer(text="Donate to support me and my developers!", icon_url=ctx.author.avatar_url)
+        await ctx.send(embed=em, file=file)
 
 
     @commands.command(help="Do a math calculation")
@@ -441,19 +576,15 @@ class Fun(commands.Cog):
         cjpg = str(member.avatar_url).replace(".webp", ".jpg")
         cjpeg = str(member.avatar_url).replace(".webp", ".jpeg")
         cgif = str(member.avatar_url).replace(".webp", ".gif")
-        ctiff = str(member.avatar_url).replace(".webp", ".tif")
-        cbmp = str(member.avatar_url).replace(".webp", ".bmp")
         cwebp = str(member.avatar_url)
 
         png = f"[`PNG`]({cpng})"
         jpg = f"[`JPG`]({cjpg})"
         jpeg = f"[`JPEG`]({cjpeg})"
         gif = f"[`GIF`]({cgif})"
-        tif = f"[`TIF`]({ctiff})"
-        bmp = f"[`BMP`]({cbmp})"
         webp = f"[`WEBP`]({cwebp})"
 
-        em = discord.Embed(title=f"{member.name}'s avatar!",description=f"{png} | {jpg} | {jpeg} | {gif} | {webp} | {tif} | {bmp}", color = 0xffcff1)
+        em = discord.Embed(title=f"{member.name}'s avatar!",description=f"{png} | {jpg} | {jpeg} | {gif} | {webp}", color = 0xffcff1)
         em.set_image(url=member.avatar_url)
         em.set_footer(text=f"Requested by {ctx.author.name}")
         em.timestamp = datetime.datetime.utcnow()
@@ -466,8 +597,7 @@ class Fun(commands.Cog):
         a = ctx.guild.member_count
         b = len([m for m in ctx.guild.members if (m.bot)])
         c = len([m for m in ctx.guild.members if not m.bot])
-        d = discord.Embed(title=f":busts_in_silhouette: **Results:**", description = f"\n<:user:819703150755577856> *Total*  »  `{a}`\n<:thumbsup:819703492481908776> *Humans*  »  `{c}`\n<:1739_CMD:819689870393999380> *Bots*  »  `{b}`", color=discord.Color(0xffff00))
-        d.set_footer(text=f"Requested by {ctx.author.name}", icon_url=ctx.author.avatar_url)
+        d = discord.Embed(title=f":busts_in_silhouette: **Member Count**", description = f"\n<:user:819703150755577856> *Total*  »  `{a}`\n<:thumbsup:819703492481908776> *Humans*  »  `{c}`\n<:1739_CMD:819689870393999380> *Bots*  »  `{b}`", color=discord.Color(0xffff00))
         await ctx.send(embed=d)
 
 
@@ -475,13 +605,7 @@ class Fun(commands.Cog):
     @commands.command(help="Check the latency",pass_context=True)
     async def ping(self, ctx):
         websocket = round(self.bot.latency*1000, 2)
-        typing = round(self.bot.latency*150, 2)
-        database = round(self.bot.latency*10, 2)
-        em = discord.Embed(color=0xffcff1)
-        em.add_field(name="WebSocket", value=f"`{websocket}`ms")
-        em.add_field(name="Typing", value=f"`{typing}`ms")
-        em.add_field(name="Database", value=f"`{database}`ms")
-        await ctx.send(embed=em)
+        await ctx.send(f"<:babyyay:839518621352460289> `{websocket}`ms")
 
     @commands.command(help="Cum on someone")
     @commands.is_nsfw()
@@ -575,7 +699,6 @@ class Fun(commands.Cog):
         em.set_footer(text=f"{t} • 24h Format", icon_url=f"{ctx.author.avatar_url}")
         await ctx.send(embed=em)
 
-
     @commands.command(help="Set your timezone to check your time",aliases=["set-tz"])
     async def timezone(self, ctx, zone):
         author_id = str(ctx.author.id)
@@ -635,86 +758,31 @@ class Fun(commands.Cog):
             return await ctx.send("This isn't a link.")
 
 
-    @commands.command(help="Earn coins with your typespeed")
-    @commands.max_concurrency(1, BucketType.default)
-    async def type(self, ctx):
-        s = RandomSentence()
-        answer = s.sentence()
-        img = Image.open("white.png")
-        font = ImageFont.truetype("standard.ttf", 108)
-        draw = ImageDraw.Draw(img)
-        text = f"{answer}"
-        margin = offset = 20
-        for line in textwrap.wrap(text, width=30):
-            draw.text((margin, offset), line, font=font, fill="#ffffff")
-            offset += font.getsize(line)[1]
-            img.save("whitet.png")
-
-        file = discord.File("whitet.png")
-        time_listen = datetime.datetime.utcnow() + timedelta(seconds=20)
-        em = discord.Embed(title =f"The first member to type this, wins!",color = 0x2F3136)
-        em.set_image(url="attachment://whitet.png")
-        em.set_footer(text="Be sure to don't miss any character.")
-        await ctx.send(embed=em, file=file)
-        starttime = time.time()
-        while True:
-            try:
-                guess = await self.bot.wait_for('message', check=lambda m: not m.author.bot and m.channel == ctx.channel, timeout=20.0)
-            except asyncio.TimeoutError:
-                return await ctx.send("No one has sent the message.")
-
-
-            if guess.content == answer:
-                guild_id = str(ctx.guild.id)
-                author_id = str(guess.author.id)
-                earnings = random.randint(300,1200)
-                user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1",  author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + 1*earnings, author_id)
-                fintime = time.time()
-                total = fintime - starttime
-                em = discord.Embed(description=f"**{guess.author}**, well done! You got **{earnings}** coins!\nCompleted in `{round(total, 2)}` seconds!", color = 0x2F3136)
-                await ctx.send(embed=em)
-                await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
-                return
-
-
-
     @commands.command(help="Convert the discord markdown into html format")
     async def html(self, ctx, *, args):
         html = convert_to_html(args)
         em = discord.Embed(description = f"```\n{html}\n```", color = 0x2F3136)
         await ctx.send(embed=em)
 
+    @commands.command(help="Search an anime and retrive some useful info about that.", aliases=["sa"])
+    async def searchanime(self, ctx, *, animename):
+        anime = await kitsu_client.search('anime', animename)
+        if not anime:
+            return await ctx.reply(f'<:redTick:596576672149667840> Nothing found for **{animename}**.')
 
-    @commands.command(help="Search an anime on MyAnimeList")
-    async def sa(self, ctx, *args):
-        search = AnimeSearch(args) # Search for "cowboy bebop"
-        link = f"[Click here to watch it now!]({search.results[0].url})"
-        lat = (round(self.bot.latency*1000, 2))
-        em = discord.Embed(title=f"```{search.results[0].title}```", description=search.results[0].synopsis, color =0x2F3136)
-        em.add_field(name="Episodes", value=f"`{search.results[0].episodes} 📺`")
-        em.add_field(name="Type", value=f"`{search.results[0].type} 🎬`")
-        em.add_field(name="Score", value=f"`{search.results[0].score} 🌟`")
-        em.add_field(name="\u200b", value=f"<:gsarrow:819706480714055681> **{link}**")
-        em.set_thumbnail(url=search.results[0].image_url)
-        em.set_footer(text=f"Search latency : {lat}ms")
-        await ctx.send(embed=em)
-
-
-    @commands.command(help="Search a manga on MyAnimeList")
-    async def sm(self, ctx, *args):
-        search = MangaSearch(args) # Search for "cowboy bebop"
-        link = f"[Click here to read it now!]({search.results[0].url})"
-        lat = (round(self.bot.latency*1000, 2))
-        em = discord.Embed(title=f"```{search.results[0].title}```", description=search.results[0].synopsis, color =0x2F3136)
-        em.add_field(name="Volumes", value=f"`{search.results[0].volumes} 📺`")
-        em.add_field(name="Type", value=f"`{search.results[0].type} 🎬`")
-        em.add_field(name="Score", value=f"`{search.results[0].score} 🌟`")
-        em.add_field(name="\u200b", value=f"<:gsarrow:819706480714055681> **{link}**")
-        em.set_thumbnail(url=search.results[0].image_url)
-        em.set_footer(text=f"Search latency : {lat}ms")
-        await ctx.send(embed=em)
-
+        slink = await kitsu_client.fetch_anime_streaming_links(anime[0])
+        if slink:
+            link = slink[0].url
+        else:
+            link = "https://no.links.found.for.your.query..don't.click.this.link..that's.useless"
+        
+        syno = anime[0].synopsis.strip("(Source: MAL Rewrite)")
+        syno = anime[0].synopsis.strip("[Written by MAL Rewrite]")
+        em = discord.Embed(title=f"{anime[0].title}", url=f"{link}", description=f"{syno}", color=0xffcff1)
+        em.set_thumbnail(url=anime[0].poster_image_url)
+        em.set_footer(text=f"Episodes: {anime[0].episode_count} | Satus: {anime[0].status.title()} | Nsfw: {anime[0].nsfw} | {anime[0].age_rating_guide}")
+        em.set_author(name=f"{anime[0].started_at.strftime('%Y-%m-%d')} - {anime[0].ended_at.strftime('%Y-%m-%d')} | Rank: #{anime[0].popularity_rank}")
+        await ctx.reply(embed=em, mention_author=False)
 
     @commands.command(help="Talk with me and earn coins for total talked time", aliases = ["oc"])
     @commands.max_concurrency(1, BucketType.user)
@@ -764,7 +832,7 @@ class Fun(commands.Cog):
                 return await cleverbot.close()
             else:
                 response = await cleverbot.ask(msg.content)
-                await msg.reply(response.text)
+                await msg.reply(response.text.lower())
 
 
 
@@ -793,57 +861,6 @@ class Fun(commands.Cog):
                     message_ = await message.channel.send("".join(lists))
                 except:
                     pass
-
-    @commands.command(help="See all the emojis ami can see")
-    async def emojis(self, ctx, *, search: str = None):
-        lists = []
-        paginator = WrappedPaginator(max_size=1000, prefix="", suffix="")
-        if search != None:
-            emojis = finder(search,
-                            self.bot.emojis,
-                            key=lambda i: i.name,
-                            lazy=False)
-            if emojis == []:
-                return await ctx.send("0 emojis with this name or similar names.")
-            for i in emojis:
-                if i.animated == True:
-                    lists.append(f"{str(i)} | `{i.id}` | **{i.name}**")
-                else:
-                    lists.append(f"{str(i)} | `{i.id}` | **{i.name}**")
-            paginator.add_line("\n".join(lists))
-            interface = PaginatorEmbedInterface(ctx.bot,
-                                           paginator,
-                                           owner=ctx.author)
-            return await interface.send_to(ctx)
-        for i in self.bot.emojis:
-            if i.animated == True:
-                lists.append(f"{str(i)} | `{i.id}` | **{i.name}**")
-            else:
-                lists.append(f"{str(i)} | `{i.id}` | **{i.name}**")
-        paginator.add_line("\n".join(lists))
-        interface = PaginatorEmbedInterface(ctx.bot, paginator, owner=ctx.author)
-        await interface.send_to(ctx)
-
-
-class PaginatorEmbedInterface(PaginatorInterface):
-
-    def __init__(self, *args, **kwargs):
-        self._embed = discord.Embed()
-        super().__init__(*args, **kwargs)
-
-    @property
-    def send_kwargs(self) -> dict:
-        display_page = self.display_page
-        self._embed.description = f"{self.pages[display_page]}"
-        self._embed.set_footer(text=f'Page {display_page + 1}/{self.page_count}')
-        return {'embed': self._embed}
-
-    max_page_size = 2048
-
-    @property
-    def page_size(self) -> int:
-        return self.paginator.max_size
-
         
 
 def setup(bot):
