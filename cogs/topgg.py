@@ -1,27 +1,29 @@
 import dbl
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
+import aiohttp
 
-# This example uses dblpy's webhook system.
-# In order to run the webhook, at least webhook_port argument must be specified (number between 1024 and 49151).
 class Top(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-        dbl_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjgwMTc0Mjk5MTE4NTkzNjM4NCIsImJvdCI6dHJ1ZSwiaWF0IjoxNjE4NzAwNTM2fQ.Bz1JQyPll65QrsTyOiRREqbp6JQJJZdmCehQDKZOJio'  # set this to your bot's Top.gg token
-        bot.dblpy = dbl.DBLClient(bot, dbl_token,autopost=True, webhook_path='/dblwebhook', webhook_auth='ddf7wiul2003', webhook_port=5000)
+        self.dbl_token = 'token'  # set this to your bot's Top.gg token
+        self.bot.dblpy = dbl.DBLClient(self.bot, self.dbl_token, autopost=True, webhook_path='path', webhook_auth="pass", webhook_port=port)
 
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"TopGG Loaded")
 
-    @commands.Cog.listener()
-    async def on_guild_post(self):
-        channel = 834212576061161472
-        d = self.bot.get_channel(channel)
-        a = "[**`top.gg`**](https://top.gg/bot/801742991185936384)"
-        em = discord.Embed(description=f'<:PepeSmart:820747995095629866> Server count (**`{len(self.bot.guilds)}`**) was succesfully posted on {a} with **`{round(self.bot.latency*1000, 2)}ms`**', color = 0xffcff1)
-        await d.send(embed=em)
+
+    @tasks.loop(minutes=30)
+    async def post(self):
+        await self.bot.wait_until_ready()
+        auth = {"Authorization": "token"}
+        async with aiohttp.ClientSession(headers=auth) as session:
+            async with session.get('https://top.gg/api/bots/801742991185936384/stats') as resp:
+                myobj = {'server_count': f'{len(self.bot.guilds)}'}
+                await session.post('https://top.gg/api/bots/801742991185936384/stats', data=myobj)
+
+        await session.close()
 
     @commands.Cog.listener()
     async def on_dbl_vote(self, data):
