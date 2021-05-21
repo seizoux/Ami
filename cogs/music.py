@@ -675,9 +675,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
         if not player.is_connected:
-            return
+            return await ctx.send("<:redTick:596576672149667840> Not connected to any voice channel.")
 
-        if player.queue.qsize() == 0:
+        if self.queue.qsize() == 0:
             return await ctx.send('<:redTick:596576672149667840> The queue is empty.', delete_after=15)
 
         entries = [f"[{track.title}]({track.uri})" for track in player.queue._queue]
