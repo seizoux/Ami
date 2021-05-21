@@ -22,6 +22,8 @@ class Admin(commands.Cog):
  
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
+        if after.embeds and not before.embeds:
+            return
         ctx = await self.bot.get_context(after)
         if ctx.valid:
             await self.bot.process_commands(after)
