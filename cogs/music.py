@@ -208,11 +208,12 @@ class PaginatorSource(menus.ListPageSource):
     """Player queue paginator class."""
 
     def __init__(self, entries, *, per_page=10):
+        entries = [f'**`{index}`** | {title}' for index, title in enumerate(entries, 1)]
         super().__init__(entries, per_page=per_page)
 
     async def format_page(self, menu: menus.Menu, page):
         embed = discord.Embed(title=f'<:FeelsBeatsMan:597591202614738947> Songs In Queue', color = 0xffcff1)
-        embed.description = '\n'.join(f'**`{index}`** | {title}' for index, title in enumerate(page, 1))
+        embed.description = '\n'.join(page)
 
         return embed
 
