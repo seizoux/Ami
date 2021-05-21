@@ -36,14 +36,6 @@ class Admin(commands.Cog):
                     pass
             except NotFound:
                 pass
-
-
-    @commands.command()
-    @commands.is_owner()
-    async def bye(self, ctx):
-        em = discord.Embed(description="<a:9565_loading_hearts:808064290468003900>", color = 0xffcff1)
-        await ctx.send(embed=em)
-        await self.bot.close()
         
 
     @commands.command()
