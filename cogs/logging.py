@@ -7,6 +7,7 @@ import aiohttp
 class Logging(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.session = aiohttp.ClientSession()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -87,7 +88,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Bulk Message Delete", color = 0xffcff1)
@@ -105,7 +106,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Channel Created", color = 0xffcff1)
@@ -121,7 +122,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Channel Deleted", color = 0xffcff1)
@@ -137,7 +138,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="New Message Pinned", color = 0xffcff1)
@@ -153,7 +154,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Channel Updated", color = 0xffcff1)
@@ -169,7 +170,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Emojis Updated", color = 0xffcff1)
@@ -185,7 +186,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Integration Updated", color = 0xffcff1)
@@ -200,7 +201,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="New Role Created", color = 0xffcff1)
@@ -216,7 +217,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Role Deleted", color = 0xffcff1)
@@ -232,7 +233,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Role Updated", color = 0xffcff1)
@@ -248,7 +249,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title=":x: Guild Unavailable", description="I can't log the action because this is a discord side issue.", color = 0xffcff1)
@@ -262,7 +263,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Guild Updated", color = 0xffcff1)
@@ -278,7 +279,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="New Invite Created", color = 0xffcff1)
@@ -294,7 +295,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Invite Deleted", color = 0xffcff1)
@@ -314,7 +315,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Member Banned", color = 0xffcff1)
@@ -329,7 +330,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="New Member Joined", color = 0xffcff1)
@@ -344,7 +345,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Member Left", color = 0xffcff1)
@@ -363,7 +364,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Member Unbanned", color = 0xffcff1)
@@ -378,7 +379,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Member Updated", color = 0xffcff1)
@@ -394,7 +395,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Message Deleted", color = 0xffcff1)
@@ -410,7 +411,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             em = discord.Embed(title="Message Edited", color = 0xffcff1)
@@ -427,7 +428,7 @@ class Logging(commands.Cog):
             return
         
         link = db["webhook"]
-        async with aiohttp.ClientSession() as session:
+        async with self.session as session:
             webhook = Webhook.from_url(link, adapter=AsyncWebhookAdapter(session))
 
             voice1 = ""
