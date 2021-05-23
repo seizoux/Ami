@@ -8,6 +8,7 @@ class Logging(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.session = aiohttp.ClientSession()
+        self.channels = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -22,6 +23,7 @@ class Logging(commands.Cog):
             if channel.permissions_for(ctx.me).manage_webhooks:
                 pfp = await self.bot.user.avatar_url.read()
                 webhook = await channel.create_webhook(name="Ami - Log System", avatar=pfp)
+                self.channels[ctx.guild.id] == channel.id
                 await self.bot.pg_con.execute("INSERT INTO logs (guild_id, channel, toggle, webhook) VALUES ($1, $2, $3, $4)", str(ctx.guild.id), channel.id, on_off, webhook.url)
                 em = discord.Embed(title="<:greenTick:596576670815879169> Logs activated!", description="Logs are basically a report of every action executed in your guild, from now i'll send **all** action in the channel you have specified before. Here's the list of all actions i will log there:\n\n"
                 "`Bulk Message Delete` : Mass delete of messages\n"
