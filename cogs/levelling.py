@@ -151,12 +151,11 @@ class Levelling(commands.Cog):
                 await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, user_id, level, xp) VALUES ($1, $2, $3, $4)", message.guild.id, message.author.id, 0, 0)
                 
             f = random.randint(320, 798)
-            self.xp_users[message.guild.id] = {
-                                                message.author.id: {
+            self.xp_users[message.guild.id][message.author.id] = {
                                                 'xp_earned': db[0]["xp"] if db[0]["xp"] >= 0 else 0,
                                                 'xp': 0,
                                                 'next_level': db[0]["xp"] + f
-                                                },}
+                                                }
 
         d = random.randint(1, 50)
         self.xp_users[message.guild.id][message.author.id]["xp_earned"] = self.xp_users[message.guild.id][message.author.id]["xp"] + d
