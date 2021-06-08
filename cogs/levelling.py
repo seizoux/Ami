@@ -141,8 +141,7 @@ class Levelling(commands.Cog):
         if message.guild.id not in self.xp_users:
             self.xp_users[message.guild.id] = {}
 
-        user = self.bot.get_user(message.author.id) or (await self.bot.fetch_user(message.author.id))
-        if user.bot:
+        if message.author.bot:
             return
 
         if message.author.id not in self.xp_users:
