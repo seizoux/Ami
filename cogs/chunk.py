@@ -1,4 +1,5 @@
 import discord
+import asyncio
 from discord.ext import commands, tasks
 
 class Chunk(commands.Cog):
@@ -14,9 +15,7 @@ class Chunk(commands.Cog):
     @tasks.loop(minutes=1)
     async def chunk(self):
         await self.bot.wait_until_ready()
-        for guild in self.bot.guilds:
-            if not guild.chunked:
-                await guild.chunk()
+        await asyncio.gather(*[guild.chunk() for guild in self.bot.guilds if not guild.chunked])
 
 def setup(bot):
     bot.add_cog(Chunk(bot))
