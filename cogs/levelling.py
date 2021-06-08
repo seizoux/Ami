@@ -87,7 +87,6 @@ class Levelling(commands.Cog):
       
 
     async def cache_levels(self):
-        await self.bot.wait_until_ready()
         db = await self.bot.pg_con.fetch("SELECT * FROM levelling")
         db2 = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings")
         for s in db2:
@@ -140,6 +139,7 @@ class Levelling(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        await self.bot.wait_until_ready()
         if message.guild.id not in self.modality:
             return
 
