@@ -152,9 +152,9 @@ class Levelling(commands.Cog):
         if message.author.id not in self.xp_users:
             f = random.randint(320, 798)
             self.xp_users[message.guild.id][message.author.id] = {
-                                                'xp_earned': db[0]["xp"] if db[0]["xp"] >= 0 else 0,
+                                                'xp_earned': 0,
                                                 'xp': 0,
-                                                'next_level': db[0]["xp"] + f
+                                                'next_level': f
                                                 }
 
         d = random.randint(1, 50)
