@@ -145,6 +145,9 @@ class Levelling(commands.Cog):
 
         if message.guild.id not in self.xp_users:
             self.xp_users[message.guild.id] = {}
+            
+        if message.guild.id not in self.levels_users:
+            self.levels_users[message.guild.id] = {}
 
         if message.author.bot:
             return
@@ -155,6 +158,11 @@ class Levelling(commands.Cog):
                                                 'xp_earned': 0,
                                                 'xp': 0,
                                                 'next_level': f
+                                                }
+            
+         if message.author.id not in self.levels_users:
+            self.levels_users[message.guild.id][message.author.id] = {
+                                                'level': 0
                                                 }
 
         d = random.randint(1, 50)
