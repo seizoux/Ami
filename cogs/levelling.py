@@ -1,5 +1,6 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
+import json
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 import random
@@ -67,10 +68,23 @@ class Levelling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Levelling"
+        self.save_level.start()
         self.modality = {}
         self.xp_users = {}
         self.levels_users = {}
         self.bot.loop.create_task(self.cache_levels())
+    
+    @tasks.loop(minutes=1)
+    async def save_level(self):
+        await self.bot.wait_until_ready()
+        for i, v in self.xp_users.items():
+            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, xp) VALUES ($1, $2) WHERE guild_id = $1 ON CONFLICT (guild_id) DO UPDATE SET xp = $2", i, json.dumps(v))
+        
+        for i, v in self.levels_users.items():
+            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, levels) VALUES ($1, $2) WHERE guild_id = $1 ON CONFLICT (guild_id) DO UPDATE SET levels = $2", i, json.dumps(v))
+        
+            
+      
 
     async def cache_levels(self):
         await self.bot.wait_until_ready()
@@ -82,19 +96,10 @@ class Levelling(commands.Cog):
 
         for i in db:
             if i["xp"]:
-                f = random.randint(320, 798)
-                self.xp_users[i["guild_id"]] = {
-                                                i["user_id"]: {
-                                                'xp_earned': i["xp"],
-                                                'xp': 0,
-                                                'next_level': i["xp"] + f
-                                                ,},}
+                self.xp_users[i["guild_id"]] = json.loads(i["xp"])
 
-            if i["level"]:
-                self.levels_users[i["guild_id"]] = {
-                                                    i["user_id"]: {
-                                                    'level': i["level"] if i["level"] >= 0 else 0
-                                                    ,},}
+            if i["levels"]:
+                self.levels_users[i["guild_id"]] = json.loads(i["levels"])
 
 
 
@@ -145,10 +150,6 @@ class Levelling(commands.Cog):
             return
 
         if message.author.id not in self.xp_users:
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling WHERE guild_id = $1 AND user_id = $2", message.guild.id, message.author.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, user_id, level, xp) VALUES ($1, $2, $3, $4)", message.guild.id, message.author.id, 0, 0)
-                
             f = random.randint(320, 798)
             self.xp_users[message.guild.id][message.author.id] = {
                                                 'xp_earned': db[0]["xp"] if db[0]["xp"] >= 0 else 0,
@@ -210,12 +211,7 @@ class Levelling(commands.Cog):
         if member is None:
             member = ctx.author
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling WHERE guild_id = $1 AND user_id = $2", ctx.guild.id, member.id)
-        if not db:
-            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, user_id, level) VALUES ($1, $2, $3)", ctx.guild.id, member.id, amount)
-            return await ctx.send(f"<:4430checkmark:848857812632076314> Added **{amount}** levels to **{member.name}#{member.discriminator}**")
-
-        await self.bot.pg_con.execute("UPDATE levelling SET level = $1 WHERE guild_id = $2 AND user_id = $3", db[0]["level"] + amount, ctx.guild.id, member.id)
+        #daishiky u change those commands urself i am lazy
         await ctx.send(f"<:4430checkmark:848857812632076314> Added **{amount}** levels to **{member.name}#{member.discriminator}**")
 
     @commands.command()
