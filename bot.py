@@ -21,6 +21,9 @@ intents=discord.Intents.default()
 intents.members=True
 client = commands.Bot(allowed_mentions=discord.AllowedMentions(everyone=False), command_prefix=["ami ", "Ami ", "a!"], intents=intents, chunk_guilds_at_startup=False)
 start_time = datetime.datetime.utcnow()
+async def create_db_pool():
+    client.pg_con = await asyncpg.create_pool('stuff')
+client.loop.run_until_complete(create_db_pool())
 
 os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
 os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
@@ -29,9 +32,6 @@ client.load_extension('jishaku')
 for filename in os.listdir('./cogs'):
   if filename.endswith('.py'):
     client.load_extension(f'cogs.{filename[:-3]}')
-
-async def create_db_pool():
-    client.pg_con = await asyncpg.create_pool('stuff')
 
 
 client.socket_receive = 0
@@ -89,5 +89,4 @@ async def uptime(ctx: commands.Context):
 
 
 # RUN CLIENT -- IF U DELETE THIS, THE BOT DON'T WORK!!
-client.loop.run_until_complete(create_db_pool())
 client.run(token)
