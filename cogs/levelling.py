@@ -78,10 +78,10 @@ class Levelling(commands.Cog):
     async def save_level(self):
         await self.bot.wait_until_ready()
         for i, v in self.xp_users.items():
-            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, xp) VALUES ($1, $2) WHERE guild_id = $1 ON CONFLICT (guild_id) DO UPDATE SET xp = $2", i, json.dumps(v))
+            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, xp) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET xp = $2", i, json.dumps(v))
         
         for i, v in self.levels_users.items():
-            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, levels) VALUES ($1, $2) WHERE guild_id = $1 ON CONFLICT (guild_id) DO UPDATE SET levels = $2", i, json.dumps(v))
+            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, levels) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET levels = $2", i, json.dumps(v))
         
             
       
@@ -125,6 +125,7 @@ class Levelling(commands.Cog):
                 return await ctx.send("<:4318crossmark:848857812565229601> This member has **0**xp and it's **Lvl. 0**.")
         
         name = f"{member.name}#{member.discriminator}"
+        #PLEASE FIX THIS, I NEED THE RANK ON THE LEVEL CARD YES YES YES YES YES YES YES YES YES YES
         rank = await self.bot.pg_con.fetchval("SELECT count(*)+1 FROM levelling WHERE guild_id = $1 AND xp > (SELECT xp FROM levelling WHERE guild_id = $1 AND user_id = $2)", ctx.guild.id, member.id)
         level = self.levels_users[ctx.guild.id][ctx.author.id]["level"]
         xp = self.xp_users[ctx.guild.id][ctx.author.id]["xp_earned"]
