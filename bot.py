@@ -19,7 +19,7 @@ import os
 # THIS IS THE TRIGGER PREFIX OF UR COMMANDS, LIKE ".BAN" "/BAN" "!BAN" "?BAN" "$BAN"
 intents=discord.Intents.default()
 intents.members=True
-client = commands.Bot(allowed_mentions=discord.AllowedMentions(everyone=False), command_prefix=["ami ", "Ami ", "a!"], intents=intents)
+client = commands.Bot(allowed_mentions=discord.AllowedMentions(everyone=False), command_prefix=["ami ", "Ami ", "a!"], intents=intents, chunk_guilds_at_startup=False)
 start_time = datetime.datetime.utcnow()
 
 os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
