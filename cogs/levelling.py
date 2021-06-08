@@ -68,11 +68,11 @@ class Levelling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Levelling"
-        self.save_level.start()
         self.modality = {}
         self.xp_users = {}
         self.levels_users = {}
         self.bot.loop.create_task(self.cache_levels())
+        self.save_level.start()
     
     @tasks.loop(minutes=1)
     async def save_level(self):
