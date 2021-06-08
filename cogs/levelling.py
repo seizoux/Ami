@@ -4,6 +4,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 import random
 
+# just skip this part, is pil image yes yes
 def level_func(avatar: discord.Member, name:str, rank:str, level:str, xp:str):
     with Image.open("assets/level_banner.png").convert("RGBA") as bg:
 
@@ -72,16 +73,33 @@ class Levelling(commands.Cog):
         self.levels_users = {}
         self.bot.loop.create_task(self.cache_levels())
     
+    # on cog load, insert into our dicts respective values from db, separated for each guild_id.
     async def cache_levels(self):
         await self.bot.wait_until_ready()
         db = await self.bot.pg_con.fetch("SELECT * FROM levelling")
         db2 = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings")
         for s in db2:
             if s["toggle"] == "on":
-                self.modality[int(s["guild_id"])] = True
+                self.modality[int(s["guild_id"])] = True #insert it into self.modality as True, to enable levelling in that guild
 
         for i in db:
             if i["xp"]:
+                """ here we're put into `self.xp_users` dict every member in the db with at least 1 xp and level 1, separated for each guild_id 
+                    example:
+                    self.xp_users= {guild_id_here: {
+                                                        user_id_here: {
+                                                        "xp": user_xp_here, 
+                                                        "xp_needed_levelup": xp + 1732},
+                                                        }, 
+                                                        {
+                                                        user2_id_here: {
+                                                        "xp": user2_xp_here, 
+                                                        "xp_needed_levelup": xp + 1732
+                                                        },
+                                                   },
+                                              }
+                                    
+                """
                 self.xp_users[int(i["guild_id"])] = {
                                                             int(i["user_id"]): {
                                                             'xp': i["xp"],
@@ -90,6 +108,7 @@ class Levelling(commands.Cog):
 
 
             if i["level"]:
+                """ same thing here as xp, but with levels """
                 self.levels_users[int(i["guild_id"])] = {
                                                             int(i["user_id"]): {
                                                             'level': i["level"]
@@ -105,6 +124,9 @@ class Levelling(commands.Cog):
     async def levelling_cache(self, ctx):
         return await ctx.send(self.xp_users)
 
+    
+    # ignore this one, this works well cuz it use directly the db #
+    
     @commands.command(help="See your rank card according to the guild where you execute this command.\nThis will return `0`, `0` if not **xp** / **level**")
     async def level(self, ctx, member: discord.Member = None):
         """ Command to see your level / the level of a member"""
@@ -131,15 +153,18 @@ class Levelling(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        #if the guild has levelling disabled, return
         if message.guild.id not in self.modality:
             return
 
+        #if the guild is not in our `self.xp_users`, insert it into that
         if not message.guild.id in self.xp_users:
             self.xp_users.append(message.guild.id)
 
+        #if the message author is not in our self.xp_users dict
         if message.author.id not in self.xp_users[message.guild.id]:
             db = await self.bot.pg_con.fetch("SELECT * FROM levelling WHERE guild_id = $1 AND user_id = $2", str(message.guild.id), str(message.author.id))
-            if not db:
+            if not db: #if the user is not in db, insert it and add it into our `self.xp_users` cache.
                 await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, user_id, level, xp) VALUES ($1, $2, $3, $4)", str(message.guild.id), str(message.author.id), 0, 0)
             
                 self.xp_users[int(db[0]["guild_id"])] = {
@@ -148,17 +173,23 @@ class Levelling(commands.Cog):
                                                             'next_level': db[0]["xp"] + random.randint(320, 798)
                                                         },}
 
+        #now let's add the xp on each message, first gets it from db
         db = await self.bot.pg_con.fetch("SELECT * FROM levelling WHERE guild_id = $1 AND user_id = $2", str(message.guild.id), str(message.author.id))
 
+        #add a random xp amount to that users in our dict `self.xp_users` from 1 to 50
         self.xp_users[message.guild.id][int(db[0]["user_id"])]["xp"] = self.xp_users[message.guild.id][int(db[0]["user_id"])]["xp"] + random.randint(1, 50)
         
+        #check if xp is > or = to xp needed to level up
         if self.xp_users[message.guild.id][int(db[0]["user_id"])]["xp"] >= self.xp_users[message.guild.id][int(db[0]["user_id"])]["next_level"]:
             
+            #if xp is > or = to xp needed to level up, reset xp in cache to 0
             self.xp_users[message.guild.id][int(db[0]["user_id"])]["xp"] = 0
             
+            # then add +1 to the level of the user in our `self.levels_users` cache
             self.levels_users[message.guild.id][int(db[0]["user_id"])]["level"] = self.levels_users[message.guild.id][int(db[0]["user_id"])]["level"] + 1
 
-
+            
+    # this works fine, skip.
     @commands.command(help="Enable or disable the levelling in the guild\n`ami setlevelling on` to enable the levelling\n`ami setlevelling off` to disable the levelling")
     @commands.is_owner()
     async def setlevelling(self, ctx, mode):
