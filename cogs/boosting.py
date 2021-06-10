@@ -52,11 +52,11 @@ class Boosting(commands.Cog):
             tgf = db[0]["toggle"]
 
             dcf = ""
+
             if tgf is True:
                 dcf = "Enabled"
-            elif tgf is False:
-                dcf = "Disabled"
-            else:
+                
+            elif not tgf:
                 dcf = "Disabled"
 
             s1 = "Message: None"
