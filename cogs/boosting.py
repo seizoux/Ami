@@ -26,21 +26,11 @@ class Boosting(commands.Cog):
     async def setboost(self, ctx, option, *, set=None):
 
         if option.lower() == "disable":
-            db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2)", ctx.guild.id, False)
-                return await ctx.send("<:4430checkmark:848857812632076314> Boosting module disabled!")
-                
-            await self.bot.pg_con.execute("UPDATE boosting SET toggle = $1 WHERE guild_id = $2", False, ctx.guild.id)
+            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET toggle = $2", ctx.guild.id, False)
             return await ctx.send("<:4430checkmark:848857812632076314> Boosting module disabled!")
 
         if option.lower() == "enable":
-            db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2)", ctx.guild.id, True)
-                return await ctx.send("<:4430checkmark:848857812632076314> Boosting module enabled!")
-                
-            await self.bot.pg_con.execute("UPDATE boosting SET toggle = $1 WHERE guild_id = $2", True, ctx.guild.id)
+            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET toggle = $2", ctx.guild.id, True)
             return await ctx.send("<:4430checkmark:848857812632076314> Boosting module enabled!")
 
 
@@ -62,9 +52,9 @@ class Boosting(commands.Cog):
             tgf = db[0]["toggle"]
 
             dcf = ""
-            if tgf == True:
+            if tgf is True:
                 dcf = "Enabled"
-            elif tgf == False:
+            elif tgf is False:
                 dcf = "Disabled"
             else:
                 dcf = "Disabled"
@@ -87,9 +77,9 @@ class Boosting(commands.Cog):
             if im:
                 s5 = f"Embed Image: {im}"
             if emb:
-                if emb == True:
+                if emb is True:
                     s6 = f"Embed: **Enabled**"
-                elif emb == False:
+                elif emb is False:
                     s6 = f"Embed: **Disabled**"
 
             em = discord.Embed(title="Boosting Panel", description=f"Boosting feature in this guild is **{dcf}**", color=0xffcff1)
@@ -169,12 +159,7 @@ class Boosting(commands.Cog):
             if len(set) > 500:
                 return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **500** characters, your is **{len(set)}.**")
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, message) VALUES ($1, $2)", ctx.guild.id, set)
-                return await ctx.send("<:4430checkmark:848857812632076314> Message succesfully set for boosting message!")
-                
-            await self.bot.pg_con.execute("UPDATE boosting SET message = $1 WHERE guild_id = $2", set, ctx.guild.id)
+            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, message) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET message = $2", ctx.guild.id, set)
             return await ctx.send("<:4430checkmark:848857812632076314> Message succesfully edited for boosting message!")
 
         if option.lower() == "channel":
@@ -186,12 +171,7 @@ class Boosting(commands.Cog):
             if not c:
                 return await ctx.send("<:4318crossmark:848857812565229601> This isn't a valid channel.")
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, channel_id) VALUES ($1, $2)", ctx.guild.id, int(d))
-                return await ctx.send("<:4430checkmark:848857812632076314> Channel succesfully set for boosting message!")
-                
-            await self.bot.pg_con.execute("UPDATE boosting SET channel_id = $1 WHERE guild_id = $2", int(d), ctx.guild.id)
+            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2", ctx.guild.id, int(d))
             return await ctx.send("<:4430checkmark:848857812632076314> Channel succesfully edited for boosting message!")
 
         if option.lower() == "embed":
@@ -199,21 +179,11 @@ class Boosting(commands.Cog):
                 return await ctx.send("<:4318crossmark:848857812565229601> You forgot the `[set]` parameter, which needs to be `enable` or `disable`.")
         
             if set.lower() == "enable":
-                db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-                if not db:
-                    await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2)", ctx.guild.id, True)
-                    return await ctx.send("<:4430checkmark:848857812632076314> Embed succesfully enabled for boosting message!")
-                
-                await self.bot.pg_con.execute("UPDATE boosting SET embed = $1 WHERE guild_id = $2", True, ctx.guild.id)
+                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed = $2", ctx.guild.id, True)
                 return await ctx.send("<:4430checkmark:848857812632076314> Embed succesfully enabled for boosting message!")
 
             if set.lower() == "disable":
-                db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-                if not db:
-                    await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2)", ctx.guild.id, False)
-                    return await ctx.send("<:4430checkmark:848857812632076314> Embed succesfully disabled for boosting message!")
-                
-                await self.bot.pg_con.execute("UPDATE boosting SET embed = $1 WHERE guild_id = $2", False, ctx.guild.id)
+                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed = $2", ctx.guild.id, False)
                 return await ctx.send("<:4430checkmark:848857812632076314> Embed succesfully disabled for boosting message!")
 
         if option.lower() == "embed-image":
@@ -224,12 +194,7 @@ class Boosting(commands.Cog):
             if not url:
                 return await ctx.send("<:4318crossmark:848857812565229601> This isn't a valid url schema for embed image.")
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_image) VALUES ($1, $2)", ctx.guild.id, set)
-                return await ctx.send("<:4430checkmark:848857812632076314> Embed image succesfully set for boosting message!")
-                
-            await self.bot.pg_con.execute("UPDATE boosting SET embed_image = $1 WHERE guild_id = $2", set, ctx.guild.id)
+            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_image) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_image = $2", ctx.guild.id, set)
             return await ctx.send("<:4430checkmark:848857812632076314> Embed image succesfully edited for boosting message!")
 
         if option.lower() == "embed-title":
@@ -239,12 +204,7 @@ class Boosting(commands.Cog):
             if len(set) > 120:
                 return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **50** characters, your is **{len(set)}.**")
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_title) VALUES ($1, $2)", ctx.guild.id, set)
-                return await ctx.send("<:4430checkmark:848857812632076314> Embed title succesfully set for boosting message!")
-                
-            await self.bot.pg_con.execute("UPDATE boosting SET embed_title = $1 WHERE guild_id = $2", set, ctx.guild.id)
+            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_title) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_title = $2", ctx.guild.id, set)
             return await ctx.send("<:4430checkmark:848857812632076314> Embed title succesfully edited for boosting message!")
 
         if option.lower() == "embed-footer":
@@ -254,12 +214,7 @@ class Boosting(commands.Cog):
             if len(set) > 100:
                 return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **50** characters, your is **{len(set)}.**")
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_footer) VALUES ($1, $2)", ctx.guild.id, set)
-                return await ctx.send("<:4430checkmark:848857812632076314> Embed footer succesfully set for boosting message!")
-                
-            await self.bot.pg_con.execute("UPDATE boosting SET embed_footer = $1 WHERE guild_id = $2", set, ctx.guild.id)
+            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_footer) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_footer = $2", ctx.guild.id, set)
             return await ctx.send("<:4430checkmark:848857812632076314> Embed footer succesfully edited for boosting message!")
     
 
