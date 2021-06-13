@@ -296,10 +296,10 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
     async def on_node_event_(self, node, event):
         if "YouTube (429)" in event.error:
             player = event.player
-            if URL_REG.match(player.query):
-                new_track = await self.bot.wavelink.get_tracks(f"scsearch:{player.track.title}")
+            if URL_REG.fullmatch(player.query):
+                new_track = await player.bot.wavelink.get_tracks(f"scsearch:{player.track.title}")
             else:
-                new_track = await self.bot.wavelink.get_tracks(f"scsearch:{player.query}")
+                new_track = await player.bot.wavelink.get_tracks(f"scsearch:{player.query}")
             if new_track:
                 track = Track(
                     new_track[0].id,
