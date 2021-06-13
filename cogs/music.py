@@ -81,7 +81,7 @@ class Player(wavelink.Player):
             return
 
         try:
-            if self.unlimit == True:
+            if self.unlimit is True:
                 self.waiting = True
                 track = await self.queue.get()
                 return
@@ -306,7 +306,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         channel = self.bot.get_channel(int(player.channel_id))
 
         if len(channel.members) < 2:
-            if player.unlimit == True:
+            if player.unlimit:
                 return
             em = discord.Embed(description=f"<:4318crossmark:848857812565229601> Leaving {channel.mention} because **all** leaved me alone...", color = 0xffcff1)
             await player.context.channel.send(embed=em, delete_after=20)
