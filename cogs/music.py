@@ -308,9 +308,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 )
                 await player.queue.put(track)
                 await player.do_next()
-                await player.context.send("")
+                await player.context.send(embed=self.build_embed)
             else:
-                await player.context.send("")
+                await player.context.send("Error while queuing your query.")
         else:
             await event.player.context.send(f"`{event.error}`")
 
