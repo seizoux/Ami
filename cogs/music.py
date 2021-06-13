@@ -292,6 +292,34 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
     async def on_player_stop(self, node: wavelink.Node, payload):
         await payload.player.do_next()
 
+    @wavelink.WavelinkMixin.listener("on_track_exception") #ty to cryptex for helping because jadon is stupid omegalul
+    async def on_node_event_(self, node, event):
+        if "YouTube (429)" in event.error:
+            player = event.player
+            if player.bot.url_regex.fullmatch(player.query):
+                new_track = await player.ctx.bot.wavelink.get_tracks(f"scsearch:{player.track.title}")
+            else:
+                new_track = await player.ctx.bot.wavelink.get_tracks(f"scsearch:{player.query}")
+            if new_track:
+                track = Track(
+                    new_track[0].id,
+                    new_track[0].info,
+                    requester=player.ctx.author,
+                )
+                player.queue.append(track)
+                player.now_playing = track
+                await player.play(player.now_playing)
+                await player.ctx.send(embed=player.make_embed(player.now_playing), delete_after=10)
+                await player.ctx.send(
+                    "sorry, but youtube is ratelimiting our ip\nthey just dont like the api requests, but if u want it to be more specific pls provide song writers name for more accurate results\ncredit to cryptex for helping with this he is no longer sussy <a:rooClap:759933903959228446>"
+                )
+            else:
+                await player.ctx.send(
+                    "so basically we searched soundcloud and couldnt find the song you wanted, but you can try a soundcloud link if they have your song on soundcloud!"
+                )
+        else:
+            await event.player.ctx.send(f"some error occured so here is the error `{event.error}`")
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if member.bot:
