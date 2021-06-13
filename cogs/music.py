@@ -11,11 +11,10 @@ import typing
 import wavelink
 from discord.ext import commands, menus
 import humanize
-from jishaku.paginators import WrappedPaginator, PaginatorInterface
 
 # URL matching REGEX...
 URL_REG = re.compile(r'https?://(?:www\.)?.+')
-
+SPOTIFY_URL_REG = re.compile(r'https?://open.spotify.com/(?P<type>album|playlist|track)/(?P<id>[a-zA-Z0-9]+)')
 
 class NoChannelProvided(commands.CommandError):
     """Error raised when no suitable voice channel was supplied."""
@@ -28,15 +27,12 @@ class IncorrectChannelError(commands.CommandError):
 
 
 class Track(wavelink.Track):
-    """Wavelink Track object with a requester attribute."""
-
-    __slots__ = ('requester', )
+    __slots__ = ("requester",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
 
-        self.requester = kwargs.get('requester')
-
+        self.requester = kwargs.get("requester")
 
 class Player(wavelink.Player):
     """Custom wavelink Player class."""
@@ -52,6 +48,8 @@ class Player(wavelink.Player):
         self.controller = None
         self.looped = False
         self.looped_track = None
+
+        self.unlimit = False
 
         self.waiting = False
         self.updating = False
@@ -73,14 +71,21 @@ class Player(wavelink.Player):
         self.skip_votes.clear()
         self.shuffle_votes.clear()
         self.stop_votes.clear()
+        self.loop_votes.clear()
 
         if self.looped == True:
             self.waiting = False
             await self.play(self.looped_track)
+            self.time = time.time()
             await self.invoke_controller()
             return
 
         try:
+            if self.unlimit == True:
+                self.waiting = True
+                track = await self.queue.get()
+                return
+            
             self.waiting = True
             with async_timeout.timeout(300):
                 track = await self.queue.get()
@@ -129,18 +134,40 @@ class Player(wavelink.Player):
         if not track:
             return
 
+        embed = discord.Embed(title="Now playing", description=f'[{track.title}]({track.uri}) | {track.requester.mention}', color = 0xffcff1)
+
+        return embed
+
+    def now_playing(self) -> typing.Optional[discord.Embed]:
+        """Method which builds our now playing embed."""
+        track = self.current
+        if not track:
+            return
+
         channel = self.bot.get_channel(int(self.channel_id))
         qsize = self.queue.qsize()
         end_time = time.time()
         passe = float(end_time) - float(self.time)
+        passed = str(datetime.timedelta(seconds=int(passe)))
         if not track.is_stream:
             total = str(datetime.timedelta(milliseconds=int(track.length)))
+            final = f"{passed}/{total}"
         else:
             total = "Live Stream"
-        passed = str(datetime.timedelta(seconds=int(passe)))
+            final = "Live Stream"
 
-        embed = discord.Embed(description=f'[`{track.title}`]({track.uri}) | {track.requester.mention}', color = 0xffcff1)
-        embed.set_footer(text=f"Playing in {channel.name} | Duration: {total} | Played: {passed} | Songs in queue : {qsize}", icon_url=track.requester.avatar_url)
+        if self.looped == True:
+            next_in = f"__This track is Looped!__"
+        else:
+            try:
+                next_in = self.queue._queue[0]
+            except Exception:
+                next_in = "Nothing played next this one."
+
+
+        embed = discord.Embed(title=f'**{track.title}**', url=f'{track.uri}', description=f'**Requester**: {track.requester.mention}\n**Duration**: {final}\n**Artist**: {track.author}\n\n**Up Next**: {next_in}', color = 0xffcff1)
+        embed.set_footer(text=f"Playing in {channel.name} | Songs in queue : {qsize}", icon_url=track.requester.avatar_url)
+        embed.set_thumbnail(url=track.thumb)
 
         return embed
 
@@ -159,10 +186,11 @@ class Player(wavelink.Player):
         """Clear internal states, remove player controller and disconnect."""
         try:
             await self.controller.message.delete()
-        except discord.HTTPException:
+        except Exception:
             pass
 
-        self.controller.stop()
+        if self.controller:
+            self.controller.stop()
 
         try:
             await self.destroy()
@@ -202,17 +230,18 @@ class InteractiveController(menus.Menu):
         return payload.emoji in self.buttons
 
     async def send_initial_message(self, ctx: commands.Context, channel: discord.TextChannel) -> discord.Message:
-        return await channel.send(embed=self.embed, delete_after=5)
+        return await channel.send(embed=self.embed)
 
 class PaginatorSource(menus.ListPageSource):
     """Player queue paginator class."""
 
     def __init__(self, entries, *, per_page=10):
-        entries = [f'**`{index}`** | {title}' for index, title in enumerate(entries, 1)]
+        entries = [f'**`{index}`** | **{title}**' for index, title in enumerate(entries, 1)]
         super().__init__(entries, per_page=per_page)
 
     async def format_page(self, menu: menus.Menu, page):
-        embed = discord.Embed(title=f'<:FeelsBeatsMan:597591202614738947> Songs In Queue', color = 0xffcff1)
+        embed = discord.Embed(color = 0xffcff1)
+        embed.set_author(name="Player Queue", icon_url="https://cdn.discordapp.com/emojis/846314042120470528.gif?v=1")
         embed.description = '\n'.join(page)
 
         return embed
@@ -242,13 +271,14 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             await i.destroy()
 
     async def start_nodes(self):
+        await self.bot.wait_until_ready()
         node = await self.bot.wavelink.initiate_node(
                         host="127.0.0.1",
                         port=2333,
                         rest_uri="http://127.0.0.1:2333",
                         password="youshallnotpass",
                         identifier="Ami",
-                        region="us_central",
+                        region="europe",
                         heartbeat=60,
                     )
 
@@ -275,6 +305,13 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         channel = self.bot.get_channel(int(player.channel_id))
 
+        if len(channel.members) < 2:
+            if player.unlimit == True:
+                return
+            em = discord.Embed(description=f"<:4318crossmark:848857812565229601> Leaving {channel.mention} because **all** leaved me alone...", color = 0xffcff1)
+            await player.context.channel.send(embed=em, delete_after=20)
+            return await player.teardown()
+
         if member == player.dj and after.channel is None:
             for m in channel.members:
                 if m.bot:
@@ -292,12 +329,12 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if isinstance(error, NoChannelProvided):
-            return await ctx.send('<:redTick:596576672149667840> You are not in a voice channel')
+            return await ctx.send('<:4318crossmark:848857812565229601> You are not in a voice channel')
 
     async def cog_check(self, ctx: commands.Context):
         """Cog wide check, which disallows commands in DMs."""
         if not ctx.guild:
-            await ctx.send('<:redTick:596576672149667840> Music commands are not available in Private Messages.')
+            await ctx.send('<:4318crossmark:848857812565229601> Music commands are not available in Private Messages.')
             return False
 
         return True
@@ -310,10 +347,11 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if player.context:
             if player.context.channel != ctx.channel:
-                em = discord.Embed(description=f"<:redTick:596576672149667840> {ctx.author.mention}, i am already in {player.context.channel.mention}", color = 0xffcff1)
-                await ctx.send(embed=em, delete_after = 45)
+                em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention}, i am already in {player.context.channel.mention}", color = 0xffcff1)
+                await ctx.send(embed=em)
+                raise IncorrectChannelError
 
-        if ctx.command.name == 'connect' and not player.context:
+        if ctx.command.name == 'join' and not player.context:
             return
         elif self.is_privileged(ctx):
             return
@@ -327,8 +365,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if player.is_connected:
             if ctx.author not in channel.members:
-                em = discord.Embed(description=f"<:redTick:596576672149667840> {ctx.author.mention} join in {channel.mention} to use __music__ commands.", color = 0xffcff1)
-                await ctx.send(embed=em, delete_after = 45)
+                em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention} join in {channel.mention} to use __music__ commands.", color = 0xffcff1)
+                await ctx.send(embed=em)
+                raise IncorrectChannelError
 
     def required(self, ctx: commands.Context):
         """Method which returns required votes based on amount of members in a channel."""
@@ -353,16 +392,19 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
         if not player.is_connected:
-            return await ctx.send(f"<:redTick:596576672149667840> Not connected to any voice channel.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | Not connected to any voice channel.")
 
         if not self.is_privileged(ctx):
-            return await ctx.send("<:redTick:596576672149667840> Only the **DJ** or **admins** can use this command.")
+            return await ctx.send("<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** can use this command.")
 
         channel = self.bot.get_channel(player.channel_id)
 
-        await player.teardown()
-        em = discord.Embed(description=f"<:redTick:596576672149667840> Disconnected from {channel.mention}", color = 0xffcff1)
-        await ctx.send(embed=em, delete_after=3)
+        try:
+            await player.teardown()
+        except Exception:
+            await player.disconnect()
+        em = discord.Embed(description=f"<:4318crossmark:848857812565229601> | Disconnected from {channel.mention}", color = 0xffcff1)
+        await ctx.send(embed=em)
 
     @commands.command(help="Make me join in a voice channel to play some music ^^")
     async def join(self, ctx: commands.Context, *, channel: discord.VoiceChannel = None):
@@ -371,26 +413,43 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if player.is_connected:
             chan = self.bot.get_channel(player.channel_id)
-            return await ctx.send(f"<:redTick:596576672149667840> Already connected to {chan.mention}.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | Already connected to {chan.mention}.")
 
         channel = getattr(ctx.author.voice, 'channel', channel)
         if channel is None:
-            return await ctx.send("<:redTick:596576672149667840> You are not connected to any voice channel.")
+            return await ctx.send("<:4318crossmark:848857812565229601> | You are not connected to any voice channel.")
 
         await player.connect(channel.id)
-        await self.bot.ws.voice_state(ctx.guild.id, channel.id, self_deaf=True)
-        em = discord.Embed(description=f"<:greenTick:596576670815879169> Joined in {channel.mention}", color = 0xffcff1)
-        await ctx.send(embed=em, delete_after=3)
+        if isinstance(channel, discord.StageChannel):
+            try:
+                payload = {"channel_id": channel.id, "suppress": False}
+                return await self.bot.http.edit_my_voice_state(ctx.guild.id, payload)
+            except:
+                try:
+                    payload = {
+                        "channel_id": channel.id,
+                        "request_to_speak_timestamp": datetime.datetime.utcnow().isoformat(),
+                    }
+                    return await self.bot.http.edit_my_voice_state(ctx.guild.id, payload)
+                except:
+                    return await ctx.send("<:4318crossmark:848857812565229601> I need the `Request To Speak` / `Manage Stage` permission to play here.")
 
-    @commands.command(help="Make me play music in voice channels, this require you to be in a valid voice channel.\nThis supports `youtube`, `soundcloud` & `spotify`.\nUse `ami play songname --sc` if the standard music request doesn't play.")
+        await self.bot.ws.voice_state(ctx.guild.id, channel.id, self_deaf=True)
+
+    @commands.command(help="Make me play music in voice channels, this require you to be in a valid voice channel.\nThis supports `youtube` & `soundcloud`.\nUse `ami play songname --sc` if the standard music request doesn't play.", aliases=["p", "pump"])
     async def play(self, ctx: commands.Context, *, query: str):
         """Play or queue a song with the given query."""
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
+
+        if SPOTIFY_URL_REG.match(query):
+            em = discord.Embed(title="⚠ Spotify URL Detected", description=f"<:4318crossmark:848857812565229601> | {ctx.author.mention} __spotify__ is not supported yet.", color = 0xffcff1)
+            return await ctx.send(embed=em)
 
         if not player.is_connected:
             await ctx.invoke(self.join)
 
         query = query.strip('<>')
+
         if not URL_REG.match(query):
             if query.endswith("--sc"):
                 query = f'scsearch:{query}'
@@ -400,20 +459,18 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         tracks = await self.bot.wavelink.get_tracks(query)
         if not tracks:
-                return await ctx.send('<:redTick:596576672149667840> I got **0** results for this song.', delete_after=15)
+            return await ctx.send('<:4318crossmark:848857812565229601> | No **results** was found for your query, try again.')
 
         if isinstance(tracks, wavelink.TrackPlaylist):
             for track in tracks.tracks:
                 track = Track(track.id, track.info, requester=ctx.author)
                 await player.queue.put(track)
-
-            em = discord.Embed(description=f"<:greenTick:596576670815879169> Added **`{len(tracks.tracks)}`** songs to the queue.", color = 0xffcff1)
-            em.set_footer(text=f'Playlist name : {tracks.data["playlistInfo"]["name"]}')
-            return await ctx.send(embed=em, delete_after=10)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Added **{len(tracks.tracks)}** songs to the queue from **{tracks.data['playlistInfo']['name']}** playlist.", color = 0xffcff1)
+            await ctx.send(embed=em)
 
         track = Track(tracks[0].id, tracks[0].info, requester=ctx.author)
-        em = discord.Embed(description=f'<:greenTick:596576670815879169> Added **`{track.title}`** to the queue.', color = 0xffcff1)
-        await ctx.send(embed=em, delete_after=5)
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Queued [{track.title}]({track.uri}) | {track.requester.mention}", color = 0xffcff1)
+        await ctx.send(embed=em)
         await player.queue.put(track)
 
         if not player.is_playing:
@@ -429,24 +486,24 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:greenTick:596576670815879169> **{ctx.author.name}** has paused the player.", color = 0xffcff1)
-            await ctx.send(embed=em, delete_after=10)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has paused the player.", color = 0xffcff1)
+            await ctx.send(embed=em)
             player.pause_votes.clear()
 
             return await player.set_pause(True)
 
         if ctx.author in player.pause_votes:
-            return await ctx.send(f"<:redTick:596576672149667840> {ctx.author.mention}, you have already voted to pause.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | {ctx.author.mention}, you have already voted to pause.")
 
         required = self.required(ctx)
         player.pause_votes.add(ctx.author)
 
         if len(player.pause_votes) >= required:
-            await ctx.send(f'<:greenTick:596576670815879169> Reached **{required}** votes to pause. Pausing player.', delete_after=10)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | Reached **{required}** votes to pause. Pausing player.')
             player.pause_votes.clear()
             await player.set_pause(True)
         else:
-            await ctx.send(f'<:greenTick:596576670815879169> {ctx.author.mention} has voted to pause the player.', delete_after=15)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to pause the player.')
 
     @commands.command(help="Make me resume the paused song.")
     async def resume(self, ctx: commands.Context):
@@ -457,24 +514,24 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:greenTick:596576670815879169> **{ctx.author.name}** has resumed the player.", color = 0xffcff1)
-            await ctx.send(embed=em, delete_after=10)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has resumed the player.", color = 0xffcff1)
+            await ctx.send(embed=em)
             player.resume_votes.clear()
 
             return await player.set_pause(False)
 
         if ctx.author in player.resume_votes:
-            return await ctx.send(f"<:redTick:596576672149667840> {ctx.author.mention}, you have already voted to resume.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | {ctx.author.mention}, you have already voted to resume.")
 
         required = self.required(ctx)
         player.resume_votes.add(ctx.author)
 
         if len(player.resume_votes) >= required:
-            await ctx.send(f'<:greenTick:596576670815879169> Reached **{required}** votes to resume. Resuming player.', delete_after=10)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | Reached **{required}** votes to resume. Resuming player.')
             player.resume_votes.clear()
             await player.set_pause(False)
         else:
-            await ctx.send(f'<:greenTick:596576670815879169> {ctx.author.mention} has voted to resume the player.', delete_after=15)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to resume the player.')
 
     @commands.command(help="Skip the current playing song to the next in the queue: if no next song in queue, this command works like `ami stop`.")
     async def skip(self, ctx: commands.Context):
@@ -485,31 +542,31 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:greenTick:596576670815879169> **{ctx.author.name}** has skipped the song.", color = 0xffcff1)
-            await ctx.send(embed=em, delete_after=10)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has skipped the song.", color = 0xffcff1)
+            await ctx.send(embed=em)
             player.skip_votes.clear()
 
             return await player.stop()
 
         if ctx.author == player.current.requester:
-            em = discord.Embed(description=f"<:greenTick:596576670815879169> **{ctx.author.name}** has skipped the song.", color = 0xffcff1)
-            await ctx.send(embed=em, delete_after=10)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has skipped the song.", color = 0xffcff1)
+            await ctx.send(embed=em)
             player.skip_votes.clear()
 
             return await player.stop()
 
         if ctx.author in player.skip_votes:
-            return await ctx.send(f"<:redTick:596576672149667840> {ctx.author.mention}, you have already voted to skip.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | {ctx.author.mention}, you have already voted to skip.")
 
         required = self.required(ctx)
         player.skip_votes.add(ctx.author)
 
         if len(player.skip_votes) >= required:
-            await ctx.send(f'<:greenTick:596576670815879169> Reached **{required}** votes, skipping song.', delete_after=10)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | Reached **{required}** votes, skipping song.')
             player.skip_votes.clear()
             await player.stop()
         else:
-            await ctx.send(f'<:greenTick:596576670815879169> {ctx.author.mention} has voted to skip the song.', delete_after=15)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to skip the song.')
 
     @commands.command(help="Stop the current playing song.")
     async def stop(self, ctx: commands.Context):
@@ -520,21 +577,24 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:greenTick:596576670815879169> **{ctx.author.name}** has stopped the player.", color = 0xffcff1)
-            await ctx.send(embed=em, delete_after=10)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has stopped the player.", color = 0xffcff1)
+            await ctx.send(embed=em)
             return await player.teardown()
 
         if ctx.author in player.stop_votes:
-            return await ctx.send(f"<:redTick:596576672149667840> {ctx.author.mention}, you have already voted to stop.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | {ctx.author.mention}, you have already voted to stop.")
 
         required = self.required(ctx)
         player.stop_votes.add(ctx.author)
 
         if len(player.stop_votes) >= required:
-            await ctx.send(f'<:greenTick:596576670815879169> Reached **{required}** votes, stopping the player.', delete_after=10)
-            await player.teardown()
+            await ctx.send(f'<:4430checkmark:848857812632076314> | Reached **{required}** votes, stopping the player.')
+            try:
+                await player.teardown()
+            except Exception:
+                await player.disconnect()
         else:
-            await ctx.send(f'<:greenTick:596576670815879169> {ctx.author.mention} has voted to stop the player.', delete_after=15)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to stop the player.')
 
     @commands.command(help="Set/change the volume of the current player.",aliases=['vol'])
     async def volume(self, ctx: commands.Context, *, vol: int=None):
@@ -546,13 +606,13 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if not vol:
             em = discord.Embed(description=f"🌹 Player volume is **`{player.volume}%`**", color = 0xffcff1)
-            return await ctx.send(embed=em, delete_after=10)
+            return await ctx.send(embed=em)
 
         if not self.is_privileged(ctx):
-            return await ctx.send('<:redTick:596576672149667840> Only the **DJ** or **admins** may change the volume.')
+            return await ctx.send('<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** may change the volume.')
 
         if not 0 < vol < 251:
-            return await ctx.send('<:redTick:596576672149667840> Volume must be between **1** and **250**')
+            return await ctx.send('<:4318crossmark:848857812565229601> | Volume must be between **1** and **250**')
 
         await player.set_volume(vol)
         await ctx.message.add_reaction('✅')
@@ -566,25 +626,25 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if player.queue.qsize() < 3:
-            return await ctx.send(f'<:redTick:596576672149667840> You may need at least **`3`** songs into the queue, **`{player.queue.qsize()}`** are in the queue.', delete_after=15)
+            return await ctx.send(f'<:4318crossmark:848857812565229601> | You may need at least **`3`** songs into the queue, **`{player.queue.qsize()}`** are in the queue.')
 
         if self.is_privileged(ctx):
-            await ctx.send('<:greenTick:596576670815879169> An **admin** or **DJ** has shuffled the playlist.', delete_after=10)
+            await ctx.send('<:4430checkmark:848857812632076314> | An **admin** or **DJ** has shuffled the playlist.')
             player.shuffle_votes.clear()
             return random.shuffle(player.queue._queue)
 
         if ctx.author in player.shuffle_votes:
-            return await ctx.send(f"<:redTick:596576672149667840> {ctx.author.mention}, you have already voted to shuffle.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | {ctx.author.mention}, you have already voted to shuffle.")
 
         required = self.required(ctx)
         player.shuffle_votes.add(ctx.author)
 
         if len(player.shuffle_votes) >= required:
-            await ctx.send('<:greenTick:596576670815879169> Vote to shuffle passed. Shuffling the playlist.', delete_after=10)
+            await ctx.send('<:4430checkmark:848857812632076314> | Vote to shuffle passed. Shuffling the playlist.')
             player.shuffle_votes.clear()
             random.shuffle(player.queue._queue)
         else:
-            await ctx.send(f'<:greenTick:596576670815879169> {ctx.author.mention} has voted to shuffle the playlist.', delete_after=15)
+            await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to shuffle the playlist.')
 
     @commands.command(help="Set the equalizer, a filter for the current playing song.\nSet the `[equalizer]` argument as `list` to see all available equalizers.\nLeave `[equalizer]` blank to reset the base equalizer.", aliases=['eq'])
     async def equalizer(self, ctx: commands.Context, *, equalizer: str=None):
@@ -593,7 +653,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             equalizer = "base"
 
         if equalizer == "list":
-            em = discord.Embed(title="Equalizers list", description="`base` : Base equalizer, standard sound.\n"
+            em = discord.Embed(title="<:catgirluppies:839518621767172106> | Equalizers", description="`base` : Base equalizer, standard sound.\n"
                                            "`bass` : Optimal for songs with high 808.\n"
                                            "`metal` : High reveerb on voice, optimal for singed songs.\n"
                                            "`piano` : Perfect for chilling, works well with voice.\n"
@@ -603,10 +663,10 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
         if not player.is_connected:
-            return await ctx.reply("<:redTick:596576672149667840> Not playing anything at the moment.")
+            return await ctx.reply("<:4318crossmark:848857812565229601> | Not playing anything at the moment.")
 
         if not self.is_privileged(ctx):
-            return await ctx.send('<:redTick:596576672149667840> Only the **DJ** or **admins** may change the equalizer.')
+            return await ctx.send('<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** may change the equalizer.')
 
         eqs = {'base': wavelink.Equalizer.flat(),
                'bass': wavelink.Equalizer.boost(),
@@ -620,11 +680,11 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if not eq:
             joined = ", ".join(eqs.keys())
-            em = discord.Embed(title="<:redTick:596576672149667840> Invalid EQ provided.", description=f"You've provided an invalid equalizer, available equalizers are:\n**`{joined}`**", color = 0xffcff1)
+            em = discord.Embed(title="<:4318crossmark:848857812565229601> | Invalid EQ provided.", description=f"You've provided an invalid equalizer, available equalizers are:\n**`{joined}`**", color = 0xffcff1)
             return await ctx.send(embed=em)
 
-        em = discord.Embed(description=f"<:greenTick:596576670815879169> {ctx.author.mention} has set the equalizer to **`{equalizer}`**.", color = 0xffcff1)
-        await ctx.send(embed=em, delete_after=15)
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has set the equalizer to **`{equalizer}`**.", color = 0xffcff1)
+        await ctx.send(embed=em)
         await player.set_eq(eq)
 
 
@@ -637,14 +697,16 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if player.queue.qsize() == 0:
-            return await ctx.send('<:redTick:596576672149667840> The queue is empty.', delete_after=15)
+            return await ctx.send('<:4318crossmark:848857812565229601> | The queue is empty.')
 
         if not self.is_privileged(ctx):
-            return await ctx.send('<:redTick:596576672149667840> Only the **DJ** or **admins** may remove songs from the queue.')
+            return await ctx.send('<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** may remove songs from the queue.')
 
-        del player.queue._queue[queue_number-1]  # Account for 0-index.
+        if not player.queue._queue[queue_number-1]:  # Account for 0-index.
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Track **#{queue_number}** not found.")
 
-        await ctx.reply(f'<:greenTick:596576670815879169> Removed song #**{queue_number}** from the queue.', delete_after=5)
+        await ctx.reply(f'<:4430checkmark:848857812632076314> | Removed **{player.queue._queue[queue_number-1]}** from the queue.')
+        del player.queue._queue[queue_number-1]
 
     @commands.command(help="Move the player seek to the given position (in seconds).\nIf seek is not specified, it set the seek to 0")
     async def seek(self, ctx: commands.Context, seek_number: int = None):
@@ -657,30 +719,35 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             seek_number = 0
 
         if not self.is_privileged(ctx):
-            return await ctx.send('<:redTick:596576672149667840> Only the **DJ** or **admins** may move the seek of the song.')
+            return await ctx.send('<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** may move the seek of the song.')
 
         if seek_number > int(player.current.length):
-            return await ctx.send(f"<:redTick:596576672149667840> Seek can't be more than the track lenght (`{int(player.current.length)}`).", delete_after=15)
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | Seek can't be more than the track lenght (`{int(player.current.length)}`).")
 
         seeky = seek_number*1000
         scd = "{}".format(humanize.precisedelta(seek_number))
         await player.seek(seeky)
-        em = discord.Embed(description=f"<:greenTick:596576670815879169> Player seek moved to **{scd}**", color = 0xffcff1)
-        await ctx.send(embed=em, delete_after=5)
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | Player seek moved to **{scd}**", color = 0xffcff1)
+        await ctx.send(embed=em)
 
 
-    @commands.command(help="See the current song queue.", aliases=['q', 'que'])
-    async def queue(self, ctx: commands.Context):
+    @commands.command(help="See the songs in queue for the actual player playing.\nUse `ami queue clear` to clear the queue (removing all songs in it) <- This require you to be the **DJ** / **Admin**.", aliases=['q', 'que'])
+    async def queue(self, ctx: commands.Context, clear=None):
         """Display the players queued songs."""
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
+        if clear:
+            if clear == "clear":
+                await ctx.send(f"<:4430checkmark:848857812632076314> The queue has been cleared by {ctx.author.mention}! ({player.queue.qsize()} track(s))")
+                return player.queue._queue.clear()
+
         if not player.is_connected:
-            return await ctx.send("<:redTick:596576672149667840> Not connected to any voice channel.")
+            return await ctx.send("<:4318crossmark:848857812565229601> | Not connected to any voice channel.")
 
-        if self.queue.qsize() == 0:
-            return await ctx.send('<:redTick:596576672149667840> The queue is empty.', delete_after=15)
+        if player.queue.qsize() == 0:
+            return await ctx.send('<:4318crossmark:848857812565229601> | The queue is empty.')
 
-        entries = [f"[{track.title}]({track.uri})" for track in player.queue._queue]
+        entries = [f"[{track.title}]({track.uri}) [{track.requester.mention}]" for track in player.queue._queue]
         pages = PaginatorSource(entries=entries)
         paginator = menus.MenuPages(source=pages, timeout=None, delete_message_after=True)
 
@@ -692,9 +759,12 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
         if not player.is_connected:
-            return await ctx.send("<:redTick:596576672149667840> Nothing playing at the moment.")
+            return await ctx.send("<:4318crossmark:848857812565229601> | Nothing playing at the moment.")
 
-        await ctx.send(embed=player.build_embed())
+        if not player.current:
+            return await ctx.send("<:4318crossmark:848857812565229601> | Nothing playing at the moment.")
+
+        await ctx.send(embed=player.now_playing())
 
     @commands.command(help="Swap the song DJ to another member.\nIf member not specified, it choose a random member in the voice channel.\nIf the members in the vc are 2 or less, the dj can't be swapped without member specified.", aliases=['swap'])
     async def swap_dj(self, ctx: commands.Context, *, member: discord.Member = None):
@@ -705,30 +775,30 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if not self.is_privileged(ctx):
-            return await ctx.send('<:redTick:596576672149667840> Only **admins** and the **DJ** may swap the dj.', delete_after=15)
+            return await ctx.send('<:4318crossmark:848857812565229601> | Only **admins** and the **DJ** may swap the dj.')
 
         members = self.bot.get_channel(int(player.channel_id)).members
 
         if member and member not in members:
-            return await ctx.send(f'<:redTick:596576672149667840> {member} is not in the voice channel.', delete_after=15)
+            return await ctx.send(f'<:4318crossmark:848857812565229601> | {member} is not in the voice channel.')
 
         if member and member == player.dj:
-            return await ctx.send("<:redTick:596576672149667840> Can't give **DJ** to the current **DJ**.", delete_after=15)
+            return await ctx.send("<:4318crossmark:848857812565229601> | Can't give **DJ** to the current **DJ**.")
 
         if len(members) <= 2:
-            return await ctx.send('<:redTick:596576672149667840> No more members for **auto-swap**.', delete_after=15)
+            return await ctx.send('<:4318crossmark:848857812565229601> | No more members for **auto-swap**.')
 
         if member:
             player.dj = member
-            em = discord.Embed(description=f"<:greenTick:596576670815879169> {ctx.author.mention} has gave the **DJ** to {member.mention}.", color = 0xffcff1)
-            return await ctx.send(embed=em, delete_after = 15)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has gave the **DJ** to {member.mention}.", color = 0xffcff1)
+            return await ctx.send(embed=em)
 
         for m in members:
             if m == player.dj or m.bot:
                 continue
             else:
                 player.dj = m
-                return await ctx.send(f'<:greenTick:596576670815879169> {member.mention} is now the **DJ**.')
+                return await ctx.send(f'<:4430checkmark:848857812632076314> | {member.mention} is now the **DJ**.')
 
 
     @commands.command(help="Loop the current playing song to make me play it in loop!\nWorks in bool, send 1 time this command to loop, resend to unloop.")
@@ -737,38 +807,106 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
         if not player.current:
-            return await ctx.send('<:redTick:596576672149667840> Nothing is playing right now!')
+            return await ctx.send('<:4318crossmark:848857812565229601> | Nothing is playing right now!')
 
         if self.is_privileged(ctx):
             if not player.looped:
                 player.looped = True
                 player.looped_track = player.current
-                em = discord.Embed(description=f"<:greenTick:596576670815879169> {ctx.author.mention} has enabled the **loop** for `{player.current}`.", color = 0xffcff1)
-                return await ctx.send(embed=em, delete_after=10)
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has enabled the **loop** for `{player.current}`.", color = 0xffcff1)
+                return await ctx.send(embed=em)
             else:
                 player.looped = False
                 player.looped_track = None
-                em = discord.Embed(description=f"<:greenTick:596576670815879169> {ctx.author.mention} has disabled the **loop** for `{player.current}`.", color = 0xffcff1)
-                return await ctx.send(embed=em, delete_after=10)
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has disabled the **loop** for `{player.current}`.", color = 0xffcff1)
+                return await ctx.send(embed=em)
 
         if ctx.author in player.loop_votes:
-            return await ctx.send(f"<:redTick:596576672149667840> {ctx.author.mention}, you have already voted to loop.")
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | {ctx.author.mention}, you have already voted to loop.")
 
         required = self.required(ctx)
         player.loop_votes.add(ctx.author)
 
         if len(player.loop_votes) >= required:
             if not player.looped:
-                await ctx.send(f'<:greenTick:596576670815879169> Reached {required} votes to loop. Looping player.', delete_after=10)
+                await ctx.send(f'<:4430checkmark:848857812632076314> | Reached {required} votes to loop. Looping player.')
                 player.loop_votes.clear()
             else:
-                await ctx.send(f'<:greenTick:596576670815879169> Reached {required} votes to unloop. Unlooping player.', delete_after=10)
+                await ctx.send(f'<:4430checkmark:848857812632076314> | Reached {required} votes to unloop. Unlooping player.')
                 player.loop_votes.clear()
         else:
             if not player.looped:
-                await ctx.send(f'<:greenTick:596576670815879169> {ctx.author.mention} has voted to loop the player.', delete_after=15)
+                await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to loop the player.')
             else:
-                await ctx.send(f'<:greenTick:596576670815879169> {ctx.author.mention} has voted to unloop the player.', delete_after=15)
+                await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to unloop the player.')
+
+    @commands.command(name="24/7", help="Enable the **24/7** mode for the music, this mode will keep me 24h/7 in the vc without make me leave!")
+    async def tfs(self, ctx: commands.Context):
+        player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
+
+        if not player.is_connected:
+            return await ctx.send('<:4318crossmark:848857812565229601> | Not connected to any voice channel right now!')
+
+        if not player.current:
+            return await ctx.send('<:4318crossmark:848857812565229601> | Nothing is playing right now!')
+
+        if self.is_privileged(ctx):
+            if player.unlimit is True:
+                player.unlimit = False
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has disabled the **24/7** mode.", color = 0xffcff1)
+                return await ctx.send(embed=em)
+
+            if player.unlimit is False:
+                player.unlimit = True
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has enabled the **24/7** mode.", color = 0xffcff1)
+                return await ctx.send(embed=em)
+
+    @commands.command(help="Apply custom filters to the actual playing song with up to 5 filters!\nType `ami filter list` to see the availables filters.\nUse `ami filter reset` to reset the standard filter.\nOnly DJ & Admins can apply filters.", aliases=["ft"])
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def filter(self, ctx: commands.Context, *, filter:str):
+        player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
+        apply_filter = player.node._websocket._send
+
+        base = {'op': 'filters', 'guildId': f'{ctx.guild.id}', 'timescale': {'speed': 1.0, 'pitch': 1.0, 'rate': 1.0},}
+
+
+        filters = {
+            'nightcore': {'op': 'filters', 'guildId': f'{ctx.guild.id}', 'timescale': {'speed': 1.1, 'pitch': 1.3, 'rate': 1.1},},
+            'low voice': {'op': 'filters', 'guildId': f'{ctx.guild.id}', 'timescale': {'speed': 1.0, 'pitch': 0.7, 'rate': 1.0},},
+            'sonicspeed': {'op': 'filters', 'guildId': f'{ctx.guild.id}', 'timescale': {'speed': 2.0, 'pitch': 1.0, 'rate': 1.0},},
+            'relax': {'op': 'filters', 'guildId': f'{ctx.guild.id}', 'timescale': {'speed': 0.9, 'pitch': 1.0, 'rate': 0.8}, "tremolo": {"frequency": 2.0,"depth": 0.8}, "vibrato": {"frequency": 2.0,"depth": 0.8},},
+            '8d': {'op': 'filters', 'guildId': f'{ctx.guild.id}', 'timescale': {'speed': 1.0, 'pitch': 0.9, 'rate': 1.1}, "rotation": {"rotationHz": 0.2},},
+        }
+
+        filt = filters.get(filter.lower(), None)
+
+        if filter == "reset":
+            payload = base
+            await apply_filter(**payload)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has reset the filter to standard.", color = 0xffcff1)
+            return await ctx.send(embed=em)
+
+        if filter == "list":
+            joined = ", ".join(filters.keys())
+            em = discord.Embed(title="<:catgirluppies:839518621767172106> | Filters", description=f"Here it is all availables filters:\n**`{joined}`**", color = 0xffcff1)
+            return await ctx.send(embed=em)
+
+        if not player.current:
+            return await ctx.send('<:4318crossmark:848857812565229601> | Nothing is playing right now!')
+
+        if not self.is_privileged(ctx):
+            return await ctx.send("<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** can set filters.")
+
+        if not filt:
+            joined = ", ".join(filters.keys())
+            em = discord.Embed(title="<:4318crossmark:848857812565229601> | Invalid filter provided.", description=f"You've provided an invalid filter, available filters are:\n**`{joined}`**", color = 0xffcff1)
+            return await ctx.send(embed=em)
+
+        payload = filters[filter.lower()]
+        await apply_filter(**payload)
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has set the `{filter.title()}` filter.", color = 0xffcff1)
+        await ctx.send(embed=em)
+
 
 def setup(bot: commands.Bot):
     bot.add_cog(Music(bot))
