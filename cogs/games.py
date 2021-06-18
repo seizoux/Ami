@@ -3,162 +3,221 @@ from discord.ext import commands, tasks
 import random
 import asyncio
 
+
+
+class TicTacToe:
+    """
+    Represents a game of Tic-tac-toe
+    """
+
+    EMOJI_X = '<:cross:855540891841331210>'
+    EMOJI_O = '<:circle:855540891753644104>'
+    CROSSMARK = '<:4318crossmark:848857812565229601>'
+
+    NUMBERS = [
+        None,  # Shift so indicies are correct
+        ':one:',
+        ':two:',
+        ':three:',
+        ':four:',
+        ':five:',
+        ':six:',
+        ':seven:',
+        ':eight:',
+        ':nine:'
+    ]
+
+    def __init__(self, ctx: commands.Context, opponent: discord.Member) -> None:
+        self.ctx = ctx
+        self.player = ctx.author
+        self.opponent = opponent
+        self.is_player_turn = bool(random.randint(0, 1))
+
+        # 1 is O, 2 is X
+        self.board = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+
+        self.message = None
+
+    async def render_and_send(self, only_board:bool=False):
+        i = 0
+        message = ''
+        for row in self.board:
+            for cell in row:
+                i += 1
+                if cell == 1:
+                    message += self.EMOJI_O
+                elif cell == 2:
+                    message += self.EMOJI_X
+                else:
+                    message += self.NUMBERS[i]
+
+                message += ''
+            message += '\n'
+
+        turn, emoji = (self.player, self.EMOJI_O) if self.is_player_turn else (self.opponent, self.EMOJI_X)
+        if only_board:
+            return await self.ctx.send(message)
+
+        message = f'{turn.mention}, it\'s your turn! {emoji}\n{message}'
+
+        if not self.message or not await self.is_in_last_messages():
+            self.message = res = await self.ctx.send(message)
+            return res
+
+        return await self.message.edit(content=message)
+
+
+    async def is_in_last_messages(self):
+        """Method which checks if our board is in last 5 messages."""
+        return await self.ctx.channel.history(limit=5).get(id=self.message.id)
+
+    async def move(self, position: int):
+        x, y = divmod(position - 1, 3)
+        if self.board[x][y] != 0:
+            return await self.ctx.send(f'{self.CROSSMARK} Someone has already went there.')
+
+        symbol = 1 if self.is_player_turn else 2
+        self.board[x][y] = symbol
+        self.is_player_turn = not self.is_player_turn
+
+        await self.render_and_send()
+
+    @property
+    def current_turn(self):
+        return self.player if self.is_player_turn else self.opponent
+
+    @property
+    def winner(self):
+        # Return 0 (no winner), 1, or 2
+        # Return -1 if it is a tie
+
+        # Horizontal
+        for row in self.board:
+            if row[0] == row[1] == row[2]:
+                return row[0]
+
+        # Vertical
+        for i in range(3):
+            if self.board[0][i] == self.board[1][i] == self.board[2][i]:
+                return self.board[0][i]
+
+        # Diagonal ascending
+        if self.board[0][2] == self.board[1][1] == self.board[2][0]:
+            return self.board[0][2]
+
+        # Diagonal decending
+        if self.board[0][0] == self.board[1][1] == self.board[2][2]:
+            return self.board[0][0]
+
+        # Tie
+        if all(all(cell != 0 for cell in row) for row in self.board):
+            return -1
+
+        return 0
+
+
 class Games(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.player1 = 0
-        self.player2 = 0
-        self.turn = 0
-        self.gameOver = True
-
-        self.board = []
-
-        self.winningConditions = [
-            [0, 1, 2],
-            [3, 4, 5],
-            [6, 7, 8],
-            [0, 3, 6],
-            [1, 4, 7],
-            [2, 5, 8],
-            [0, 4, 8],
-            [2, 4, 6]
-        ]
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("Games Loaded")
 
-    @commands.command(aliases=["ttt"])
-    async def tictactoe(self, ctx, opponent: discord.Member, bet:int):
-
-        if self.gameOver is False:
-            self.gameOver = True
-
+    @commands.command(aliases=["ttt"], help="Play a fun tictactoe game with bet your <:cupcake:845632403405012992>!\nThe winner gets as reward the **bet placed * 2** (one from his balance, and one from the opponent balance), example: if you bet **35000**, who wins get **70000** (__35k__ are from his balance and __35k__ from opponent balance)\nIf the game ends as draw, no <:cupcake:845632403405012992> will be taken from eithers balances.")
+    async def tictactoe(self, ctx, opponent: discord.Member, bet: int):
         db2 = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", str(opponent.id))
         if not db2:
-            return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention} looks like **{opponent.name}** doesn't have a balance, so he/she can't play.")
+            return await ctx.send(
+                f"<:4318crossmark:848857812565229601> {ctx.author.mention} looks like **{opponent.name}** doesn't have a balance, so he/she can't play.")
 
         db = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", str(ctx.author.id))
         if not db:
-            return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention} you don't have a balance for cuppy, open one with `ami bal`.")
+            return await ctx.send(
+                f"<:4318crossmark:848857812565229601> {ctx.author.mention} you don't have a balance for cuppy, open one with `ami bal`.")
 
         balance = db[0]["wallet"]
+        balance2 = db2[0]["wallet"]
         if bet > balance:
-            return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention} you have <:cupcake:845632403405012992> **{balance}** in your wallet, you can't bet <:cupcake:845632403405012992> **{bet}**")
+            return await ctx.send(
+                f"<:4318crossmark:848857812565229601> {ctx.author.mention} you have <:cupcake:845632403405012992> **{balance}** in your wallet, you can't bet <:cupcake:845632403405012992> **{bet}**")
 
-        if self.gameOver:
-            self.board = [":one:", ":two:", ":three:\n",
-                    ":four:", ":five:", ":six:\n",
-                    ":seven:", ":eight:", ":nine:"]
-            self.turn = 0
-            self.gameOver = False
-            count = 0
+        if bet > balance2:
+            return await ctx.send(
+                f"<:4318crossmark:848857812565229601> **{opponent.name}** does not have <:cupcake:845632403405012992> **{bet}** in their wallet, they can't bet <:cupcake:845632403405012992> **{bet}**")
 
-            message = await ctx.send(f"{opponent.mention}, you got an invite to play a `TicTacToe` game from **{ctx.author.name}** with <:cupcake:845632403405012992> **{bet}** for the __winner__: click <:4318crossmark:848857812565229601> to `decline` or <:4430checkmark:848857812632076314> to `accept` in **60** seconds.")
-            await message.add_reaction("<:4318crossmark:848857812565229601>")
-            await message.add_reaction("<:4430checkmark:848857812632076314>")
+        count = 0
 
-            emojis = ["4318crossmark", "4430checkmark"]
+        message = await ctx.send(
+            f"{opponent.mention}, you got an invite to play a `TicTacToe` game from **{ctx.author.name}** with <:cupcake:845632403405012992> "
+            f"**{bet*2}** for the __winner__: click <:4318crossmark:848857812565229601> to `decline` or <:4430checkmark:848857812632076314> to `accept` in **60** seconds.")
+        await message.add_reaction("<:4318crossmark:848857812565229601>")
+        await message.add_reaction("<:4430checkmark:848857812632076314>")
 
-            def check(payload):
-                return payload.message_id == message.id and payload.emoji.name in emojis and payload.user_id == opponent.id
+        emojis = ["4318crossmark", "4430checkmark"]
 
-            try: 
-                payload = await self.bot.wait_for("raw_reaction_add", check=check, timeout=60.0)
-            except asyncio.TimeoutError:
-                return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention}, looks like **{opponent.name}** is away or it didn't see the invite.")
+        def check(payload):
+            return payload.message_id == message.id and payload.emoji.name in emojis and payload.user_id == opponent.id
 
-            if payload.emoji.name == "4318crossmark":
-                await message.delete()
-                return await ctx.send(f"<:4318crossmark:848857812565229601> **{opponent.name}** has refused to play.")
+        try:
+            payload = await self.bot.wait_for("raw_reaction_add", check=check, timeout=60.0)
+        except asyncio.TimeoutError:
+            return await ctx.send(
+                f"<:4318crossmark:848857812565229601> {ctx.author.mention}, looks like **{opponent.name}** is away or it didn't see the invite.")
 
+        if payload.emoji.name == "4318crossmark":
             await message.delete()
-            mcd = await ctx.send("<:4430checkmark:848857812632076314> Picking who goes first...")
-            await asyncio.sleep(3)
-            await mcd.delete()
+            return await ctx.send(f"<:4318crossmark:848857812565229601> **{opponent.name}** has refused to play.")
 
-            self.player1 = ctx.author
-            self.player2 = opponent
+        await message.delete()
+        mcd = await ctx.send("<:4430checkmark:848857812632076314> Picking who goes first...")
+        await asyncio.sleep(3)
+        await mcd.delete()
 
-            turn_emojis = {
-                self.player1.id: "<:4430checkmark:848857812632076314>",
-                self.player2.id: "<:4318crossmark:848857812565229601>"
-            }
+        game = TicTacToe(ctx, opponent)
+        msg2 = await game.render_and_send()
 
-            # determine who goes first
-            num = random.randint(1, 2)
-            if num == 1:
-                self.turn = self.player1
-            elif num == 2:
-                self.turn = self.player2
+        while True:
+            try:
+                msg = await self.bot.wait_for('message', check=lambda
+                    message: message.author.id == game.current_turn.id and message.channel == ctx.channel, timeout=180.0)
+            except asyncio.TimeoutError:
+                return await ctx.send(
+                    f"<:4318crossmark:848857812565229601> {game.current_turn.name} took too long to choose a position, stopping the game.")
 
-            msg2 = await ctx.send(f"{self.turn.mention} is your turn! {turn_emojis[int(self.turn.id)]}\n{''.join(self.board)}")
+            if msg.content.isdigit():
+                valids = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+                if int(msg.content) - 1 not in valids:
+                    return
 
-            while True:
-                try:
-                    msg = await self.bot.wait_for('message', check=lambda message: message.author.id == self.turn.id and message.channel == ctx.channel, timeout=180.0)
-                except asyncio.TimeoutError:
-                    return await ctx.send(f"<:4318crossmark:848857812565229601> {self.turn.name} took too long to choose a position, stopping the game.")
-            
-                if msg.content.isdigit():
-                    valids = [0,1,2,3,4,5,6,7,8]
-                    if int(msg.content)-1 not in valids:
-                        return
-                    
-                    if self.board[int(msg.content)-1] in emojis:
-                        return
+                if game.winner == 0:
+                    await game.move(int(msg.content))
 
-                    if self.board[int(msg.content)-1]:
-                        count += 1
-
-                        sides = [2,5]
-
-                        if int(msg.content) - 1 in sides:
-                            self.board[int(msg.content)-1] = f"{turn_emojis[int(self.turn.id)]}\n"
-                        else:
-                            self.board[int(msg.content)-1] = f"{turn_emojis[int(self.turn.id)]}"
-
-                    extra_turn = self.player1 if self.turn.id != self.player1.id else self.player2
-
-                    async def is_in_last_messages(mex):
-                        """Method which checks if our board is in last 5 messages."""
-                        return await ctx.channel.history(limit=5).get(id=mex.id)
-
-                    if not await is_in_last_messages(msg2):
-                        try:
-                            await msg2.delete()
-                        except Exception:
-                            pass
-
-                        msg2 = await ctx.send(f"{extra_turn.mention} is your turn! {turn_emojis[int(self.turn.id)]}\n{''.join(self.board)}")
-
-                    else:
-                        await msg2.edit(content=f"{extra_turn.mention} is your turn! {turn_emojis[int(self.turn.id)]}\n{''.join(self.board)}")
-
-                    def checkWinner(winningConditions, mark):
-                        for condition in winningConditions:
-                            if self.board[condition[0]] == mark and self.board[condition[1]] == mark and self.board[condition[2]] == mark:
-                                self.gameOver = True
-
-                    checkWinner(self.winningConditions, turn_emojis[self.turn.id])
-                    if self.gameOver == True:
-                        if ctx.author.id == self.turn.id:
-                            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", db[0]["wallet"] + bet, str(ctx.author.id))
-                            await ctx.send(self.turn.mention + f" has won the game, he/she got the <:cupcake:845632403405012992> **{bet}**!")
-                            break
-                        elif opponent.id == self.turn.id:
-                            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", db[0]["wallet"] - bet, str(ctx.author.id))
-                            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", db[0]["wallet"] + bet, str(opponent.id))
-                            await ctx.send(self.turn.mention + f" has won the game, he/she got the <:cupcake:845632403405012992> **{bet}**!")
-                            break
-                    elif count >= 9:
-                        self.gameOver = True
-                        await ctx.send("<:4318crossmark:848857812565229601> It's a fucking draw.")
+                winner = game.winner
+                if winner != 0:
+                    if winner == 1:
+                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                                                      db[0]["wallet"] + bet*2, str(ctx.author.id))
+                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                                                      db[0]["wallet"] - bet, str(opponent.id))
+                        await ctx.send(
+                            f"👑 {ctx.author.mention} has won the game, they got <:cupcake:845632403405012992> **{bet*2}**!")
+                        await game.render_and_send(True)
+                        break
+                    elif winner == 2:
+                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                                                      db[0]["wallet"] - bet, str(ctx.author.id))
+                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                                                      db[0]["wallet"] + bet*2, str(opponent.id))
+                        await ctx.send(
+                            f"👑 {opponent.mention} has won the game, they got <:cupcake:845632403405012992> **{bet*2}**!\n")
+                        await game.render_and_send(True)
+                        break
+                    elif winner == -1:
+                        await ctx.send("<:4318crossmark:848857812565229601> It's a draw, good game.")
+                        await game.render_and_send(True)
                         break
 
-                    self.gameOver = False
-                    self.turn = self.player1 if self.turn != self.player1 else self.player2
-                else:
-                    pass
+
 def setup(bot):
     bot.add_cog(Games(bot))
