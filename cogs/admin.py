@@ -4,22 +4,31 @@ from discord.ext import commands
 from urllib.request import urlretrieve
 import time
 from jishaku.paginators import WrappedPaginator, PaginatorInterface
+import random
+from jishaku.codeblocks import codeblock_converter
+from cogsf.defs import is_team
 
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Admin"
 
+
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Admin Loaded")
 
+    @commands.command(aliases=["exe", "run", "eval"])
+    @is_team()
+    async def evaluate(self, ctx, *, code : codeblock_converter):
+        await ctx.invoke(self.bot.get_command("jishaku python"), **{"argument": code})
+
     @commands.command()
-    @commands.is_owner()
+    @is_team()
     async def reboot(self, ctx):
         await ctx.send("<:greenTick:596576670815879169> Rebooting...")
         await self.bot.close()
- 
+
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
         if after.embeds and not before.embeds:
@@ -38,10 +47,9 @@ class Admin(commands.Cog):
                     pass
             except NotFound:
                 pass
-        
 
     @commands.command()
-    @commands.is_owner()
+    @is_team()
     async def changename(self, ctx, *, newname=None):
         if newname == None:
             return await ctx.reply("No name specified")
@@ -60,87 +68,24 @@ class Admin(commands.Cog):
 
 
     @commands.command(help="Disable a command (globally)")
-    @commands.is_owner()
+    @is_team()
     async def disable(self, ctx, command):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                command = self.bot.get_command(command)
-                if not command.enabled:
-                    return await ctx.send("This command is disabled for now.")
-                command.enabled = False
-                em = discord.Embed(description=f"• `{command.name}` disabled.\n• Use `ami enable <command>` to re-enable it.", color = 0xffcff1)
-                await ctx.send(embed=em)
-        else:
-            return
+        command = self.bot.get_command(command)
+        if not command.enabled:
+                return await ctx.send("This command is disabled for now.")
+        command.enabled = False
+        em = discord.Embed(description=f"• `{command.name}` disabled.\n• Use `ami enable <command>` to re-enable it.", color = 0xffcff1)
+        await ctx.send(embed=em)
 
     @commands.command(help="Enable a command (globally)")
-    @commands.is_owner()
+    @is_team()
     async def enable(self, ctx, command):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                command = self.bot.get_command(command)
-                if command.enabled:
-                    return await ctx.send("This command is already enabled.")
-                command.enabled = True
-                em = discord.Embed(description=f"• `{command.name}` enabled.\n• Use `ami disable <command>` to disable it.", color = 0xffcff1)
-                await ctx.send(embed=em)
-        else:
-            return
-
-
-    @commands.command()
-    @commands.is_owner()
-    async def addbl(self, ctx, member: discord.Member, *, reason:str):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                db = await self.bot.pg_con.fetchrow("SELECT * FROM blacklist")
-                user_id = str(member.id)
-                reas = str(reason)
-                if member == None:
-                    await ctx.send("Uhm.. you didn't sent the member to put into the blacklist.")
-                    return
-                
-                reason = reas
-                if reason == None:
-                    await ctx.send(f"Blacklisted **`{member.name}#{member.discriminator}`**.")
-                else:
-                    if reason:
-                        await ctx.send(f"Blacklisted **`{member.name}#{member.discriminator}`**\nReason : **`{reason}`**.")
-                
-                await self.bot.pg_con.execute("INSERT INTO blacklist (user_id, reason) VALUES ($1, $2)", user_id, reas)
-        else:
-            return
-
-    @commands.command()
-    @commands.is_owner()
-    async def rembl(self, ctx, member: discord.Member):
-        if ctx.guild.id == 800176902765674496:
-            rol = discord.utils.get(ctx.guild.roles, name = "Mods")
-            if not rol in ctx.author.roles:
-                return
-            else:
-                user_id = str(member.id)
-                db = await self.bot.pg_con.fetchrow("SELECT * FROM blacklist WHERE user_id = $1", user_id)
-                if member == None:
-                    await ctx.send("Uhm.. the fuck, send also the member, baaka.")
-                    return
-                
-                if not db:
-                    return await ctx.reply("This member isn't blacklisted.")
-                
-                await ctx.send(f"Removed `{member.name}#{member.discriminator}` from the blacklist.")
-                await self.bot.pg_con.execute("DELETE FROM blacklist WHERE user_id = $1", user_id)
-        else:
-            return
+        command = self.bot.get_command(command)
+        if command.enabled:
+            return await ctx.send("This command is already enabled.")
+        command.enabled = True
+        em = discord.Embed(description=f"• `{command.name}` enabled.\n• Use `ami disable <command>` to disable it.", color = 0xffcff1)
+        await ctx.send(embed=em)
 
 
     @commands.Cog.listener()
