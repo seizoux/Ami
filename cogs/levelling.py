@@ -2,162 +2,186 @@ import discord
 from discord.ext import commands, tasks
 import json
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import random
+from numerize import numerize
+from cogsf.defs import is_team
 
-def levelup_func(avatar: discord.Member):
-    with Image.open("assets/levelup.png").convert("RGBA") as bg:
+class RankCard():
+  """
+  A class function to draw our rank card
+  """
 
-        with Image.open(avatar).convert("RGBA") as pfp_1:
-            im = pfp_1.resize((223, 223))
-            bigsize = (im.size[0] * 3, im.size[1] * 3)
-            mask = Image.new('L', bigsize, 0)
-            draw = ImageDraw.Draw(mask) 
-            draw.ellipse((0, 0) + bigsize, fill=255)
-            mask = mask.resize(im.size, Image.ANTIALIAS)
-            im.putalpha(mask)
-            bg.paste(im,(9, 49),im)
-            im.close()
+  def drawProgressBar(d, x, y, w, h, progress, fg="#FFB6C1"):
 
-        font = ImageFont.truetype("fonts/antom.ttf", 48)
-        draw = ImageDraw.Draw(bg)
-        text = "L E V E L  U P!"
-        color = "white"
-        shadow = "black"
+      w *= progress
+      d.ellipse((x+w, y, x+h+w, y+h),fill=fg)
+      d.ellipse((x, y, x+h, y+h),fill=fg)
+      d.rectangle((x+(h/2), y, x+w+(h/2), y+h),fill=fg)
 
-        x, y = 285, 120
+      return d
 
-        draw.text((x-1, y), text, font=font, fill=shadow)
-        draw.text((x+1, y), text, font=font, fill=shadow)
-        draw.text((x, y-1), text, font=font, fill=shadow)
-        draw.text((x, y+1), text, font=font, fill=shadow)
+  def levelup_func(avatar: discord.Member, level:str):
+      with Image.open("assets/levelup.png").convert("RGBA") as bg:
+          bg = bg.resize((230, 100))
 
-        # thicker border
-        draw.text((x-1, y-1), text, font=font, fill=shadow)
-        draw.text((x+1, y-1), text, font=font, fill=shadow)
-        draw.text((x-1, y+1), text, font=font, fill=shadow)
-        draw.text((x+1, y+1), text, font=font, fill=shadow)
+          with Image.open("assets/glass.png").convert("RGBA") as glass:
+              im = glass.resize((150, 90))
+              bg.paste(im, (70, 5), im)
+              im.close()
 
-        draw.text((x, y), text, font=font, fill=color)
+          with Image.open(avatar).convert("RGBA") as pfp_1:
+              im = pfp_1.resize((85, 85))
+              bg.paste(im,(9, 8),im)
+              im.close()
 
-        buffer = BytesIO()
-        bg.save(buffer, format="PNG")
-        buffer.seek(0)
+          font = ImageFont.truetype("fonts/antom.ttf", 28)
+          draw = ImageDraw.Draw(bg)
+          text = f"{level}"
+          text2 = "LEVEL UP!"
+          color = "white"
+          color2 = "gold"
+          shadow = "black"
 
-        return buffer
+          x, y = 150, 70
+          x2, y2 = 105, 10
 
-def level_func(avatar: discord.Member, name:str, level:str, xp:str, needed:str):
-    with Image.open("assets/level_banner.png").convert("RGBA") as bg:
+          draw.text((x-1, y), text, font=font, fill=shadow, anchor="mm")
+          draw.text((x+1, y), text, font=font, fill=shadow, anchor="mm")
+          draw.text((x, y-1), text, font=font, fill=shadow, anchor="mm")
+          draw.text((x, y+1), text, font=font, fill=shadow, anchor="mm")
 
-        with Image.open("assets/level_circle.png").convert("RGBA") as circle:
-            im = circle.resize((180,190))
-            bg.paste(im,(50,20), im)
-            im.close()
+          # thicker border
+          draw.text((x-1, y-1), text, font=font, fill=shadow, anchor="mm")
+          draw.text((x+1, y-1), text, font=font, fill=shadow, anchor="mm")
+          draw.text((x-1, y+1), text, font=font, fill=shadow, anchor="mm")
+          draw.text((x+1, y+1), text, font=font, fill=shadow, anchor="mm")
 
-        with Image.open(avatar).convert("RGBA") as pfp_1:
-            im = pfp_1.resize((110, 103))
-            bigsize = (im.size[0] * 3, im.size[1] * 3)
-            mask = Image.new('L', bigsize, 0)
-            draw = ImageDraw.Draw(mask) 
-            draw.ellipse((0, 0) + bigsize, fill=255)
-            mask = mask.resize(im.size, Image.ANTIALIAS)
-            im.putalpha(mask)
-            bg.paste(im,(85,54),im)
-            im.close()
-      
-        exp = int(xp)
-        need = int(needed)
-        spkx, spky = 245, 155
+          draw.text((x, y), text, font=font, fill=color, anchor="mm")
 
-        with Image.open("assets/sparkle_not.png").convert("RGBA") as not_sparkle:
-            dfc = not_sparkle.resize((40, 40))
-            bg.paste(dfc, (245, 155), dfc)
-            n = 0
-            d, c = 245, 155
-            for i in range(10):
-                n += 1
-                d += 40
-                s = not_sparkle.resize((40, 40))
-                bg.paste(s, (d, c), s)
-                if n >= 9:
-                    break
+          draw.text((x2-1, y2), text2, font=font, fill=shadow)
+          draw.text((x2+1, y2), text2, font=font, fill=shadow)
+          draw.text((x2, y2-1), text2, font=font, fill=shadow)
+          draw.text((x2, y2+1), text2, font=font, fill=shadow)
 
-        with Image.open("assets/sparkle.png").convert("RGBA") as sparkle:
-            im = sparkle.resize((40, 40))
+          # thicker border
+          draw.text((x2-1, y2-1), text2, font=font, fill=shadow)
+          draw.text((x2+1, y2-1), text2, font=font, fill=shadow)
+          draw.text((x2-1, y2+1), text2, font=font, fill=shadow)
+          draw.text((x2+1, y2+1), text2, font=font, fill=shadow)
 
-            if (exp >= need/10):
-                bg.paste(im, (spkx, spky), im)
+          draw.text((x2, y2), text2, font=font, fill=color2)
 
-            if (exp >= need-(need/2)):
-                bg.paste(im, (spkx+40, spky), im)
+          buffer = BytesIO()
+          bg.save(buffer, format="PNG")
+          buffer.seek(0)
 
-            if (exp >= need-(need/3)):
-                bg.paste(im, (spkx+80, spky), im)
+          return buffer
 
-            if (exp >= need-(need/4)):
-                bg.paste(im, (spkx+120, spky), im)
+  def level_func(avatar: discord.Member, name:str, disc:str, level:int, xp:int, needed:int, rank:str):
+      with Image.open("assets/level_card.png").convert("RGBA") as bg:
 
-            if (exp >= need-(need/5)):
-                bg.paste(im, (spkx+160, spky), im)
+          with Image.open(avatar).convert("RGBA") as pfp_1:
+              im = pfp_1.resize((241, 242))
+              bigsize = (im.size[0] * 3, im.size[1] * 3)
+              mask = Image.new('L', bigsize, 0)
+              draw = ImageDraw.Draw(mask) 
+              draw.ellipse((0, 0) + bigsize, fill=255)
+              mask = mask.resize(im.size, Image.ANTIALIAS)
+              im.putalpha(mask)
+              bg.paste(im,(34,19),im)
+              im.close()
+        
+          exp = int(xp)
+          need = int(needed)
+          spkx, spky = 355, 216
 
-            if (exp >= need-(need/6)):
-                bg.paste(im, (spkx+200, spky), im)
+          sparky = 0.00
+          x_sparky = int(need/100)
+          f = x_sparky
+          for i in range(100):
+              if exp >= x_sparky:
+                  sparky += 0.01
+                  x_sparky += f
 
-            if (exp >= need-(need/7)):
-                bg.paste(im, (spkx+240, spky), im)
+          d = ImageDraw.Draw(bg)
+          d = RankCard.drawProgressBar(d, spkx, spky+10, 815, 30, sparky)
 
-            if (exp >= need-(need/8)):
-                bg.paste(im, (spkx+280, spky), im)
+          font = ImageFont.truetype("fonts/ArialUnicodeMS.ttf", 58)
+          font_disc = ImageFont.truetype("fonts/ArialUnicodeMS.ttf", 35)
+          font2 = ImageFont.truetype("fonts/louis.ttf", 38)
+          font3 = ImageFont.truetype("fonts/louis.ttf", 42)
+          font4 = ImageFont.truetype("fonts/louis.ttf", 70)
+          font5 = ImageFont.truetype("fonts/louis.ttf", 36)
+          font6 = ImageFont.truetype("fonts/louis.ttf", 45)
+          font7 = ImageFont.truetype("fonts/louis.ttf", 78)
+          draw = ImageDraw.Draw(bg)
 
-            if (exp >= need-(need/9)):
-                bg.paste(im, (spkx+320, spky), im)
+          # colors
+          color = "#F8F8FF"
+          color2 = "white"
 
-            if (exp >= need-(need/10)):
-                bg.paste(im, (spkx+360, spky), im)
-            
-            if (exp >= need):
-                bg.paste(s, (spkx+40, spky), s)
+          #TEXTS
+          member_name = name
+          member_disc = disc
+          level_text = f"LVL."
+          level_number_text = f"{level}"
+          xp_text = f"{xp:,} XP /"
+          needed_xp_text = f"{need:,}"
+          rank_text = "RANK"
+          rank_number_text = f"#{rank}"
 
+          #coords
+          x, y = 355, 28
+          x2, y2 = 360, 130
+          x3, y3 = 365 + font.getsize(member_name)[0], 53
+          x4 = 370 + font3.getsize(xp_text)[0]
+          x5 = 1010 + font4.getsize(level_text)[0]
+          x6, y6 = 955, 50
+          x7 = 965 + font6.getsize(rank_text)[0]
 
-        font = ImageFont.truetype("fonts/ArialUnicodeMS.ttf", 38)
-        font2 = ImageFont.truetype("fonts/louis.ttf", 18)
-        draw = ImageDraw.Draw(bg)
+          # drawing member rank text
+          draw.text((x6, y6), rank_text, font=font6, fill="white")
 
-        # colors
-        color = "#F8F8FF"
-        color2 = "black"
+          # drawing member rank number
+          draw.text((x7, y6-30), rank_number_text, font=font7, fill="#FFB6C1")
 
-        #TEXTS
-        member_name = name
-        level_text = f"Level : {level}"
-        xp_text = f"Exp : {xp} / {need}"
+          # drawing member name
+          if len(member_name) >= 10:
+              font = ImageFont.truetype("fonts/ArialUnicodeMS.ttf", 38)
+              y += 12
+              x3, y3 = 360 + font.getsize(member_name)[0], 42
+          draw.text((x-1, y+1), member_name, font=font, fill="black")
+          draw.text((x-2, y+2), member_name, font=font, fill="black")
+          draw.text((x, y), member_name, font=font, fill=color)
 
-        #coords
-        x, y = 250, 70
-        x2, y2 = 250, 90
+          # drawing member disc
+          draw.text((x3, y3), member_disc, font=font_disc, fill="#FFB6C1")
 
-        # drawing member name
-        draw.text((x+1, y-1), member_name, font=font, fill="black")
-        draw.text((x+2, y-2), member_name, font=font, fill="black")
-        draw.text((x, y), member_name, font=font, fill=color)
+          # drawing member level text
+          draw.text((x2+700, y2+40), level_text, font=font2, fill=color2)
 
-        # drawing member level
-        draw.text((x2+300, y2+40), level_text, font=font2, fill=color2)
+          # drawing member level number with border bold black
+          draw.text((x5, y2+10), level_number_text, font=font4, fill="#FFB6C1")
 
-        # drawing member xp
-        draw.text((x2, y2+40), xp_text, font=font2, fill=color2)
+          # drawing member xp
+          draw.text((x2, y2+40), xp_text, font=font3, fill="#FFB6C1")
+          draw.text((x2-1, (y2+40)-1), xp_text, font=font3, fill="#FFB6C1")
 
-        buffer = BytesIO()
-        bg.save(buffer, format="PNG")
-        buffer.seek(0)
+          # drawing member needed xp with border bold black
+          draw.text((x4, y2+44), needed_xp_text, font=font5, fill="#DCDCDC")
 
-        return buffer
+          buffer = BytesIO()
+          bg.save(buffer, format="PNG")
+          buffer.seek(0)
+
+          return buffer
 
 class Levelling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Levelling"
-        self._cd = commands.CooldownMapping.from_cooldown(1, 5.0, commands.BucketType.user)
+        self._cd = commands.CooldownMapping.from_cooldown(1, 7.2, commands.BucketType.user)
         self.modality = {}
         self.xp_users = {}
         self.levels_users = {}
@@ -197,6 +221,13 @@ class Levelling(commands.Cog):
     async def on_ready(self):
         print(f"Levelling Loaded")
 
+    @commands.group(help="Manage the leveling feature settings for this guild!\n`ami setleveling settings` to check the leveling settings for the guild\n`ami setleveling set enable` to enable the leveling\n`ami setleveling set disable` to disable the leveling\n"
+                            "`ami setleveling message [set]` to set the level-up message\n`ami setleveling channel [set]` to set the channel where send level-up messages\n"
+                            "`ami setleveling levelup-image [set]` to enable / disable the image on levelup messages.\n\n"
+                            "**You can also use some variables in the level-up message:**```py\n{name} : will return the member name\n{mention} : will return the member mention\n{member} : will return the complete member name\n{level} : will return the member level\n```", invoke_without_command=True)
+    async def setleveling(self, ctx):
+        await ctx.invoke(self.bot.get_command("help"), **{"command":"setleveling"})
+
     @commands.command(help="See your rank card according to the guild where you execute this command.\nThis will return `0`, `0` if not **xp** / **level**", aliases=["rank", "lvl"])
     async def level(self, ctx, member: discord.Member = None):
         """ Command to see your level / the level of a member"""
@@ -204,32 +235,61 @@ class Levelling(commands.Cog):
             member = ctx.author
 
         if ctx.guild.id not in self.modality:
-            return await ctx.send("<:4318crossmark:848857812565229601> Levelling is disabled in this guild.")
+            return await ctx.send("<:4318crossmark:848857812565229601> Leveling is disabled in this guild.")
 
-        if ctx.guild.id in self.xp_users:
-            if str(ctx.author.id) not in self.xp_users[ctx.guild.id]:
-                return await ctx.send("<:4318crossmark:848857812565229601> This member has **0**xp and it's **Lvl. 0**.")
-        
-        name = f"{member.name}#{member.discriminator}"
+        if ctx.guild.id not in self.xp_users:
+            return
+
+        if ctx.guild.id not in self.levels_users:
+            return
+
+        name = f"{member.name}"
+        disc = f"#{member.discriminator}"
+
         level = 0
         if str(member.id) in self.levels_users[ctx.guild.id]:
             level = self.levels_users[ctx.guild.id][str(member.id)]["level"]
-        xp = self.xp_users[ctx.guild.id][str(member.id)]["xp_earned"]
-        needed = self.xp_users[ctx.guild.id][str(member.id)]["next_level"]
+        
+        xp = 0
+        if str(member.id) in self.xp_users[ctx.guild.id]:
+            xp = self.xp_users[ctx.guild.id][str(member.id)]["xp"]
+        
+        needed = 300
+        if str(member.id) in self.xp_users[ctx.guild.id]:
+            needed = self.xp_users[ctx.guild.id][str(member.id)]["next_level"]
+
+        rank = "N/A"
+        if ctx.guild.id in self.xp_users:
+            if str(member.id) in self.xp_users[ctx.guild.id]:
+                rank =  sorted([x['xp_earned'] for x in self.xp_users[ctx.guild.id].values()], reverse=True).index(self.xp_users[ctx.guild.id][str(member.id)]['xp_earned']) + 1
 
         asset1 = member.avatar_url_as(size=128)
         avatar = BytesIO(await asset1.read())
 
-        buffer = await self.bot.loop.run_in_executor(None, level_func, avatar, name, str(level), str(xp), str(needed))
+        buffer = await self.bot.loop.run_in_executor(None, RankCard.level_func, avatar, name, disc, int(level), int(xp), int(needed), str(rank))
         file=discord.File(fp=buffer, filename="level.png")
         await ctx.send(file=file)
 
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        """ 
+        Our event function to add xp to members on mesage
+        This works with a commands.CooldownMapping(1, 7.3) timeout
+        When someone is ratelimited, just return without add xp
+
+        If the member xp is > or = to the needed_xp to level-up, this
+        reset the member xp to 0, add 1 level if the member is in our
+        self.levels_users dict, then if in the guild leveling settings
+        the level-up image is enabled, continue sending the level-up
+        image in the designed channel.
+        """
         await self.bot.wait_until_ready()
 
-        if message.guild.id not in self.modality:
+        try:
+            if message.guild.id not in self.modality:
+                return
+        except Exception:
             return
 
         if message.guild.id not in self.xp_users:
@@ -249,16 +309,16 @@ class Levelling(commands.Cog):
             self.xp_users[message.guild.id][str(message.author.id)] = {
                                                 'xp_earned': 0,
                                                 'xp': 0,
-                                                'next_level': 447
+                                                'next_level': 301
                                                 }
 
-        d = random.randint(31, 74)
-        self.xp_users[message.guild.id][str(message.author.id)]["xp_earned"] = self.xp_users[message.guild.id][str(message.author.id)]["xp"] + d
+        d = random.randint(11, 28)
+        self.xp_users[message.guild.id][str(message.author.id)]["xp_earned"] = self.xp_users[message.guild.id][str(message.author.id)]["xp_earned"] + d
         self.xp_users[message.guild.id][str(message.author.id)]["xp"] = self.xp_users[message.guild.id][str(message.author.id)]["xp"] + d
 
         if self.xp_users[message.guild.id][str(message.author.id)]["xp"] >= self.xp_users[message.guild.id][str(message.author.id)]["next_level"]:
             self.xp_users[message.guild.id][str(message.author.id)]["xp"] = 0
-            self.xp_users[message.guild.id][str(message.author.id)]["next_level"] = self.xp_users[message.guild.id][str(message.author.id)]["xp_earned"] + 447
+            self.xp_users[message.guild.id][str(message.author.id)]["next_level"] = self.xp_users[message.guild.id][str(message.author.id)]["xp_earned"] + 301
             
             if str(message.author.id) not in self.levels_users[message.guild.id]:
                 self.levels_users[message.guild.id][str(message.author.id)] = {
@@ -296,13 +356,13 @@ class Levelling(commands.Cog):
 
             try:
                 if image == "enable":
+                    level = self.levels_users[message.guild.id][str(message.author.id)]["level"]
                     asset1 = message.author.avatar_url_as(size=128)
                     avatar = BytesIO(await asset1.read())
 
-                    buffer = await self.bot.loop.run_in_executor(None, levelup_func, avatar)
-                    file=discord.File(fp=buffer, filename="levelup.png")
-                    await ch.send(msg)
-                    await ch.send(file=file)
+                    buffer = await self.bot.loop.run_in_executor(None, RankCard.levelup_func, avatar, level)
+                    file=discord.File(fp=buffer, filename="levelup_member.png")
+                    await ch.send(msg, file=file)
             except Exception:
                 return
 
@@ -313,59 +373,59 @@ class Levelling(commands.Cog):
     
         asset1 = ctx.author.avatar_url_as(size=128)
         avatar = BytesIO(await asset1.read())
+        level = self.levels_users[ctx.guild.id][str(ctx.author.id)]["level"]
 
-        buffer = await self.bot.loop.run_in_executor(None, levelup_func, avatar)
+        buffer = await self.bot.loop.run_in_executor(None, RankCard.levelup_func, avatar, level)
         file=discord.File(fp=buffer, filename="levelup.png")
         await ctx.send(file=file)
 
-    @commands.command(help="Manage the levelling feature settings for this guild!\n`ami levelling settings` to check the levelling settings for the guild\n`ami levelling enable` to enable the levelling\n`ami levelling disable` to disable the levelling\n"
-                            "`ami levelling message [set]` to set the level-up message\n`ami levelling channel [set]` to set the channel where send level-up messages\n"
-                            "`ami levelling levelup-image [set]` to enable / disable the image on levelup messages.\n\n"
-                            "**You can also use some variables in the level-up message:**```py\n{name} : will return the member name\n{mention} : will return the member mention\n{member} : will return the complete member name\n{level} : will return the member level\n```")
+    @setleveling.command()
     @commands.has_permissions(manage_guild=True)
-    async def setlevelling(self, ctx, mode, *, set=None):
-        if mode.lower() == "settings":
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
-            if not db:
-                return await ctx.send("<:4318crossmark:848857812565229601> This guild has no levelling settings yet.")
+    async def settings(self, ctx, mode, *, set=None):
+        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        if not db:
+            return await ctx.send("<:4318crossmark:848857812565229601> This guild has no leveling settings yet.")
 
-            mexs = db[0]["message"]
-            chs = db[0]["channel"]
-            tog = db[0]["toggle"]
+        mexs = db[0]["message"]
+        chs = db[0]["channel"]
+        tog = db[0]["toggle"]
 
-            gfc = ""
+        gfc = ""
 
-            chd = self.bot.get_channel(chs)
-            if not chd:
-                gfc = chs
-            gfc = chd.mention
+        chd = self.bot.get_channel(chs)
+        if not chd:
+            gfc = chs
+        gfc = chd.mention
 
-            if tog.lower() in ["off", "disable"]:
-                tog = "Disabled"
+        if tog.lower() in ["off", "disable"]:
+            tog = "Disabled"
 
-            elif tog.lower() in ["on", "enable"]:
-                tog = "Enabled"
+        elif tog.lower() in ["on", "enable"]:
+            tog = "Enabled"
 
-            d1 = "Message set? : <:4430checkmark:848857812632076314>"
-            d2 = "Channel set? : <:4430checkmark:848857812632076314>"
+        d1 = "Message set? : <:4430checkmark:848857812632076314>"
+        d2 = "Channel set? : <:4430checkmark:848857812632076314>"
 
-            if not mexs:
-                d1 = "Message set? : <:4318crossmark:848857812565229601>"
-                mexs = "No message set."
+        if not mexs:
+            d1 = "Message set? : <:4318crossmark:848857812565229601>"
+            mexs = "No message set."
 
-            if not chs:
-                d2 = "Channel set? : <:4318crossmark:848857812565229601>"
-                chs = "No channel set."
+        if not chs:
+            d2 = "Channel set? : <:4318crossmark:848857812565229601>"
+            chs = "No channel set."
 
-            if not tog:
-                tog = "No modality set"
+        if not tog:
+            tog = "No modality set"
 
-            em = discord.Embed(title = "Levelling Settings", description = f"The levelling in this guild is **{tog.title()}**", color = 0xffcff1)
-            em.add_field(name=f"{ctx.guild.name} options", value = f"{d1}\n{d2}\n\n**Channel** : {gfc}\n**Message** : {mexs}")
-            em.set_thumbnail(url=ctx.guild.icon_url)
-            em.set_footer(text="Check `ami help setlevelling` for more things.")
-            return await ctx.send(embed=em)
+        em = discord.Embed(title = "Leveling Settings", description = f"The leveling in this guild is **{tog.title()}**", color = 0xffcff1)
+        em.add_field(name=f"{ctx.guild.name} options", value = f"{d1}\n{d2}\n\n**Channel** : {gfc}\n**Message** : {mexs}")
+        em.set_thumbnail(url=ctx.guild.icon_url)
+        em.set_footer(text="Check `ami help setleveling` for more things.")
+        return await ctx.send(embed=em)
 
+    @setleveling.command()
+    @commands.has_permissions(manage_guild=True)
+    async def set(self, ctx, mode):
         if mode.lower() == "enable":
             db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
             if not db:
@@ -388,57 +448,49 @@ class Levelling(commands.Cog):
             del self.modality[ctx.guild.id]
             return await ctx.message.add_reaction("<:4318crossmark:848857812565229601>")
 
-        elif mode.lower() == "levelup-image":
-            if not set:
-                return await ctx.send("<:4318crossmark:848857812565229601> The `[set]` argument is required for this option, example:\n"
-                                    "ami setlevelling levelup-message enable / ami setlevelling levelup-message disable")
-            
-            modescf = ["enable", "disable"]
-            if set.lower() not in modescf:
-                return await ctx.send("<:4318crossmark:848857812565229601> This isn't a valid option for **levelup-image**. Valids are `enable` & `disable`")
+    @setleveling.command(name="levelup-image")
+    @commands.has_permissions(manage_guild=True)
+    async def levelup_image(self, ctx, set):
+        modescf = ["enable", "disable"]
+        if set.lower() not in modescf:
+            return await ctx.send("<:4318crossmark:848857812565229601> This isn't a valid option for **levelup-image**. Valids are `enable` & `disable`")
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, levelup_image) VALUES ($1, $2)", str(ctx.guild.id), set)
+        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        if not db:
+            await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, levelup_image) VALUES ($1, $2)", str(ctx.guild.id), set)
         
-            await self.bot.pg_con.execute("UPDATE levelling_settings SET levelup_image = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
+        await self.bot.pg_con.execute("UPDATE levelling_settings SET levelup_image = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
 
-            if set.lower() == "enable":
-                return await ctx.send("<:4430checkmark:848857812632076314> Levelup image succesfully enabled!")
-            return await ctx.send("<:4318crossmark:848857812565229601> Levelup image succesfully disabled!")
+        if set.lower() == "enable":
+            return await ctx.send("<:4430checkmark:848857812632076314> Levelup image succesfully enabled!")
+        return await ctx.send("<:4318crossmark:848857812565229601> Levelup image succesfully disabled!")
 
-        elif mode.lower() == "message":
-            if not set:
-                return await ctx.send("<:4318crossmark:848857812565229601> The `[set]` argument is required for this option, example:\n"
-                                    "ami setlevelling message 🎉 {member} is now **Lvl. {level}!**")
-            
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, message) VALUES ($1, $2)", str(ctx.guild.id), set)
-                return await ctx.send(f"<:4430checkmark:848857812632076314> Levelup message succesfully set!")
-    
-            await self.bot.pg_con.execute("UPDATE levelling_settings SET message = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
+    @setleveling.command()
+    @commands.has_permissions(manage_guild=True)
+    async def message(self, ctx, set):    
+        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        if not db:
+            await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, message) VALUES ($1, $2)", str(ctx.guild.id), set)
             return await ctx.send(f"<:4430checkmark:848857812632076314> Levelup message succesfully set!")
+    
+        await self.bot.pg_con.execute("UPDATE levelling_settings SET message = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
+        return await ctx.send(f"<:4430checkmark:848857812632076314> Levelup message succesfully set!")
 
-        elif mode.lower() == "channel":
-            if not set:
-                return await ctx.send("<:4318crossmark:848857812565229601> The `[set]` argument is required for this option, example:\n"
-                                    "ami setlevelling channel #mention / ami setlevelling channel 87493829249205534")
+    @setleveling.command()
+    @commands.has_permissions(manage_guild=True)
+    async def channel(self, ctx, set):
+        d = set.strip("<#>")
+        v = self.bot.get_channel(int(d))
+        if not v:
+            return await ctx.send(f"{set} is not a valid channel.")
 
-            d = set.strip("<#>")
-            v = self.bot.get_channel(int(d))
-            if not v:
-                return await ctx.send(f"{set} is not a valid channel.")
+        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        if not db:
+            await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, channel) VALUES ($1, $2)", str(ctx.guild.id), int(d))
+            return await ctx.send("<:4430checkmark:848857812632076314> Leveling channel updated, i'll send every level up message there.")
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
-            if not db:
-                await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, channel) VALUES ($1, $2)", str(ctx.guild.id), int(d))
-                return await ctx.send("<:4430checkmark:848857812632076314> Levelling channel updated, i'll send every level up message there.")
-
-            await self.bot.pg_con.execute("UPDATE levelling_settings SET channel = $1 WHERE guild_id = $2", int(d), str(ctx.guild.id))
-            return await ctx.send("<:4430checkmark:848857812632076314> Levelling channel updated, i'll send every level up message there.")
-        else:
-            return await ctx.send("<:4318crossmark:848857812565229601> The provided option is invalid, check `ami help levelling` for more info's.")
+        await self.bot.pg_con.execute("UPDATE levelling_settings SET channel = $1 WHERE guild_id = $2", int(d), str(ctx.guild.id))
+        return await ctx.send("<:4430checkmark:848857812632076314> Leveling channel updated, i'll send every level up message there.")
 
 #########################################################################################################
 #########################################################################################################
@@ -449,58 +501,90 @@ class Levelling(commands.Cog):
 #########################################################################################################
 
     @commands.command()
-    @commands.is_owner()
+    @is_team()
     async def addlevels(self, ctx, amount:int, member: discord.Member = None):
         if member is None:
             member = ctx.author
 
-        #daishiky u change those commands urself i am lazy
+        if amount >= 1000:
+            return await ctx.send("<:4318crossmark:848857812565229601> Amount can't be over 1000.")
+
+        if ctx.guild.id not in self.modality:
+            return await ctx.send("<:4318crossmark:848857812565229601> Leveling in this guild is disabled.")
+
+        if ctx.guild.id not in self.levels_users:
+            return await ctx.send("<:4318crossmark:848857812565229601> Guild not found in levels cache.")
+
+        if str(member.id) not in self.levels_users[ctx.guild.id]:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** is not in the database.")
+    
+        self.levels_users[ctx.guild.id][str(member.id)]["level"] = self.levels_users[ctx.guild.id][str(member.id)]["level"] + amount
         await ctx.send(f"<:4430checkmark:848857812632076314> Added **{amount}** levels to **{member.name}#{member.discriminator}**")
 
     @commands.command()
-    @commands.is_owner()
+    @is_team()
     async def remlevels(self, ctx, amount:int, member: discord.Member = None):
         if member is None:
             member = ctx.author
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling WHERE guild_id = $1 AND user_id = $2", ctx.guild.id, member.id)
-        if not db:
+        if ctx.guild.id not in self.modality:
+            return await ctx.send("<:4318crossmark:848857812565229601> Leveling in this guild is disabled.")
+
+        if ctx.guild.id not in self.levels_users:
+            return await ctx.send("<:4318crossmark:848857812565229601> Guild not found in levels cache.")
+
+        if str(member.id) not in self.levels_users[ctx.guild.id]:
             return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** is not in the database.")
 
-        if amount > db[0]["level"]:
-            return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** level is **{db[0]['level']}**, you can't remove **{amount}** levels.")
+        if amount > self.levels_users[ctx.guild.id][str(member.id)]["level"]:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** level is **{self.levels_users[ctx.guild.id][str(member.id)]['level']}**, you can't remove **{amount}** levels.")
 
-        await self.bot.pg_con.execute("UPDATE levelling SET level = $1 WHERE guild_id = $2 AND user_id = $3", db[0]["level"] - amount, ctx.guild.id, member.id)
+        self.levels_users[ctx.guild.id][str(member.id)]["level"] = self.levels_users[ctx.guild.id][str(member.id)]["level"] - amount
         await ctx.send(f"<:4430checkmark:848857812632076314> Removed **{amount}** levels to **{member.name}#{member.discriminator}**")
 
     @commands.command()
-    @commands.is_owner()
+    @is_team()
     async def addxp(self, ctx, amount:int, member: discord.Member = None):
         if member is None:
             member = ctx.author
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling WHERE guild_id = $1 AND user_id = $2", ctx.guild.id, member.id)
-        if not db:
-            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, user_id, xp) VALUES ($1, $2, $3)", ctx.guild.id, member.id, amount)
-            return await ctx.send(f"<:4430checkmark:848857812632076314> Added **{amount}** xp to **{member.name}#{member.discriminator}**")
+        if amount >= 100000:
+            return await ctx.send("<:4318crossmark:848857812565229601> Amount can't be over 100k.")
 
-        await self.bot.pg_con.execute("UPDATE levelling SET xp = $1 WHERE guild_id = $2 AND user_id = $3", db[0]["xp"] + amount, ctx.guild.id, member.id)
+        if ctx.guild.id not in self.modality:
+            return await ctx.send("<:4318crossmark:848857812565229601> Leveling in this guild is disabled.")
+
+        if ctx.guild.id not in self.xp_users:
+            return await ctx.send("<:4318crossmark:848857812565229601> Guild not found in levels cache.")
+
+        if str(member.id) not in self.xp_users[ctx.guild.id]:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** is not in the database.")
+
+        self.xp_users[ctx.guild.id][str(member.id)]["xp"] =  self.xp_users[ctx.guild.id][str(member.id)]["xp"] + amount
+        self.xp_users[ctx.guild.id][str(member.id)]["xp_earned"] = self.xp_users[ctx.guild.id][str(member.id)]["xp_earned"] + amount
         await ctx.send(f"<:4430checkmark:848857812632076314> Added **{amount}** xp to **{member.name}#{member.discriminator}**")
 
     @commands.command()
-    @commands.is_owner()
+    @is_team()
     async def remxp(self, ctx, amount:int, member: discord.Member = None):
         if member is None:
             member = ctx.author
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling WHERE guild_id = $1 AND user_id = $2", ctx.guild.id, member.id)
-        if not db:
+        if ctx.guild.id not in self.modality:
+            return await ctx.send("<:4318crossmark:848857812565229601> Leveling in this guild is disabled.")
+
+        if ctx.guild.id not in self.xp_users:
+            return await ctx.send("<:4318crossmark:848857812565229601> Guild not found in levels cache.")
+
+        if str(member.id) not in self.xp_users[ctx.guild.id]:
             return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** is not in the database.")
 
-        if amount > db[0]["level"]:
-            return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** xp is **{db[0]['xp']}**, you can't remove **{amount}** xp.")
+        if amount > self.xp_users[ctx.guild.id][str(member.id)]["xp"]:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> **{member.name}#{member.discriminator}** xp is **{self.xp_users[ctx.guild.id][str(member.id)]['xp']}**, you can't remove **{amount}** xp.")
 
-        await self.bot.pg_con.execute("UPDATE levelling SET xp = $1 WHERE guild_id = $2 AND user_id = $3", db[0]["xp"] - amount, ctx.guild.id, member.id)
+        self.xp_users[ctx.guild.id][str(member.id)]["xp"] = self.xp_users[ctx.guild.id][str(member.id)]["xp"] - amount
+        self.xp_users[ctx.guild.id][str(member.id)]["xp_earned"] = self.xp_users[ctx.guild.id][str(member.id)]["xp_earned"] - amount
+
         await ctx.send(f"<:4430checkmark:848857812632076314> Removed **{amount}** xp to **{member.name}#{member.discriminator}**")
 
 def setup(bot):
