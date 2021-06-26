@@ -1,8 +1,5 @@
 import discord
-from discord.errors import NotFound
-from discord.ext import commands
-import alexflipnote
-import aiozaneapi
+from discord.ext import commands, menus
 from nudenet import NudeClassifier
 import typing
 from urllib.request import urlretrieve
@@ -11,11 +8,62 @@ import aiofiles
 import aiohttp
 import asyncio
 import humanize
-import psutil
 import async_cse
 import time
 from jishaku.paginators import WrappedPaginator, PaginatorInterface
 from collections import Counter
+from cogsf.defs import is_team
+import psutil
+import platform
+import pathlib
+
+def line_count():
+    p = pathlib.Path('./')
+    cm = cr = fn = cl = ls = fc = 0
+    for f in p.rglob('*.py'):
+        if str(f).startswith("venv"):
+            continue
+        fc += 1
+        with f.open() as of:
+            for l in of.readlines():
+                l = l.strip()
+                if l.startswith('class'):
+                    cl += 1
+                if l.startswith('def'):
+                    fn += 1
+                if l.startswith('async def'):
+                    cr += 1
+                if '#' in l:
+                    cm += 1
+                ls += 1
+    return f"Files: {fc}\nLines: {ls:,}\nFunctions: {fn}\nComments: {cm:,}"
+
+
+def get_size(bytes, suffix="B"):
+    """
+    Scale bytes to its proper format
+    e.g:
+        1253656 => '1.20MB'
+        1253656678 => '1.17GB'
+    """
+    factor = 1024
+    for unit in ["", "K", "M", "G", "T", "P"]:
+        if bytes < factor:
+            return f"{bytes:.2f}{unit}{suffix}"
+        bytes /= factor
+
+class PaginateGuilds(menus.ListPageSource):
+    """Player queue paginator class."""
+
+    def __init__(self, entries, *, per_page=1):
+        entries = [f'{name}' for name in entries]
+        super().__init__(entries, per_page=per_page)
+
+    async def format_page(self, menu: menus.Menu, page):
+        embed = discord.Embed(color = 0xffcff1)
+        embed.description = ''.join(page)
+
+        return embed
 
 class Utility(commands.Cog):
     def __init__(self, bot):
@@ -28,69 +76,125 @@ class Utility(commands.Cog):
     async def on_ready(self):
         print(f"Utility Loaded")
 
-    @commands.command(help="Suggest new feature for ami")
-    async def feature(self, ctx):
-        user_id = str(f"{ctx.author.id}")
-        db = await self.bot.pg_con.fetchrow("SELECT * FROM blacklist WHERE user_id = $1", user_id)
-        if db:
-            try:
-                reason = db["reason"]
-                em = discord.Embed(description=f"**{ctx.author.name}**, you're blacklisted from the bot. You can't use `ami feature & ami support`. If you think this is a mistake, feel free to reach the support team.\nReason: **`{reason}`**", color=0xffcff1)
-                em.set_footer(text="https://discord.gg/ZcErEwmVYu")
-                return await ctx.author.send(embed=em)
-            except Exception:
-                em = discord.Embed(description=f"**{ctx.author.name}**, you're blacklisted from the bot. You can't use `ami feature & ami support`. If you think this is a mistake, feel free to reach the support team.\nReason: **`{reason}`**", color=0xffcff1)
-                em.set_footer(text="https://discord.gg/ZcErEwmVYu")
-                return await ctx.send(embed=em)
+    @commands.command()
+    @is_team()
+    async def topguilds(self, ctx):
 
-        channel = self.bot.get_channel(805892487503413310)
-        msg1 = "ami nvm"
-        msg2 = "ami feature"
-        await ctx.send("<:qmark:819702268479012974> Ok! Now send the feature u want to be added in Ami: you have `1 minute`. Use **ami nvm** to cancel the request.")
+        msg = await ctx.send(f"{ctx.author.mention}, this command can be a little spammy, are you sure you want to execute it?\nClick the reaction in **30** seconds to continue.")
+        await msg.add_reaction("<:check:819702267476967444>")
+
+        def check(payload):
+            return payload.message_id == msg.id and payload.emoji.name == "check" and payload.user_id == ctx.author.id
 
         try:
-            msg = await self.bot.wait_for('message', check=lambda message: message.author == ctx.author and message.channel == ctx.channel, timeout=60.0)
-
+            payload = await self.bot.wait_for("raw_reaction_add", check=check, timeout=30)
         except asyncio.TimeoutError:
-            await ctx.send("<:allert:819708576796114994> Times Up!")
-            return
+            return await msg.delete()
 
-        if msg.content == msg1:
-            try:
-                await ctx.send("<:vea:819703490703523860> Alright! Feature request deleted.")
-                await ctx.message.delete()
-                return
-            except Exception:
-                return
+        await msg.delete()
 
-        if msg.content == msg2:
-            await ctx.send("<:vea:819703490703523860> What are u trying to do? You can't send `ami feature` with `ami feature`, try again.")
-            await ctx.message.delete()
-            return
-            
-        if msg:
-            await ctx.send("<:check:819702267476967444> Perfect! The feature has been forwarded to #features in the support server.")
-            fmt = '%d/%m/%Y - %H:%m'
-            time = datetime.datetime.utcnow()
-            t3 = (time.strftime(fmt))
-            em = discord.Embed(title="New feature requested!", color = 0xffcff1)
-            em.add_field(name="Requested by", value =f"{ctx.author.name}#{ctx.author.discriminator}")
-            em.add_field(name="Date", value = f"{t3}")
-            em.add_field(name="Feature Message", value =f"{msg.content}", inline = False)
-            em.set_footer(text=f"ID : {ctx.author.id}")
-            react = await channel.send(embed=em)
-            await react.add_reaction("<a:4214_yes_tick:819689871156445245>")
-            await react.add_reaction("<a:no:819689870284816415>")
+        final = sorted(self.bot.guilds, key=lambda m: m.member_count, reverse=True)
+        index = 0
+        for guild in final:
+            if "VANITY_URL" in guild.features:
+                if guild.me.guild_permissions.manage_guild:
+                    vanity = (await guild.vanity_invite()) and "Can't get the vanity due issues."
+                else:
+                    vanity = "No perms to get the Vanity URL"
+            else:
+                vanity = "No Vanity URL"
 
-    @commands.command(help="See info about me and my dev")
+            desc = "This guild has no description set."
+            if guild.description:
+                desc = guild.description
+
+            em = discord.Embed(title=f"{guild.name} (`{guild.id}`)", description=f"The guild owner is `{guild.owner}`\n{desc}\n\n<a:Casual_Crowe:853894751140446248> Members : {guild.member_count}\n<a:Casual_Crowe:853894751140446248> Emojis : {len(guild.emojis)}\n<a:Casual_Crowe:853894751140446248> Boosts & Tier : {guild.premium_subscription_count} / {guild.premium_tier}\n<a:Casual_Crowe:853894751140446248> Vanity URL : {vanity}\n<a:Casual_Crowe:853894751140446248> Text & Voice : <:text:843198832464625714> {len(guild.text_channels)} | <:voice:585783907673440266> {len(guild.voice_channels)}", color = 0xffcff1)
+            em.set_thumbnail(url=guild.icon_url)
+            if guild.banner_url:
+                em.set_image(url=guild.banner_url)
+
+            await ctx.send(embed=em)
+            index += 1
+            if index >= 10:
+                break
+
+    @commands.command(aliases=["sys"])
+    @is_team()
+    async def system(self, ctx):
+        """Get system informations"""
+        uname = platform.uname()
+        system_name = uname.system
+        node_name = uname.node
+        machine = uname.machine
+        processor = uname.processor
+
+
+        """Get the boot system time and convert
+        it into a readable format."""
+        boot_time_timestamp = psutil.boot_time()
+        bt = datetime.datetime.fromtimestamp(boot_time_timestamp)
+        conv_boot = f"{bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}"
+
+        """Get some CPU informations here"""
+        # number of cores
+        physical_cores = psutil.cpu_count(logical=False)
+        total_cores = psutil.cpu_count(logical=True)
+
+        # CPU frequencies
+        cpufreq = psutil.cpu_freq()
+        current_cpu_freq = f"{cpufreq.current:.2f}Mhz"
+
+        # CPU usage
+        cpu_usage = f"{psutil.cpu_percent()}%" 
+
+        """Get some memory informations here"""
+        # get the memory details
+        svmem = psutil.virtual_memory()
+        total_mem = f"{get_size(svmem.total)}"
+        available_mem = f"{get_size(svmem.available)}"
+        used_mem = f"{get_size(svmem.used)}"
+        mem_perc = f"{svmem.percent}%"
+
+        # get the swap memory details (if exists)
+        swap = psutil.swap_memory()
+        total_swap = f"{get_size(swap.total)}"
+        free_swap = f"{get_size(swap.free)}"
+        used_swap = f"{get_size(swap.used)}"
+        perc_swap = f"{swap.percent}%"
+
+        """Get some disk io informations here"""
+        # get IO statistics since boot
+        disk_io = psutil.disk_io_counters()
+        disk_io_bytes_read = f"{get_size(disk_io.read_bytes)}"
+        disk_io_bytes_send = f"{get_size(disk_io.write_bytes)}"
+
+        """Get some network informations here"""
+        net_io = psutil.net_io_counters()
+        net_io_bytes_sent = f"{get_size(net_io.bytes_sent)}"
+        net_io_bytes_recv = f"{get_size(net_io.bytes_recv)}"
+
+        line_counter = line_count()
+
+        em = discord.Embed(color = 0xffcff1)
+        em.add_field(name="System", value=f"```prolog\nName : {system_name}\nNode : {node_name}\nMachine : {machine}\nProcessor : {processor}\n```")
+        em.add_field(name="CPU", value=f"```prolog\nPhysical Cores : {physical_cores}\nTotal Cores : {total_cores}\nFreq : {current_cpu_freq}\nUsage : {cpu_usage}\n```")
+        em.add_field(name="Memory", value=f"```prolog\nTotal : {total_mem}\nAvailable : {available_mem}\nUsed : {used_mem}\nPercentage : {mem_perc}\n```")
+        em.add_field(name="Swap", value=f"```prolog\nTotal : {total_swap}\nFree : {free_swap}\nUsed : {used_swap}\nPercentage : {perc_swap}\n```")
+        em.add_field(name="Network (disk io & net io)", value=f"```prolog\nRead : {disk_io_bytes_read}\nSent : {disk_io_bytes_send}\nSent : {net_io_bytes_sent}\nRecived : {net_io_bytes_recv}\n```")
+        em.add_field(name="Code", value=f"```prolog\n{line_counter}\n```")
+
+
+        em.set_footer(text=f"System Boot : {conv_boot}")
+        await ctx.send(embed=em)
+
+    @commands.command(help="See information about me, who have designed me, and other stuff like guilds & members, vps usage & commands.", aliases=["about", "stats"])
     async def info(self, ctx):
         cpu_usage = psutil.cpu_percent()
         m = psutil.Process().memory_full_info()
         ram_usage=humanize.naturalsize(m.rss)
-        cmds = len(list(self.bot.walk_commands()))
+        cmds = len(self.bot.commands)
         vc = sum(len(guild.voice_channels) for guild in self.bot.guilds)
         txt = sum(len(guild.text_channels) for guild in self.bot.guilds)
-        supp = "https://discord.gg/ZcErEwmVYu"
 
         count = 0
         for cmd in self.bot.commands:
@@ -105,17 +209,22 @@ class Utility(commands.Cog):
         time_2 = time.perf_counter()
         ping = round((time_2-time_1)*1000)
 
-        em = discord.Embed(color = 0xffcff1)
+        alvin = "[`Cryptex#0117`](https://discordapp.com/users/590323594744168494)"
+        jadon = "[`Jadon#2494`](https://discordapp.com/users/711057339360477184)"
+        moanie = "[`ムーニー#6598`](https://discordapp.com/users/691406006277898302)"
+        ali = "[`Ali™#9171`](https://discordapp.com/users/410452466631442443)"
+        crunchy = "[`CrunchyAnime#3992`](https://discordapp.com/users/343019667511574528)"
+
+        em = discord.Embed(description="[**Support Server**](https://discord.gg/ZcErEwmVYu)\nThis bot has been designed and developed by [`Daishiky#0828`](http://discordapp.com/users/144126010642792449)\n"
+                           f"Team : {alvin}, {jadon}, {moanie}, {ali}, {crunchy}",color = 0xffcff1)
         em.add_field(name="<:settings:585767366743293952> Channels", value=f"<:voice:585783907673440266> Voice: `{vc}`\n<:text:843198832464625714> Text: `{txt}`")
         em.add_field(name="<:settings:585767366743293952> Stats", value=f"<:upward_stonks:739614245997641740> Guilds: `{len(self.bot.guilds)}`\n<:upward_stonks:739614245997641740> Users: `{len(self.bot.users)}`",inline=False)
         em.add_field(name="<:settings:585767366743293952> Latency", value=f"<:greenTick:596576670815879169> Websocket: `{round(self.bot.latency*1000, 2)}ms`\n<:greenTick:596576670815879169> Typing: `{ping}ms`", inline=False)
         em.add_field(name="<:settings:585767366743293952> VPS (Usage)", value=f"<:rich_presence:658538493521166336> RAM: `{ram_usage}`\n<:rich_presence:658538493521166336> CPU: `{cpu_usage}%`")
         em.add_field(name="<:settings:585767366743293952> Commands", value=f"<:upward_stonks:739614245997641740> Total Commands: `{cmds}`\n<:upward_stonks:739614245997641740> Runnable by you: `{count}`\n<:upward_stonks:739614245997641740> Invoked: `{self.bot.command_counter}`",inline=False)
         em.set_thumbnail(url=self.bot.user.avatar_url)
-        em.set_footer(text=f"Support: {supp}", icon_url=ctx.author.avatar_url)
         em.timestamp = datetime.datetime.utcnow()
         await ctx.send(embed=em)
-        return
 
     @commands.command(help="See info about a member", aliases=["ui"])
     async def userinfo(self, ctx, *, user: discord.Member = None):
@@ -124,22 +233,70 @@ class Utility(commands.Cog):
         
         date_format = "%a, %d %b %Y %I:%M %p"
 
-
-        members = sorted(ctx.guild.members, key=lambda m: m.joined_at)
         if len(user.roles) > 1:
             role_string = ' '.join([r.mention for r in user.roles][1:])
         else:
             role_string = "No roles."
+
+
+        flags_valid = {
+            "bug_hunter": "<:bughunter:585765206769139723>",
+            "bug_hunter_level_2": "<:DiscordGoldBug:813372529879679046>",
+            "early_supporter": "<:supporter:585763690868113455>",
+            "early_verified_bot_developer": "<:verifiedbotdev:853277205264859156>",
+            "hypesquad": "<:hypesquad_events:585765895939424258>",
+            "hypesquad_balance": "<:balance:585763004574859273>",
+            "hypesquad_bravery": "<:bravery:585763004218343426>",
+            "hypesquad_brilliance": "<:brilliance:585763004495298575>",
+            "partner": "<:partner_old:748662699772346450>",
+            "staff": "<:Discord_Staff:828196998951337984>",
+            "verified_bot": "<:VerifiedBOT:730717381445419028>",
+            "verified_bot_developer": "<:verifiedbotdev:853277205264859156>"
+            }
+
+        flags_user = [badge for badge, value in user.public_flags if value]
+
+        flags = []
+
+        if flags_user:
+            for i in flags_user:
+                if i in flags_valid:
+                    flags.append(f"{flags_valid[i]}")
+        else:
+            flags.append("No Badges")
+
         perm_string = ', '.join([str(p[0]).replace("_", " ").title() for p in user.guild_permissions if p[1]])
-        embed = discord.Embed(color=0xdfa3ff, description=f"<:gsarrow:819706480714055681> **ID** » `{user.id}`\n<:gsarrow:819706480714055681> **Joined** » `{user.joined_at.strftime(date_format)}`\n<:gsarrow:819706480714055681> **Registered** » `{user.created_at.strftime(date_format)}`\n<:gsarrow:819706480714055681> **Roles [{(len(user.roles)-1)}]** » {role_string}")
-        embed.add_field(name="Guild permissions", value=f"```css\n{perm_string}\n```", inline=False)
+        
+            
+        boosting = "Not Boosting"
+        if user.premium_since:
+            boosting = f"Boosting The Server ({humanize.naturaltime(user.premium_since)})"
+            flags.append("<:booster3:585764446220189716>")
+            flags.append("<:nitro:314068430611415041>")
+
+        nickname = "No Nickname"
+        if user.nick:
+            nickname = user.nick
+
+        joined = sorted(ctx.guild.members, key=lambda m: m.joined_at, reverse=True).index(ctx.me)
+
+        embed = discord.Embed(color=0xdfa3ff, description=f"<:gsarrow:819706480714055681> **ID** » {user.id}\n"
+                                                        f"<:gsarrow:819706480714055681> **Joined** » {user.joined_at.strftime(date_format)} ({humanize.naturaltime(user.joined_at)})\n"
+                                                        f"<:gsarrow:819706480714055681> **Join Position** » {joined} (In {ctx.guild.member_count} members)\n"
+                                                        f"<:gsarrow:819706480714055681> **Nickname** » {nickname}\n"
+                                                        f"<:gsarrow:819706480714055681> **Registered** » {user.created_at.strftime(date_format)} ({humanize.naturaltime(user.created_at)})\n"
+                                                        f"<:gsarrow:819706480714055681> **Boosting** » {boosting}\n\n"
+                                                        f"<:gsarrow:819706480714055681> **Badges** » {' '.join(flags)}\n"
+                                                        f"<:gsarrow:819706480714055681> **Roles [{(len(user.roles)-1)}]** » {role_string}\n"
+                                                        f"<:gsarrow:819706480714055681> **Top-Role** » {f'<@&{user.top_role.id}>' if user.roles[1:] else 'No Roles'}\n\n"
+                                                        f"<:gsarrow:819706480714055681> **Guild Permissions** » {perm_string}")
+
         embed.set_author(name=str(user), icon_url=user.avatar_url)
-        embed.set_thumbnail(url=user.avatar_url)
         embed.timestamp = datetime.datetime.utcnow()
         return await ctx.send(embed=embed)
 
-    @commands.command(help="Search something on google")
-    async def ggl(self, ctx, *, query):
+    @commands.command(help="Search something on google", aliases=["ggl"])
+    async def google(self, ctx, *, query):
         try:
             lat = (round(self.bot.latency*1000, 2))
             client = async_cse.Search("AIzaSyChzFV6odUmQh7nPp34laGuniYwdlJjSV4") # create the Search client (uses Google by default!)
@@ -170,40 +327,8 @@ class Utility(commands.Cog):
 
     @commands.command(help="Send a support request to the ami mods")
     async def support(self, ctx):
-        user_id = str(f"{ctx.author.id}")
-        db = await self.bot.pg_con.fetchrow("SELECT * FROM blacklist WHERE user_id = $1", user_id)
-        if db:
-            try:
-                reason = db["reason"]
-                em = discord.Embed(description=f"**{ctx.author.name}**, you're blacklisted from the bot. You can't use `ami feature & ami support`. If you think this is a mistake, feel free to reach the support team.\nReason: **`{reason}`**", color=0xffcff1)
-                em.set_footer(text="https://discord.gg/ZcErEwmVYu")
-                return await ctx.author.send(embed=em)
-            except Exception:
-                em = discord.Embed(description=f"**{ctx.author.name}**, you're blacklisted from the bot. You can't use `ami feature & ami support`. If you think this is a mistake, feel free to reach the support team.\nReason: **`{reason}`**", color=0xffcff1)
-                em.set_footer(text="https://discord.gg/ZcErEwmVYu")
-                return await ctx.send(embed=em)
+        await ctx.send("Need help? Join now in the support server.\nhttps://discord.gg/ZcErEwmVYu")
 
-        channel = self.bot.get_channel(810625559868342353)
-        msg1 = "ami nvm"
-        ms = await ctx.send("<:qmark:819702268479012974> Ok! Now send the message u want to send at the support, you have `1 minute`. Use **ami nvm** if u don't need support.")
-
-        try:
-            msg = await self.bot.wait_for('message', check=lambda message: message.author == ctx.author and message.channel == ctx.channel, timeout=60.0)
-
-        except asyncio.TimeoutError:
-            await ctx.send("<:timealert:819702268457648148> Times Up!")
-            return
-
-        if msg.content == msg1:
-            await ctx.send("<:vea:819703490703523860> Alright! Support request deleted.")
-            await ms.delete()
-            return
-            
-        if msg:
-            await ms.delete()
-            await ctx.send("<:check:819702267476967444> Perfect! The message has been forwarded to the bot support.")
-            await channel.send(f"<:info:819702267480899634> **Yo! Someone asked for support, see info next**\n<:message:819702268269297665> The message is : {msg.content}\n<:author:819702267698610176> The author is : {ctx.author.name}#{ctx.author.discriminator}\n<a:dogekek:819739315125878822> Report sended at : {datetime.datetime.utcnow()}")
-    
     @commands.command(help="Check a pic to retrive SFW & NSFW score, works with urls, @members and attachments")
     async def check(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
         if attachment := ctx.message.attachments:
@@ -271,39 +396,36 @@ class Utility(commands.Cog):
             await ctx.send(embed=em)
         else:
             if member.startswith("https"):
-                try:
-                    url = member
-                    url.replace("cdn.discordapp.com", "media.discordapp.net")
-                    async with aiohttp.ClientSession().get(url) as resp:
+                url = member
+                url.replace("cdn.discordapp.com", "media.discordapp.net")
+                async with aiohttp.ClientSession().get(url) as resp:
 
-                        if resp.status != "200":
-                            return await ctx.send(":x: Invalid Picture")
-                        if not "image" in resp.content_type:
-                            return await ctx.send(":x: Invalid Picture")
-                        if resp.headers.get("Content-Length") and int(resp.headers.get("Content-Length")) > 15000000:
-                            return await ctx.send(":x: Max size for images are **`15 MB`**")
+                    if resp.status != "200":
+                        return await ctx.send(":x: Invalid Picture")
+                    if not "image" in resp.content_type:
+                        return await ctx.send(":x: Invalid Picture")
+                    if resp.headers.get("Content-Length") and int(resp.headers.get("Content-Length")) > 15000000:
+                        return await ctx.send(":x: Max size for images are **`15 MB`**")
 
-                        bobo = await resp.read()
-                        async with aiofiles.open("check.png", "wb") as f:
-                            await f.write(bobo)
+                    bobo = await resp.read()
+                    async with aiofiles.open("check.png", "wb") as f:
+                        await f.write(bobo)
 
-                        classifier = NudeClassifier()
-                        classs = classifier.classify("check.png")
-                        dict1 = classs["check.png"]
-                        unsafe = dict1['unsafe']
-                        safe = dict1['safe']
-                        safec = ((safe)*100)/200
-                        unsafec = ((unsafe)*100)/200
-                        unsafep = round(unsafec*200,2)
-                        safep = round(safec*200,2)
-                        em = discord.Embed(color=0xffcff1)
-                        em.add_field(name="<:status_online:596576749790429200> Safe score", value = f"{safe} `({safep}%)`")
-                        em.add_field(name="<:status_dnd:596576774364856321> Unsafe score", value = f"{unsafe} `({unsafep}%)`")
-                        em.set_image(url=url)
-                        em.set_footer(text="Image NSFW Detection | Safe = SFW  | Unsafe = NSFW")
-                        await ctx.send(embed=em)
-                except Exception:
-                    return await ctx.send("Couldn't process the image, sorry. If it's actually an image, probably the link/the image isn't supported yet or the link doesn't redirect to the image.")
+                    classifier = NudeClassifier()
+                    classs = classifier.classify("check.png")
+                    dict1 = classs["check.png"]
+                    unsafe = dict1['unsafe']
+                    safe = dict1['safe']
+                    safec = ((safe)*100)/200
+                    unsafec = ((unsafe)*100)/200
+                    unsafep = round(unsafec*200,2)
+                    safep = round(safec*200,2)
+                    em = discord.Embed(color=0xffcff1)
+                    em.add_field(name="<:status_online:596576749790429200> Safe score", value = f"{safe} `({safep}%)`")
+                    em.add_field(name="<:status_dnd:596576774364856321> Unsafe score", value = f"{unsafe} `({unsafep}%)`")
+                    em.set_image(url=url)
+                    em.set_footer(text="Image NSFW Detection | Safe = SFW  | Unsafe = NSFW")
+                    await ctx.send(embed=em)
             else:
                 return await ctx.send(":x: Image not found / unsupported provided image.")
 
@@ -315,7 +437,7 @@ class Utility(commands.Cog):
         self.bot.commandsusages[ctx.command.qualified_name] += 1
 
     @commands.command(help="See the commands usage")
-    @commands.is_owner()
+    @is_team()
     async def cmdus(self, ctx):
         lists = []
         lists.append(f"Total usages » {self.bot.command_counter}")
