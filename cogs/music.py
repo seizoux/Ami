@@ -11,6 +11,11 @@ import typing
 import wavelink
 from discord.ext import commands, menus
 import humanize
+import aiohttp
+import sr_api
+import aiofiles
+
+srclient = sr_api.Client() 
 
 # URL matching REGEX...
 URL_REG = re.compile(r'https?://(?:www\.)?.+')
@@ -235,21 +240,17 @@ class InteractiveController(menus.Menu):
 class PaginatorSource(menus.ListPageSource):
     """Player queue paginator class."""
 
-    def __init__(self, entries, *, per_page=10):
-        entries = [f'**`{index}`** | **{title}**' for index, title in enumerate(entries, 1)]
+    def __init__(self, entries, *, per_page=5):
+        entries = [f'{index} | {title}' for index, title in enumerate(entries, 1)]
         super().__init__(entries, per_page=per_page)
 
     async def format_page(self, menu: menus.Menu, page):
+        player: Player = menu.bot.wavelink.get_player(guild_id=menu.ctx.guild.id, cls=Player, context=menu.ctx)
         embed = discord.Embed(color = 0xffcff1)
-        embed.set_author(name="Player Queue", icon_url="https://cdn.discordapp.com/emojis/846314042120470528.gif?v=1")
+        embed.set_author(name=f"{menu.ctx.guild.name} queue ({player.queue.qsize()} songs)", icon_url="https://cdn.discordapp.com/emojis/846314042120470528.gif?v=1")
         embed.description = '\n'.join(page)
 
         return embed
-
-    def is_paginating(self):
-        # We always want to embed even on 1 page of results...
-        return True
-
 
 class Music(commands.Cog, wavelink.WavelinkMixin):
     """Music Cog."""
@@ -257,6 +258,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.category = "Music"
+        self.session = aiohttp.ClientSession()
 
         if not hasattr(bot, 'wavelink'):
             bot.wavelink = wavelink.Client(bot=bot)
@@ -297,9 +299,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if "YouTube (429)" in event.error:
             player = event.player
             if URL_REG.fullmatch(player.query):
-                new_track = await player.bot.wavelink.get_tracks(f"scsearch:{player.track.title}")
+                new_track = await self.bot.wavelink.get_tracks(f"scsearch:{player.track.title}")
             else:
-                new_track = await player.bot.wavelink.get_tracks(f"scsearch:{player.query}")
+                new_track = await self.bot.wavelink.get_tracks(f"scsearch:{player.query}")
             if new_track:
                 track = Track(
                     new_track[0].id,
@@ -310,9 +312,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 await player.do_next()
                 await player.context.send(embed=self.build_embed)
             else:
-                await player.context.send("Error while queuing your query.")
+                await player.context.send("<:4318crossmark:848857812565229601> No results was found for your query, try again.")
         else:
-            await event.player.context.send(f"`{event.error}`")
+            await event.player.context.send(f"<:4318crossmark:848857812565229601> {event.error}")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -340,28 +342,23 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                     continue
                 else:
                     player.dj = m
+                    await player.context.send(f"<:4430checkmark:848857812632076314> {m.mention} is the new **DJ** because the last one has __left__ the voice channel.", allowed_mentions=discord.AllowedMentions.none())
                     return
 
         elif after.channel == channel and player.dj not in channel.members:
             player.dj = member
+            await player.context.send(f"<:4430checkmark:848857812632076314> {member.mention} is the new **DJ** because the last one has __left__ the voice channel.", allowed_mentions=discord.AllowedMentions.none())
 
     async def cog_command_error(self, ctx: commands.Context, error: Exception):
         """Cog wide error handler."""
         if isinstance(error, IncorrectChannelError):
-            return
+            raise IncorrectChannelError
 
         if isinstance(error, NoChannelProvided):
-            return await ctx.send('<:4318crossmark:848857812565229601> You are not in a voice channel')
+            await ctx.send('<:4318crossmark:848857812565229601> You are not in a voice channel')
+            raise NoChannelProvided
 
     async def cog_check(self, ctx: commands.Context):
-        """Cog wide check, which disallows commands in DMs."""
-        if not ctx.guild:
-            await ctx.send('<:4318crossmark:848857812565229601> Music commands are not available in Private Messages.')
-            return False
-
-        return True
-
-    async def cog_before_invoke(self, ctx: commands.Context):
         """Coroutine called before command invocation.
         We mainly just want to check whether the user is in the players controller channel.
         """
@@ -371,25 +368,27 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             if player.context.channel != ctx.channel:
                 em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention}, i am already in {player.context.channel.mention}", color = 0xffcff1)
                 await ctx.send(embed=em)
-                raise IncorrectChannelError
+                return False
 
         if ctx.command.name == 'join' and not player.context:
-            return
+            return True
         elif self.is_privileged(ctx):
-            return
+            return True
 
         if not player.channel_id:
-            return
+            return False
 
         channel = self.bot.get_channel(int(player.channel_id))
         if not channel:
-            return
+            return False
 
         if player.is_connected:
             if ctx.author not in channel.members:
                 em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention} join in {channel.mention} to use __music__ commands.", color = 0xffcff1)
                 await ctx.send(embed=em)
-                raise IncorrectChannelError
+                return False
+
+        return True
 
     def required(self, ctx: commands.Context):
         """Method which returns required votes based on amount of members in a channel."""
@@ -407,7 +406,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         """Check whether the user is an Admin or DJ."""
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
-        return player.dj == ctx.author or ctx.author.guild_permissions.kick_members
+        team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302]
+
+        return ctx.author.id in team or player.dj == ctx.author or ctx.author.guild_permissions.kick_members
 
     @commands.command(help="Make me leave the channel where i am.", aliases=['dc', 'disconnect', 'quit'])
     async def leave(self, ctx: commands.Context):
@@ -458,6 +459,36 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         await self.bot.ws.voice_state(ctx.guild.id, channel.id, self_deaf=True)
 
+    @commands.command(help="Retrive the lyrics for the current playing song if there's one, else specify the `song` argument with a song name to retrive the lyrics for that song.")
+    async def lyrics(self, ctx: commands.Context, *, song=None):
+        player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
+
+        song_name = song
+
+        if not song:
+            if not player.current:
+                return await ctx.send("<:4318crossmark:848857812565229601> Nothing played right now to search lyrics for.")
+            song_name = player.current.title
+
+        try:
+            lyrics = await srclient.get_lyrics(f"{song_name}", False)
+        except Exception:
+            c = song
+            if player.current:
+                c = player.current.title
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while searching lyrics for **{c}**")
+
+        try:
+            em = discord.Embed(title=f"{lyrics.title}", description=f"{lyrics.lyrics}", color = 0xffcff1)
+            em.set_thumbnail(url=lyrics.thumbnail)
+            await ctx.send(embed=em)
+        except Exception:
+            async with aiofiles.open('lyrics.txt', 'w', encoding='utf-8') as f:
+                await f.write(f'{lyrics.lyrics}')
+
+            await ctx.send("<:4318crossmark:848857812565229601> Lyrics too long to embed, here's a `.txt` file of it.")
+            return await ctx.send(file=discord.File("lyrics.txt"))
+
     @commands.command(help="Make me play music in voice channels, this require you to be in a valid voice channel.\nThis supports `youtube` & `soundcloud`.\nUse `ami play songname --sc` if the standard music request doesn't play.", aliases=["p", "pump"])
     async def play(self, ctx: commands.Context, *, query: str):
         """Play or queue a song with the given query."""
@@ -489,11 +520,11 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 await player.queue.put(track)
             em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Added **{len(tracks.tracks)}** songs to the queue from **{tracks.data['playlistInfo']['name']}** playlist.", color = 0xffcff1)
             await ctx.send(embed=em)
-
-        track = Track(tracks[0].id, tracks[0].info, requester=ctx.author)
-        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Queued [{track.title}]({track.uri}) | {track.requester.mention}", color = 0xffcff1)
-        await ctx.send(embed=em)
-        await player.queue.put(track)
+        else:
+            track = Track(tracks[0].id, tracks[0].info, requester=ctx.author)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Queued [{track.title}]({track.uri}) | {track.requester.mention}", color = 0xffcff1)
+            await ctx.send(embed=em)
+            await player.queue.put(track)
 
         if not player.is_playing:
             await player.do_next()
@@ -760,7 +791,14 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if clear:
             if clear == "clear":
-                await ctx.send(f"<:4430checkmark:848857812632076314> The queue has been cleared by {ctx.author.mention}! ({player.queue.qsize()} track(s))")
+
+                if player.queue.qsize() == 0:
+                    return await ctx.send('<:4318crossmark:848857812565229601> | The queue is empty.')
+
+                if not self.is_privileged(ctx):
+                    return await ctx.send('<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** can clear the full queue.')
+
+                await ctx.send(f"<:4430checkmark:848857812632076314> | The queue has been cleared by {ctx.author.mention}! (**{player.queue.qsize()} tracks**)")
                 return player.queue._queue.clear()
 
         if not player.is_connected:
@@ -769,7 +807,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if player.queue.qsize() == 0:
             return await ctx.send('<:4318crossmark:848857812565229601> | The queue is empty.')
 
-        entries = [f"[{track.title}]({track.uri}) [{track.requester.mention}]" for track in player.queue._queue]
+        entries = [f"[{track.title}]({track.uri})\n[`{str(datetime.timedelta(milliseconds=int(track.length)))}`] -> {track.requester.mention}\n" for track in player.queue._queue]
         pages = PaginatorSource(entries=entries)
         paginator = menus.MenuPages(source=pages, timeout=None, delete_message_after=True)
 
@@ -789,7 +827,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         await ctx.send(embed=player.now_playing())
 
     @commands.command(help="Swap the song DJ to another member.\nIf member not specified, it choose a random member in the voice channel.\nIf the members in the vc are 2 or less, the dj can't be swapped without member specified.", aliases=['swap'])
-    async def swap_dj(self, ctx: commands.Context, *, member: discord.Member = None):
+    async def swapdj(self, ctx: commands.Context, *, member: discord.Member = None):
         """Swap the current DJ to another member in the voice channel."""
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
