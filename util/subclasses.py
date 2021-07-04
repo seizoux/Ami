@@ -3,6 +3,7 @@ from discord.ext import commands
 import aiohttp, re, sys, ujson, signal, asyncio, asyncpg, os, datetime, humanize
 from io import BytesIO
 from util.context import AmiCtx
+from discord import Webhook, AsyncWebhookAdapter
 
 def _cancel_tasks(loop):
     tasks = {t for t in asyncio.all_tasks(loop=loop) if not t.done()}
@@ -51,6 +52,10 @@ class Ami(commands.Bot):
             case_insensitive=False,
             allowed_mentions=discord.AllowedMentions.none(),
         )
+
+    async def send_via_hook(self, url: str, *args, **kwargs):
+        webhook = discord.Webhook.from_url(url, adapter=AsyncWebhookAdapter(self.session))
+        await webhook.send(*args, **kwargs)
 
     async def run_constants(self):
         self.default_prefix = ["ami "]
