@@ -4,157 +4,6 @@ import random
 import asyncio
 
 
-
-class Blackjack:
-    """
-    Represents a game of Blackjack
-    """
-
-    SYMBOL_1 = "♠"
-    SYMBOL_2 = "♣"
-    SYMBOL_3 = "♥"
-    SYMBOL_4 = "♦"
-
-    ACTIONS = ["`hit` : Pick a new card", "`stand` : Stop, don't pick anything else", "`double` : Double your bet and pick a last card", "`surrender` : Give up, clear your hand and get back 1/2 of your bet."]
-    ACTIONS_NAMES = ["hit", "stand", "double", "surrender"]
-
-    def __init__(self, ctx: commands.Context, opponent: discord.Member) -> None:
-        self.ctx = ctx
-        self.player = ctx.author
-        self.opponent = opponent
-
-        self.is_player_turn = bool(random.randint(0, 1))
-
-        self.points_author = 0
-        self.points_opponent = 0
-
-        self.is_standing_author = False
-        self.is_standing_opponent = False
-
-        self.has_doubled_author = False
-        self.has_doubled_opponent = False
-
-        self.bet = 0
-
-        self.max_rounds = 4
-
-        self.cards = None
-
-        self.message = None
-
-    async def last_mexs(self):
-        """Method which checks if our message is in last 5 messages."""
-        return await self.ctx.channel.history(limit=5).get(id=self.message.id)
-
-    async def update_and_send(self, no_edit:bool=False, same_turn:bool=False): 
-        turn = self.player if self.is_player_turn else self.opponent
-        if same_turn:
-            turn = self.player if self.is_player_turn else self.opponent
-
-        message = f"{self.opponent.mention} : `{self.points_opponent}`\n{self.player.mention} : `{self.points_author}`"
-
-        if no_edit:
-            return await self.ctx.send(message)
-
-        choiches = '\n'.join(self.ACTIONS)
-        message = f"🃏 {turn.mention}, is your turn.\n\n**{self.opponent.name}** : `{self.points_opponent}`\n**{self.player.name}** : `{self.points_author}`\n\nChoose what to do:\n{choiches}"
-
-        if not self.message or not await self.last_mexs():
-            self.max_rounds = self.max_rounds + 1
-            self.message = res = await self.ctx.send(message)
-            return res
-
-        if self.is_standing_author or self.is_standing_opponent:
-            if self.max_rounds != 4 or self.max_rounds != 3:
-                self.max_rounds = 3
-    
-        if self.has_doubled_author or self.has_doubled_opponent:
-            if self.max_rounds != 4 or self.max_rounds != 3:
-                self.max_rounds = 3
-
-        return await self.message.edit(content=message)
-
-    async def do_action(self, action:str):
-        if action.lower() not in self.ACTIONS_NAMES:
-            await self.ctx.send(f"`{action}` is not a valid action.")
-            return await self.update_and_send(False, True)
-
-        self.max_rounds = self.max_rounds + 1
-
-        if action.lower() == "hit":
-            turn = self.player if self.is_player_turn else self.opponent
-
-            if turn.id == self.player.id:
-                self.points_author = self.points_author + random.randint(1, 10)
-
-            elif turn.id == self.opponent.id:
-                self.points_opponent = self.points_opponent + random.randint(1, 10)
-
-            await self.update_and_send()
-
-        elif action.lower() == "stand":
-            turn = self.player if self.is_player_turn else self.opponent
-
-            if turn.id == self.player.id:
-                self.is_standing_author = True
-
-            elif turn.id == self.opponent.id:
-                self.is_standing_opponent = True
-
-            await self.update_and_send()
-
-        elif action.lower() == "double":
-            self.bet = self.bet + self.bet/2
-
-            turn = self.player if self.is_player_turn else self.opponent
-
-            if turn.id == self.player.id:
-                self.has_doubled_author = True
-
-            elif turn.id == self.opponent.id:
-                self.has_doubled_opponent = True
-
-            await self.update_and_send()
-
-        elif action.lower() == "surrender":
-            await self.surrended_player()
-
-        self.is_player_turn = not self.is_player_turn
-
-        await self.update_and_send()
-
-    async def surrended_player(self):
-        turn = self.player if self.is_player_turn else self.opponent
-        return await self.ctx.send(f"🎲 {turn.mention} has gave up, giving back 1/2 of the game bet.")
-
-
-    async def end_game(self, the_winner : discord.Member):
-        return await self.ctx.send(f"🎲 {the_winner.mention} has won, they got <:cupcake:845632403405012992> **{self.bet}**")
-
-
-    @property
-    def is_right_turn(self):
-        return self.player if self.is_player_turn else self.opponent
-
-    @property
-    def check_winner(self):
-
-        if self.max_rounds == 4:
-            if self.points_author >= 21:
-                return 0 #over author
-
-            if self.points_opponent >= 21:
-                return 1 #over oppoent 
-                    
-            if self.points_opponent == self.points_author:
-                return 2 #tie
-
-            if self.points_author > self.points_opponent or self.points_opponent > self.points_author:
-                return 3 #winner 
-
-        return -1 #nothing / tie end rounds
-
-
 class TicTacToe:
     """
     Represents a game of Tic-tac-toe
@@ -274,104 +123,73 @@ class Games(commands.Cog):
     async def on_ready(self):
         print("Games Loaded")
 
-    @commands.command()
-    async def blackjack(self, ctx, opponent: discord.Member, bet: int):
-        db2 = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", str(opponent.id))
-        if not db2:
-            return await ctx.send(
-                f"<:4318crossmark:848857812565229601> {ctx.author.mention} looks like **{opponent.name}** doesn't have a balance, so they can't play.")
-
-        db = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", str(ctx.author.id))
+    @commands.command(help="Play a rock-paper-scissors game against me and try to win!\nThis game requires you have a cuppy balance, you need to bet an amount of cupcakes to play >.>\nYou can bet maximum <:cupcake:845632403405012992> **100.000**, over this amount the game won't start.", aliases=["rps"])
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def rockpaperscissors(self, ctx, bet:int):
+        db = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", str(ctx.author.id))
         if not db:
             return await ctx.send(
                 f"<:4318crossmark:848857812565229601> {ctx.author.mention} you don't have a balance for cuppy, open one with `ami bal`.")
 
         balance = db[0]["wallet"]
-        balance2 = db2[0]["wallet"]
         if bet > balance:
             return await ctx.send(
                 f"<:4318crossmark:848857812565229601> {ctx.author.mention} you have <:cupcake:845632403405012992> **{balance}** in your wallet, you can't bet <:cupcake:845632403405012992> **{bet}**")
 
-        if bet > balance2:
-            return await ctx.send(
-                f"<:4318crossmark:848857812565229601> **{opponent.name}** does not have <:cupcake:845632403405012992> **{bet}** in their wallet, they can't bet <:cupcake:845632403405012992> **{bet}**")
+        if bet > 100000:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention}, this game has a maximum bet of <:cupcake:845632403405012992> **100.000**, you can't bet <:cupcake:845632403405012992> **{bet}**")
 
-        if bet <= 0:
-            return await ctx.send("<:4318crossmark:848857812565229601> You can't bet negative amounts.")
+        msg = await ctx.send(embed=discord.Embed(
+                            title = "RPS Game Started!",
+                            description=f"{ctx.author.mention} there you go, choose a move using reactions!\n\n"
+                            "👊 : Rock\n✌ : Scissors\n🖐 : Paper",
+                            color = 0xffcff1))
 
-        message = await ctx.send(
-            f"{opponent.mention}, you got an invite to play a `Blackjack` game from **{ctx.author.name}** with <:cupcake:845632403405012992> "
-            f"**{bet*2}** for the __winner__: click <:4318crossmark:848857812565229601> to `decline` or <:4430checkmark:848857812632076314> to `accept` in **60** seconds.")
-        await message.add_reaction("<:4318crossmark:848857812565229601>")
-        await message.add_reaction("<:4430checkmark:848857812632076314>")
+        await msg.add_reaction("👊")
+        await msg.add_reaction("✌")
+        await msg.add_reaction("🖐")
 
-        emojis = ["4318crossmark", "4430checkmark"]
+        emojis = ["🖐", "✌", "👊"]
 
         def check(payload):
-            return payload.message_id == message.id and payload.emoji.name in emojis and payload.user_id == opponent.id
+            return payload.message_id == msg.id and payload.emoji.name in emojis and payload.user_id == ctx.author.id
 
         try:
             payload = await self.bot.wait_for("raw_reaction_add", check=check, timeout=60.0)
         except asyncio.TimeoutError:
-            return await ctx.send(
-                f"<:4318crossmark:848857812565229601> {ctx.author.mention}, looks like **{opponent.name}** is away or it didn't see the invite.")
+            return await msg.delete()
 
-        if payload.emoji.name == "4318crossmark":
-            await message.delete()
-            return await ctx.send(f"<:4318crossmark:848857812565229601> **{opponent.name}** has refused to play.")
+        if payload.emoji.name in emojis:
+            move_author = payload.emoji.name
+        bot_move = random.choice(["🖐", "✌", "👊"])
 
-        await message.delete()
-        mcd = await ctx.send("<:4430checkmark:848857812632076314> Picking who goes first...")
-        await asyncio.sleep(3)
-        await mcd.delete()
+        winner = None
+        if bot_move == move_author or move_author == bot_move:
+            winner = f"<:4318crossmark:848857812565229601> That's a draw, better luck next time dude.\n:one: **{ctx.author.name}** : {move_author}\n:two: **{ctx.me.name}** : {bot_move}"
 
-        game = Blackjack(ctx, opponent)
-        game.bet = bet*2
-        msg2 = await game.update_and_send()        
+        elif bot_move == "🖐" and move_author == "👊" or bot_move == "✌" and move_author == "🖐" or bot_move == "👊" and move_author == "✌":
+            winner = f"<:4318crossmark:848857812565229601> {ctx.me.mention} has won dude, you lost the game and lost <:cupcake:845632403405012992> **{bet}**!\n:one: **{ctx.author.name}** : {move_author}\n:two: **{ctx.me.name}** : {bot_move}"
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", db[0]["wallet"] - bet, str(ctx.author.id))
 
-        while True:
-            try:
-                msg = await self.bot.wait_for('message', check=lambda
-                    message: message.author.id == game.is_right_turn.id and message.channel == ctx.channel, timeout=180.0)
-            except asyncio.TimeoutError:
-                return await ctx.send(f"<:4318crossmark:848857812565229601> {game.is_right_turn.name} took too long to choose, stopping the game.")
+        elif move_author == "🖐" and bot_move == "👊" or move_author == "✌" and bot_move == "🖐" or move_author == "👊" and bot_move == "✌":
+            winner = f"<:4430checkmark:848857812632076314> {ctx.author.mention} you won dude! You got <:cupcake:845632403405012992> **{bet}**!\n:one: **{ctx.author.name}** : {move_author}\n:two: **{ctx.me.name}** : {bot_move}"
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", db[0]["wallet"] + bet, str(ctx.author.id))
 
-            await game.do_action(msg.content)
+        await msg.delete()
 
-            turn = game.player if not game.is_player_turn else game.opponent
-            if turn.id == ctx.author.id:
-                final_points = game.points_author
-            else:
-                final_points = game.points_opponent
+        msg2 = await ctx.send("<a:eyeshaking:819703490342289474> Picking the winner...")
+        await asyncio.sleep(4)
 
-            winner = game.check_winner
-            if winner != -1:
-                if winner == 0 or winner == 1:
-                    db = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", str(turn.id))
-                    await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", db[0]["wallet"] - game.bet/2, str(turn.id))
-                    await ctx.send(f"🥈 {turn.name} has `{final_points}`, he lost <:cupcake:845632403405012992> **{game.bet/2}**")
-                    await game.update_and_send(True)
-                    break
-
-                elif winner == 3:
-                    turn_s = game.player if not game.is_player_turn else game.opponent
-                    await game.end_game(turn_s)
-                    break
-
-                elif game.max_rounds == 4:
-                    if winner == 2:
-                        await ctx.send(f"🔮 **{game.player.name}** & **{game.opponent.name}** game finished as a tie.")
-                        await game.update_and_send(True)
-                        break
+        await msg2.edit(content=winner)
 
     @commands.command(aliases=["ttt"], help="Play a fun tictactoe game with bet your <:cupcake:845632403405012992>!\nThe winner gets as reward the **bet placed * 2** (one from his balance, and one from the opponent balance), example: if you bet **35000**, who wins get **70000** (__35k__ are from his balance and __35k__ from opponent balance)\nIf the game ends as draw, no <:cupcake:845632403405012992> will be taken from eithers balances.")
     async def tictactoe(self, ctx, opponent: discord.Member, bet: int):
-        db2 = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", str(opponent.id))
+        db2 = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", str(opponent.id))
         if not db2:
             return await ctx.send(
                 f"<:4318crossmark:848857812565229601> {ctx.author.mention} looks like **{opponent.name}** doesn't have a balance, so they can't play.")
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", str(ctx.author.id))
+        db = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", str(ctx.author.id))
         if not db:
             return await ctx.send(
                 f"<:4318crossmark:848857812565229601> {ctx.author.mention} you don't have a balance for cuppy, open one with `ami bal`.")
@@ -437,18 +255,18 @@ class Games(commands.Cog):
                 if winner != 0:
                     await game.message.delete()
                     if winner == 1:
-                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
                                                       db[0]["wallet"] + bet*2, str(ctx.author.id))
-                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
                                                       db[0]["wallet"] - bet, str(opponent.id))
                         await ctx.send(
                             f"👑 {ctx.author.mention} has won the game, they got <:cupcake:845632403405012992> **{bet*2}**!")
                         await game.render_and_send(True)
                         break
                     elif winner == 2:
-                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
                                                       db[0]["wallet"] - bet, str(ctx.author.id))
-                        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
+                        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2",
                                                       db[0]["wallet"] + bet*2, str(opponent.id))
                         await ctx.send(
                             f"👑 {opponent.mention} has won the game, they got <:cupcake:845632403405012992> **{bet*2}**!\n")
