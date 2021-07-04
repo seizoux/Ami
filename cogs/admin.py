@@ -1,4 +1,4 @@
-import discord
+import discord, os
 from discord.errors import NotFound
 from discord.ext import commands
 from urllib.request import urlretrieve
@@ -6,17 +6,72 @@ import time
 from jishaku.paginators import WrappedPaginator, PaginatorInterface
 import random
 from jishaku.codeblocks import codeblock_converter
-from cogsf.defs import is_team
+from util.defs import is_team
 
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Admin"
 
-
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Admin Loaded")
+
+    @commands.group(help="Developer commands group, runnable only by team.", aliases=["dev", "d"], invoke_without_command=True)
+    @is_team()
+    async def developer(self, ctx):
+        await ctx.invoke(self.bot.get_command("help"), **{"command":"developer"})
+
+    @developer.command()
+    async def load(self, ctx, file):
+        try:
+            self.bot.load_extension(f"cogs.{file}")
+            return await ctx.send(f"<:4430checkmark:848857812632076314> Loaded **{f'cogs.{file}'}**")
+        except Exception as e:
+            try:
+                self.bot.load_extension(f"util.{file}")
+                return await ctx.send(f"<:4430checkmark:848857812632076314> Loaded **{f'util.{file}'}**")
+            except Exception as e:
+                return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while loading **{file}**:\n```py\n{e}\n```")
+    
+    @developer.command()
+    async def unload(self, ctx, file):
+        try:
+            self.bot.unload_extension(f"cogs.{file}")
+            return await ctx.send(f"<:4430checkmark:848857812632076314> Unloaded **{f'cogs.{file}'}**")
+        except Exception as e:
+            try:
+                self.bot.unload_extension(f"util.{file}")
+                return await ctx.send(f"<:4430checkmark:848857812632076314> Unloaded **{f'util.{file}'}**")
+            except Exception as e:
+                return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while unloading **{file}**:\n```py\n{e}\n```")
+
+    @developer.command(name="reload all", aliases=["ra"])
+    async def reload_all(self, ctx):
+        check = []
+        errors = {}
+
+        extensions = self.bot.extensions.copy()
+        for file in extensions:
+            try:
+                self.bot.reload_extension(f"{file}")
+            except Exception as e:
+                errors[f"{file}"] = e
+            finally:
+                check.append(f"{file}")
+
+        text = "\n".join(f"<:4430checkmark:848857812632076314> {module}" if module not in errors else f"<:4318crossmark:848857812565229601> {module}\n{errors[module]}" for module in check)
+        title = "Reloaded all." if len(check)-len(list(errors)) == len(extensions) else f"{len(check)-len(list(errors))}/{len(extensions)} cogs reloaded."
+                    
+        await ctx.send(embed=discord.Embed(title=title, description=text, color = 0xffcff1))
+
+    @developer.command()
+    async def reload(self, ctx, file):
+        try:
+            self.bot.reload_extension(f"cogs.{file}" or f"util.{file}")
+            return await ctx.send(f"<:4430checkmark:848857812632076314> Reloaded **{file}**")
+        except Exception as e:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while reloading **{file}**:\n```py\n{e}\n```")
 
     @commands.command(aliases=["exe", "run", "eval"])
     @is_team()
