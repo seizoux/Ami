@@ -12,7 +12,7 @@ class RTFM(commands.Cog):
   async def rtfm_lookup(self, program = None, *, args = None):
     
     self.scraper = AsyncScraper(session = self.session)
-    rtfm_dictionary = dict(await self.bot.pg_con.fetch("SELECT * FROM rtfmstuff"))
+    rtfm_dictionary = dict(await self.bot.db.fetch("SELECT * FROM rtfmstuff"))
 
     if not args:
       return rtfm_dictionary.get(program)
