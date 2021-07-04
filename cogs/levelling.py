@@ -2,180 +2,9 @@ import discord
 from discord.ext import commands, tasks
 import json
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import random
-from numerize import numerize
-from cogsf.defs import is_team
-
-class RankCard():
-  """
-  A class function to draw our rank card
-  """
-
-  def drawProgressBar(d, x, y, w, h, progress, fg="#FFB6C1"):
-
-      w *= progress
-      d.ellipse((x+w, y, x+h+w, y+h),fill=fg)
-      d.ellipse((x, y, x+h, y+h),fill=fg)
-      d.rectangle((x+(h/2), y, x+w+(h/2), y+h),fill=fg)
-
-      return d
-
-  def levelup_func(avatar: discord.Member, level:str):
-      with Image.open("assets/levelup.png").convert("RGBA") as bg:
-          bg = bg.resize((230, 100))
-
-          with Image.open("assets/glass.png").convert("RGBA") as glass:
-              im = glass.resize((150, 90))
-              bg.paste(im, (70, 5), im)
-              im.close()
-
-          with Image.open(avatar).convert("RGBA") as pfp_1:
-              im = pfp_1.resize((85, 85))
-              bg.paste(im,(9, 8),im)
-              im.close()
-
-          font = ImageFont.truetype("fonts/antom.ttf", 28)
-          draw = ImageDraw.Draw(bg)
-          text = f"{level}"
-          text2 = "LEVEL UP!"
-          color = "white"
-          color2 = "gold"
-          shadow = "black"
-
-          x, y = 150, 70
-          x2, y2 = 105, 10
-
-          draw.text((x-1, y), text, font=font, fill=shadow, anchor="mm")
-          draw.text((x+1, y), text, font=font, fill=shadow, anchor="mm")
-          draw.text((x, y-1), text, font=font, fill=shadow, anchor="mm")
-          draw.text((x, y+1), text, font=font, fill=shadow, anchor="mm")
-
-          # thicker border
-          draw.text((x-1, y-1), text, font=font, fill=shadow, anchor="mm")
-          draw.text((x+1, y-1), text, font=font, fill=shadow, anchor="mm")
-          draw.text((x-1, y+1), text, font=font, fill=shadow, anchor="mm")
-          draw.text((x+1, y+1), text, font=font, fill=shadow, anchor="mm")
-
-          draw.text((x, y), text, font=font, fill=color, anchor="mm")
-
-          draw.text((x2-1, y2), text2, font=font, fill=shadow)
-          draw.text((x2+1, y2), text2, font=font, fill=shadow)
-          draw.text((x2, y2-1), text2, font=font, fill=shadow)
-          draw.text((x2, y2+1), text2, font=font, fill=shadow)
-
-          # thicker border
-          draw.text((x2-1, y2-1), text2, font=font, fill=shadow)
-          draw.text((x2+1, y2-1), text2, font=font, fill=shadow)
-          draw.text((x2-1, y2+1), text2, font=font, fill=shadow)
-          draw.text((x2+1, y2+1), text2, font=font, fill=shadow)
-
-          draw.text((x2, y2), text2, font=font, fill=color2)
-
-          buffer = BytesIO()
-          bg.save(buffer, format="PNG")
-          buffer.seek(0)
-
-          return buffer
-
-  def level_func(avatar: discord.Member, name:str, disc:str, level:int, xp:int, needed:int, rank:str):
-      with Image.open("assets/level_card.png").convert("RGBA") as bg:
-
-          with Image.open(avatar).convert("RGBA") as pfp_1:
-              im = pfp_1.resize((241, 242))
-              bigsize = (im.size[0] * 3, im.size[1] * 3)
-              mask = Image.new('L', bigsize, 0)
-              draw = ImageDraw.Draw(mask) 
-              draw.ellipse((0, 0) + bigsize, fill=255)
-              mask = mask.resize(im.size, Image.ANTIALIAS)
-              im.putalpha(mask)
-              bg.paste(im,(34,19),im)
-              im.close()
-        
-          exp = int(xp)
-          need = int(needed)
-          spkx, spky = 355, 216
-
-          sparky = 0.00
-          x_sparky = int(need/100)
-          f = x_sparky
-          for i in range(100):
-              if exp >= x_sparky:
-                  sparky += 0.01
-                  x_sparky += f
-
-          d = ImageDraw.Draw(bg)
-          d = RankCard.drawProgressBar(d, spkx, spky+10, 815, 30, sparky)
-
-          font = ImageFont.truetype("fonts/ArialUnicodeMS.ttf", 58)
-          font_disc = ImageFont.truetype("fonts/ArialUnicodeMS.ttf", 35)
-          font2 = ImageFont.truetype("fonts/louis.ttf", 38)
-          font3 = ImageFont.truetype("fonts/louis.ttf", 42)
-          font4 = ImageFont.truetype("fonts/louis.ttf", 70)
-          font5 = ImageFont.truetype("fonts/louis.ttf", 36)
-          font6 = ImageFont.truetype("fonts/louis.ttf", 45)
-          font7 = ImageFont.truetype("fonts/louis.ttf", 78)
-          draw = ImageDraw.Draw(bg)
-
-          # colors
-          color = "#F8F8FF"
-          color2 = "white"
-
-          #TEXTS
-          member_name = name
-          member_disc = disc
-          level_text = f"LVL."
-          level_number_text = f"{level}"
-          xp_text = f"{xp:,} XP /"
-          needed_xp_text = f"{need:,}"
-          rank_text = "RANK"
-          rank_number_text = f"#{rank}"
-
-          #coords
-          x, y = 355, 28
-          x2, y2 = 360, 130
-          x3, y3 = 365 + font.getsize(member_name)[0], 53
-          x4 = 370 + font3.getsize(xp_text)[0]
-          x5 = 1010 + font4.getsize(level_text)[0]
-          x6, y6 = 955, 50
-          x7 = 965 + font6.getsize(rank_text)[0]
-
-          # drawing member rank text
-          draw.text((x6, y6), rank_text, font=font6, fill="white")
-
-          # drawing member rank number
-          draw.text((x7, y6-30), rank_number_text, font=font7, fill="#FFB6C1")
-
-          # drawing member name
-          if len(member_name) >= 10:
-              font = ImageFont.truetype("fonts/ArialUnicodeMS.ttf", 38)
-              y += 12
-              x3, y3 = 360 + font.getsize(member_name)[0], 42
-          draw.text((x-1, y+1), member_name, font=font, fill="black")
-          draw.text((x-2, y+2), member_name, font=font, fill="black")
-          draw.text((x, y), member_name, font=font, fill=color)
-
-          # drawing member disc
-          draw.text((x3, y3), member_disc, font=font_disc, fill="#FFB6C1")
-
-          # drawing member level text
-          draw.text((x2+700, y2+40), level_text, font=font2, fill=color2)
-
-          # drawing member level number with border bold black
-          draw.text((x5, y2+10), level_number_text, font=font4, fill="#FFB6C1")
-
-          # drawing member xp
-          draw.text((x2, y2+40), xp_text, font=font3, fill="#FFB6C1")
-          draw.text((x2-1, (y2+40)-1), xp_text, font=font3, fill="#FFB6C1")
-
-          # drawing member needed xp with border bold black
-          draw.text((x4, y2+44), needed_xp_text, font=font5, fill="#DCDCDC")
-
-          buffer = BytesIO()
-          bg.save(buffer, format="PNG")
-          buffer.seek(0)
-
-          return buffer
+from util.defs import is_team
+from util.pil_funcs import RankCard
 
 class Levelling(commands.Cog):
     def __init__(self, bot):
@@ -196,14 +25,14 @@ class Levelling(commands.Cog):
     async def save_level(self):
         await self.bot.wait_until_ready()
         for i, v in self.xp_users.items():
-            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, xp) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET xp = $2", i, json.dumps(v))
+            await self.bot.db.execute("INSERT INTO levelling (guild_id, xp) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET xp = $2", i, json.dumps(v))
         
         for i, v in self.levels_users.items():
-            await self.bot.pg_con.execute("INSERT INTO levelling (guild_id, levels) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET levels = $2", i, json.dumps(v))
+            await self.bot.db.execute("INSERT INTO levelling (guild_id, levels) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET levels = $2", i, json.dumps(v))
 
     async def cache_levels(self):
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling")
-        db2 = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings")
+        db = await self.bot.db.fetch("SELECT * FROM levelling")
+        db2 = await self.bot.db.fetch("SELECT * FROM levelling_settings")
         for s in db2:
             if s["toggle"] == "enable":
                 self.modality[int(s["guild_id"])] = True
@@ -327,7 +156,7 @@ class Levelling(commands.Cog):
 
             self.levels_users[message.guild.id][str(message.author.id)]["level"] = self.levels_users[message.guild.id][str(message.author.id)]["level"] + 1
 
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(message.guild.id))
+            db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(message.guild.id))
             mex = db[0]["message"]
             channel = db[0]["channel"]
             image = db[0]["levelup_image"]
@@ -382,7 +211,7 @@ class Levelling(commands.Cog):
     @setleveling.command()
     @commands.has_permissions(manage_guild=True)
     async def settings(self, ctx, mode, *, set=None):
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
         if not db:
             return await ctx.send("<:4318crossmark:848857812565229601> This guild has no leveling settings yet.")
 
@@ -427,24 +256,24 @@ class Levelling(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def set(self, ctx, mode):
         if mode.lower() == "enable":
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+            db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
             if not db:
-                await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, toggle) VALUES ($1, $2)", str(ctx.guild.id), mode)
+                await self.bot.db.execute("INSERT INTO levelling_settings (guild_id, toggle) VALUES ($1, $2)", str(ctx.guild.id), mode)
                 self.modality[ctx.guild.id] = True
                 return await ctx.message.add_reaction("<:4430checkmark:848857812632076314>")
 
-            await self.bot.pg_con.execute("UPDATE levelling_settings SET toggle = $1 WHERE guild_id = $2", mode, str(ctx.guild.id))
+            await self.bot.db.execute("UPDATE levelling_settings SET toggle = $1 WHERE guild_id = $2", mode, str(ctx.guild.id))
             self.modality[ctx.guild.id] = True
             return await ctx.message.add_reaction("<:4430checkmark:848857812632076314>")
 
         elif mode.lower() == "disable":
-            db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+            db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
             if not db:
-                await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, toggle) VALUES ($1, $2)", str(ctx.guild.id), mode)
+                await self.bot.db.execute("INSERT INTO levelling_settings (guild_id, toggle) VALUES ($1, $2)", str(ctx.guild.id), mode)
                 del self.modality[ctx.guild.id]
                 return await ctx.message.add_reaction("<:4318crossmark:848857812565229601>")
 
-            await self.bot.pg_con.execute("UPDATE levelling_settings SET toggle = $1 WHERE guild_id = $2", mode, str(ctx.guild.id))
+            await self.bot.db.execute("UPDATE levelling_settings SET toggle = $1 WHERE guild_id = $2", mode, str(ctx.guild.id))
             del self.modality[ctx.guild.id]
             return await ctx.message.add_reaction("<:4318crossmark:848857812565229601>")
 
@@ -455,11 +284,11 @@ class Levelling(commands.Cog):
         if set.lower() not in modescf:
             return await ctx.send("<:4318crossmark:848857812565229601> This isn't a valid option for **levelup-image**. Valids are `enable` & `disable`")
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
         if not db:
-            await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, levelup_image) VALUES ($1, $2)", str(ctx.guild.id), set)
+            await self.bot.db.execute("INSERT INTO levelling_settings (guild_id, levelup_image) VALUES ($1, $2)", str(ctx.guild.id), set)
         
-        await self.bot.pg_con.execute("UPDATE levelling_settings SET levelup_image = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
+        await self.bot.db.execute("UPDATE levelling_settings SET levelup_image = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
 
         if set.lower() == "enable":
             return await ctx.send("<:4430checkmark:848857812632076314> Levelup image succesfully enabled!")
@@ -468,12 +297,12 @@ class Levelling(commands.Cog):
     @setleveling.command()
     @commands.has_permissions(manage_guild=True)
     async def message(self, ctx, set):    
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
         if not db:
-            await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, message) VALUES ($1, $2)", str(ctx.guild.id), set)
+            await self.bot.db.execute("INSERT INTO levelling_settings (guild_id, message) VALUES ($1, $2)", str(ctx.guild.id), set)
             return await ctx.send(f"<:4430checkmark:848857812632076314> Levelup message succesfully set!")
     
-        await self.bot.pg_con.execute("UPDATE levelling_settings SET message = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
+        await self.bot.db.execute("UPDATE levelling_settings SET message = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
         return await ctx.send(f"<:4430checkmark:848857812632076314> Levelup message succesfully set!")
 
     @setleveling.command()
@@ -484,12 +313,12 @@ class Levelling(commands.Cog):
         if not v:
             return await ctx.send(f"{set} is not a valid channel.")
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
+        db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
         if not db:
-            await self.bot.pg_con.execute("INSERT INTO levelling_settings (guild_id, channel) VALUES ($1, $2)", str(ctx.guild.id), int(d))
+            await self.bot.db.execute("INSERT INTO levelling_settings (guild_id, channel) VALUES ($1, $2)", str(ctx.guild.id), int(d))
             return await ctx.send("<:4430checkmark:848857812632076314> Leveling channel updated, i'll send every level up message there.")
 
-        await self.bot.pg_con.execute("UPDATE levelling_settings SET channel = $1 WHERE guild_id = $2", int(d), str(ctx.guild.id))
+        await self.bot.db.execute("UPDATE levelling_settings SET channel = $1 WHERE guild_id = $2", int(d), str(ctx.guild.id))
         return await ctx.send("<:4430checkmark:848857812632076314> Leveling channel updated, i'll send every level up message there.")
 
 #########################################################################################################
