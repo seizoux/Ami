@@ -2,129 +2,28 @@ import discord
 from discord.ext import commands
 import random
 import datetime
-from datetime import timedelta
 import time
 from discord.ext.commands.cooldowns import BucketType
 import simpleeval
 import asyncio
 import pytz
 from pytz import all_timezones
-import re
 from discord_markdown.discord_markdown import convert_to_html
-from PIL import Image,ImageDraw, ImageFont
-from cogsf.fuzzy import finder
+from util.fuzzy import finder
 from io import BytesIO
 import kitsu
 from aiogtts import aiogTTS
 import string
 import os
 import randfacts
+from twitch import TwitchClient
+import humanize
+import aiohttp
+from util.pil_funcs import GayMeter, Ship
+import util.config as config
 
 kitsu_client = kitsu.Client()
-
-class GayMeter:
-    def gaymeter_func(pfp: discord.Member, perc:int):
-        with Image.open("assets/gaymeter.png") as bg:
-
-            x, y = 134, 576
-
-            for i in range(perc):
-                y -= 6
-
-            with Image.open(pfp).convert("RGBA") as pfp_1:
-                im = pfp_1.resize((100, 100))
-                bigsize = (im.size[0] * 3, im.size[1] * 3)
-                mask = Image.new('L', bigsize, 0)
-                draw = ImageDraw.Draw(mask) 
-                draw.ellipse((0, 0) + bigsize, fill=255)
-                mask = mask.resize(im.size, Image.ANTIALIAS)
-                im.putalpha(mask)
-                bg.paste(im,(x, y),im)
-                im.close()
-
-            buffer = BytesIO()
-            bg.save(buffer, format="PNG")
-            buffer.seek(0)
-
-            return buffer
-
-class Ship:
-    def ShipBar(d, x, y, w, h, progress, fg="#FFB6C1"):
-
-        w *= progress
-        d.ellipse((x+w, y, x+h+w, y+h),fill=fg)
-        d.ellipse((x, y, x+h, y+h),fill=fg)
-        d.rectangle((x+(h/2), y, x+w+(h/2), y+h),fill=fg)
-
-        return d
-
-
-    def ship_func(perc:int, pfp: discord.Member, pfp2: discord.Member = None):
-        with Image.open("assets/ship_banner.png") as bg:
-
-            with Image.open(pfp).convert("RGBA") as pfp_1:
-              im = pfp_1.resize((255, 258))
-              bigsize = (im.size[0] * 3, im.size[1] * 3)
-              mask = Image.new('L', bigsize, 0)
-              draw = ImageDraw.Draw(mask) 
-              draw.ellipse((0, 0) + bigsize, fill=255)
-              mask = mask.resize(im.size, Image.ANTIALIAS)
-              im.putalpha(mask)
-              bg.paste(im,(65,25),im)
-              im.close()
-
-
-            with Image.open(pfp2).convert("RGBA") as pfp_2:
-              im = pfp_2.resize((260, 258))
-              bigsize = (im.size[0] * 3, im.size[1] * 3)
-              mask = Image.new('L', bigsize, 0)
-              draw = ImageDraw.Draw(mask) 
-              draw.ellipse((0, 0) + bigsize, fill=255)
-              mask = mask.resize(im.size, Image.ANTIALIAS)
-              im.putalpha(mask)
-              bg.paste(im,(972,22),im)
-              im.close()
-
-            sparky = 0.00
-            x_sparky = int(perc/100)
-            d = 0
-            f = x_sparky
-            for i in range(100):
-                d += 1
-                sparky += 0.01
-                x_sparky += f
-                if d >= perc:
-                    break
-
-            d = ImageDraw.Draw(bg)
-            d = Ship.ShipBar(d, 380, 212, 500, 40, sparky)
-
-            font = ImageFont.truetype("fonts/love.ttf", 180)
-            draw = ImageDraw.Draw(bg)
-            text = f"{perc}%"
-            x, y = 640, 150
-            fillcolor = "pink"
-            shadowcolor = "black"
-
-            # thin border
-            draw.text((x-1, y), text, font=font, fill=shadowcolor, anchor="mm")
-            draw.text((x+1, y), text, font=font, fill=shadowcolor, anchor="mm")
-            draw.text((x, y-1), text, font=font, fill=shadowcolor, anchor="mm")
-            draw.text((x, y+1), text, font=font, fill=shadowcolor, anchor="mm")
-
-            # thicker border
-            draw.text((x-1, y-1), text, font=font, fill=shadowcolor, anchor="mm")
-            draw.text((x+1, y-1), text, font=font, fill=shadowcolor, anchor="mm")
-            draw.text((x-1, y+1), text, font=font, fill=shadowcolor, anchor="mm")
-            draw.text((x+1, y+1), text, font=font, fill=shadowcolor, anchor="mm")
-
-            draw.text((x, y), text, font=font, fill=fillcolor, anchor="mm")
-
-            buffer = BytesIO()
-            bg.save(buffer, format="PNG")
-            buffer.seek(0)
-
-            return buffer
+twitch = TwitchClient(client_id=config.TWITCH_CLIENT)
 
 class Fun(commands.Cog):
     def __init__(self, bot):
@@ -132,11 +31,12 @@ class Fun(commands.Cog):
         self.afks = {}
         self.languages = {}
         self.category = "Fun"
+        self.session = aiohttp.ClientSession()
         bot.loop.create_task(self.cache_langs())
     
     async def cache_langs(self):
         await self.bot.wait_until_ready()
-        db = await self.bot.pg_con.fetch("SELECT * FROM tts")
+        db = await self.bot.db.fetch("SELECT * FROM tts")
         for i in db:
             if i["language"]:
                 self.languages[i["guild_id"]] = i["language"]
@@ -144,6 +44,81 @@ class Fun(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Fun Loaded")
+
+
+    @commands.command()
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def caption(self, ctx, member: discord.Member = None):
+        if member is None:
+            member = ctx.author
+
+        url = f"{member.avatar_url}"
+        async with self.session as session:
+            res = await session.post("https://captionbot.azurewebsites.net/api/messages", json={"Content": url, "Type": "CaptionRequest"}, headers={"Content-Type": "application/json; charset=utf-8"})
+        text = await res.text()
+        em=discord.Embed(description=text, color=0xffcff1)
+        em.set_image(url=url)
+        await ctx.send(embed=em)
+
+    @commands.command(help="Search a twitch stream directly with this command, see if it is in live, check followers and total views, and some other info!", aliases=["ttv", "tw"])
+    async def twitch(self, ctx, *, name:str):
+        """Gets a twitch channel's statistics."""
+        if twitch is None:
+            await ctx.send("The bot owner did not specify a twitch api key, therefore this command is disabled.")
+            return
+        try:
+            channel = twitch.search.channels(name, limit=1)[0]
+        except IndexError:
+            await ctx.send(f"<:4318crossmark:848857812565229601> Could not find any channel by the name of **{name}**", allowed_mentions=discord.AllowedMentions.none())
+            return
+        stream =  twitch.streams.get_stream_by_user(channel["id"])
+        streaming = "<:offline:859131537734500353>"
+        game = None
+        if channel["game"]:
+            game = channel["game"]
+        fields = {"Name":channel["status"] or "Unknown", "Description":channel["description"] or "Unknown", "For Mature":channel["mature"] or "Unknown", "Category":game, "Created": (channel["created_at"]).strftime("%B %d, %Y at %I:%M:%S %p") or "Unknown", "Total Views": humanize.intword(channel["views"]) or "Unknown", "Followers": humanize.intword(channel["followers"]) or "Unknown"}
+        if stream is not None:
+            streaming = "<:online:859131538058641418>"
+            fields["Live Viewers"] = humanize.intword(stream["viewers"])
+        fields["Live"] = streaming
+
+        desc = ""
+        for key, value in fields.items():
+            desc += f"**{key}** : {value}\n"
+
+        embed = discord.Embed()
+
+
+        if channel["logo"] is not None:
+            embed.set_thumbnail(url=channel["logo"])
+
+        embed.description = desc
+        embed.title = f'<:twitch:859129135833939998> {channel["display_name"]}'
+        embed.url = channel["url"]
+        if streaming == "<:online:859131538058641418>":
+            embed.set_image(url=stream["preview"]["large"] + "?v={}".format(random.randint(0, 10000)))
+            embed.color = 0xffcff1
+        else:
+            if channel["video_banner"] is not None:
+                embed.set_image(url=channel["video_banner"])
+            embed.color = 0xffcff1
+        await ctx.send(embed=embed)
+
+    @commands.command(help="Reverse the given phrase, e.g:\n`ami reverse \"hi mom\"` will return `\"mom ih\"`", aliases=["rev", "rv"])
+    async def reverse(self, ctx, *, message):
+        if len(message) > 2000:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Your message was {len(message)} characters long, which is over the maximum (`2048`).")
+        await ctx.reply(message[::-1], mention_author=False)
+
+    @commands.command(name="penis-size", help="Look how long is the ||penis|| of a member >.>", aliases=["pp", "psize"])
+    async def penis_size(self, ctx, member: discord.Member = None):
+        if member is None:
+            member = ctx.author
+
+        size = random.randint(0, 32)
+
+        final_pp_size = f"8{(''.join('=' * size))}D"
+        await ctx.send(embed=discord.Embed(description=final_pp_size, color = 0xffcff1).set_author(name=f"{member.name}'s pp ({size}cm)", icon_url = member.avatar_url))
 
     @commands.command(help="Get a random fact, you can also pass some arguments to retrive innapropriate facts (they are excluded by default), or exclude them, e.g:\n`ami fact --unsafe` to retrive inappropriate facts.")
     async def fact(self, ctx, flags=None):
@@ -163,7 +138,7 @@ class Fun(commands.Cog):
         asset = member.avatar_url_as(size=512)
         pfp = BytesIO(await asset.read())
         
-        perc = random.randint(1, 100)
+        perc = random.randint(0, 100)
 
         buffer = await self.bot.loop.run_in_executor(None, GayMeter.gaymeter_func, pfp, perc)
         file=discord.File(fp=buffer, filename="gaymeter.png")
@@ -182,7 +157,7 @@ class Fun(commands.Cog):
             except asyncio.TimeoutError:
                 return
 
-            await self.bot.pg_con.execute("INSERT INTO tts (guild_id, language) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET language = $2", ctx.guild.id, msg.content.lower())
+            await self.bot.db.execute("INSERT INTO tts (guild_id, language) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET language = $2", ctx.guild.id, msg.content.lower())
             self.languages[ctx.guild.id] = msg.content.lower()
             return await msg.add_reaction("<:4430checkmark:848857812632076314>")
 
@@ -287,7 +262,7 @@ class Fun(commands.Cog):
     async def count(self, ctx, option=None, whitelist: commands.Greedy[discord.Member]=None):
         if option:
             if option == "stats":
-                db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                 if not db:
                     return await ctx.send("<:redTick:596576672149667840> This guild has no __stats__ registered, play a counting game before.")
 
@@ -301,7 +276,7 @@ class Fun(commands.Cog):
                 return await ctx.send(embed=em)
 
             elif option == "score":
-                db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                 if not db:
                     return await ctx.send("<:redTick:596576672149667840> This guild has no __stats__ registered, play a counting game before.")
 
@@ -309,7 +284,7 @@ class Fun(commands.Cog):
                 return await ctx.send(f"<:5324_letters:848857812577812511> Higher counting score in this guild is **{higher_score}**")
 
             elif option == "restarts":
-                db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                 if not db:
                     return await ctx.send("<:redTick:596576672149667840> This guild has no __stats__ registered, play a counting game before.")
 
@@ -327,9 +302,9 @@ class Fun(commands.Cog):
                             if str(mex.author.id) == author_id:
                                 await mex.add_reaction("<:4318crossmark:848857812565229601>")
                                 await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count --m-a` to restart with messages allowed.")
-                                db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                                db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                 if not db:
-                                    await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                    await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                 
                                 final_score = 0
                                 if db[0]["higher_score"] > num:
@@ -337,7 +312,7 @@ class Fun(commands.Cog):
                                 else:
                                     final_score = num
                                 
-                                await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
+                                await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
                                 break
                             num += 1
                             author_id = str(mex.author.id)
@@ -345,9 +320,9 @@ class Fun(commands.Cog):
                         else:
                             await mex.add_reaction("<:4318crossmark:848857812565229601>")
                             await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count --m-a` to restart the game with messages allowed.")
-                            db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                            db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                             if not db:
-                                await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                             
                             final_scoree = 0
                             if db[0]["higher_score"] > num:
@@ -355,7 +330,7 @@ class Fun(commands.Cog):
                             else:
                                 final_scoree = num 
                             
-                            await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
+                            await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
                             break
 
             elif option == "--r":
@@ -397,9 +372,9 @@ class Fun(commands.Cog):
                             if str(mex.author.id) == author_id:
                                 await mex.add_reaction("<:4318crossmark:848857812565229601>")
                                 await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count --r @members` to restart.")
-                                db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                                db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                 if not db:
-                                    await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                    await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                     
                                 final_score = 0
                                 if db[0]["higher_score"] > num:
@@ -407,7 +382,7 @@ class Fun(commands.Cog):
                                 else:
                                     final_score = num
                                     
-                                await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
+                                await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
                                 break
                             num += 1
                             author_id = str(mex.author.id)
@@ -415,9 +390,9 @@ class Fun(commands.Cog):
                         else:
                             await mex.add_reaction("<:4318crossmark:848857812565229601>")
                             await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count --r @members` to restart the restricted game.")
-                            db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                            db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                             if not db:
-                                await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                 
                             final_scoree = 0
                             if db[0]["higher_score"] > num:
@@ -425,7 +400,7 @@ class Fun(commands.Cog):
                             else:
                                 final_scoree = num 
                                 
-                            await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
+                            await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
                             break
                     else:
                         pass
@@ -470,9 +445,9 @@ class Fun(commands.Cog):
                                 if str(mex.author.id) == author_id:
                                     await mex.add_reaction("<:4318crossmark:848857812565229601>")
                                     await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count --r-m-a @members` to restart.")
-                                    db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                                    db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                     if not db:
-                                        await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                        await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                         
                                     final_score = 0
                                     if db[0]["higher_score"] > num:
@@ -480,7 +455,7 @@ class Fun(commands.Cog):
                                     else:
                                         final_score = num
                                         
-                                    await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
+                                    await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
                                     break
                                 num += 1
                                 author_id = str(mex.author.id)
@@ -488,9 +463,9 @@ class Fun(commands.Cog):
                             else:
                                 await mex.add_reaction("<:4318crossmark:848857812565229601>")
                                 await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count --r-m-a @members` to restart the restricted game.")
-                                db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                                db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                 if not db:
-                                    await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                    await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                     
                                 final_scoree = 0
                                 if db[0]["higher_score"] > num:
@@ -498,7 +473,7 @@ class Fun(commands.Cog):
                                 else:
                                     final_scoree = num 
                                     
-                                await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
+                                await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
                                 break
                     else:
                         pass
@@ -514,9 +489,9 @@ class Fun(commands.Cog):
                     mex = await self.bot.wait_for('message', check=lambda m: not m.author.bot and m.channel == ctx.channel)
                     if mex.content == "ami stopcount":
                         await ctx.send("<:4430checkmark:848857812632076314> Counting game stopped succesfully!")
-                        db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                        db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                         if not db:
-                            await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                            await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                         
                         final_score = 0
                         if db[0]["higher_score"] > num:
@@ -524,7 +499,7 @@ class Fun(commands.Cog):
                         else:
                             final_score = num
                                         
-                        await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
+                        await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
                         break
 
                     elif mex.content == str(num+1):
@@ -548,9 +523,9 @@ class Fun(commands.Cog):
                     if str(mex.author.id) == author_id:
                         await mex.add_reaction("<:4318crossmark:848857812565229601>")
                         await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count` to restart.")
-                        db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                        db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                         if not db:
-                            await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                            await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                             
                         final_score = 0
                         if db[0]["higher_score"] > num:
@@ -558,7 +533,7 @@ class Fun(commands.Cog):
                         else:
                             final_score = num
                             
-                        await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
+                        await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_score, db[0]["restarts"] + 1, str(ctx.guild.id))
                         break
                     num += 1
                     author_id = str(mex.author.id)
@@ -566,9 +541,9 @@ class Fun(commands.Cog):
                 else:
                     await mex.add_reaction("<:4318crossmark:848857812565229601>")
                     await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count` to restart the game.")
-                    db = await self.bot.pg_con.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
+                    db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                     if not db:
-                        await self.bot.pg_con.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                        await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                         
                     final_scoree = 0
                     if db[0]["higher_score"] > num:
@@ -576,7 +551,7 @@ class Fun(commands.Cog):
                     else:
                         final_scoree = num 
                         
-                    await self.bot.pg_con.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
+                    await self.bot.db.execute("UPDATE counting SET higher_score = $1, restarts = $2 WHERE guild_id = $3", final_scoree, db[0]["restarts"] + 1, str(ctx.guild.id))
                     break
 
 
@@ -589,7 +564,7 @@ class Fun(commands.Cog):
         if len(reason) > 100:
             return await ctx.reply(":x: The reason must be less than **100** letters.")
 
-        await ctx.send(f"<:KannaSip:819739316502134805> **{ctx.author.name}** i've set your afk for:  {reason}")
+        await ctx.send(f"<:KannaSip:819739316502134805> **{ctx.author.name}** i've set your afk for:  {reason}", allowed_mentions=discord.AllowedMentions.none())
         self.afks[ctx.author.id] = reason
 
     @commands.command()
@@ -621,7 +596,7 @@ class Fun(commands.Cog):
             id2 = "None"
         if id2 in self.afks.keys():
             reasons = self.afks[id2]
-            return await message.channel.send(f'<:nani:819694934491004937> {message.author.mention}, **{str(message.mentions[0].name)}** is afk for: {reasons}')
+            return await message.channel.send(f'<:nani:819694934491004937> {message.author.mention}, **{str(message.mentions[0].name)}** is afk for: {reasons}', allowed_mentions=discord.AllowedMentions.none())
 
 
     @commands.command(help="Choose between multiple choices.\nAdd quotemarks at the start & end of something to mark a long phrase as a possible choice, e.g: `ami choose sky \"watch anime\" netflix`")
@@ -715,7 +690,7 @@ class Fun(commands.Cog):
         asset2 = pfp2.avatar_url_as(size=512)
         avatar2= BytesIO(await asset2.read())
 
-        perc = random.randint(1, 100)
+        perc = random.randint(0, 100)
         
         buffer = await self.bot.loop.run_in_executor(None, Ship.ship_func, perc, avatar, avatar2)
         file=discord.File(fp=buffer, filename="ship.png")
@@ -788,7 +763,7 @@ class Fun(commands.Cog):
 
     @commands.command(help="Get a member avatar",pass_context=True, aliases=["av"])
     async def avatar(self, ctx, member:discord.Member=None):
-        if member == None:
+        if member is None:
             member = ctx.author
 
         await ctx.send(member.avatar_url)
@@ -814,7 +789,7 @@ class Fun(commands.Cog):
     async def vote(self, ctx):
         link = "[`vote on top.gg!`](https://top.gg/bot/801742991185936384)"
         link2 = "[`vote on discordbotlist!`](https://discordbotlist.com/bots/ami)"
-        em = discord.Embed(description=f"**{link}** (**`+20k Coins`**)\n**{link2}**\nThanks if you vote! <3", color = 0xffcff1)
+        em = discord.Embed(description=f"**{link}** (**<:cupcake:845632403405012992> `+20k`**)\n**{link2}**\nThanks if you vote! <3", color = 0xffcff1)
         await ctx.send(embed=em)
 
 
@@ -824,7 +799,7 @@ class Fun(commands.Cog):
             member = ctx.author
 
         author_id = str(member.id)
-        db = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        db = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not db:
             return await ctx.reply(f"I didn't found this member inside the database, tell him to send `ami bal` and retry again after done.")
@@ -848,7 +823,7 @@ class Fun(commands.Cog):
     @commands.command(help="Set your timezone to check your time",aliases=["set-tz"])
     async def timezone(self, ctx, zone):
         author_id = str(ctx.author.id)
-        db = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        db = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if zone == None:
             await ctx.send(f"{ctx.author.name}, be sure to send a zone across the command.")
@@ -856,8 +831,8 @@ class Fun(commands.Cog):
 
         if zone in all_timezones:
             zone1 = zone
-            await self.bot.pg_con.execute("UPDATE users SET tz = $1 WHERE user_id = $2", zone, author_id)
-            await ctx.send(f"{ctx.author.name}, you have set **{zone1}** as a zone!")
+            await self.bot.db.execute("UPDATE users SET tz = $1 WHERE user_id = $2", zone, author_id)
+            await ctx.send(f"{ctx.author.name}, you have set **{zone1}** as your zone!")
         else:
             await ctx.send("The zone you provided isn't in the list.")
 
@@ -867,7 +842,7 @@ class Fun(commands.Cog):
     async def setzone(self,ctx,member:discord.Member, *, args):
         member_id = str(member.id)
         guild_id = str(ctx.guild.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", member_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", member_id)
         timezone = args
 
         if timezone == None:
@@ -878,7 +853,7 @@ class Fun(commands.Cog):
 
         if timezone in all_timezones:
             zone1 = timezone
-            await self.bot.pg_con.execute("UPDATE users SET tz = $1 WHERE user_id = $2", zone1, member_id)
+            await self.bot.db.execute("UPDATE users SET tz = $1 WHERE user_id = $2", zone1, member_id)
             await ctx.send(f"Set **{timezone}** for `{member}`!")
         else:
             await ctx.send("Zone not found.")
