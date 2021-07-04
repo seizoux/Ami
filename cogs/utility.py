@@ -12,69 +12,85 @@ import async_cse
 import time
 from jishaku.paginators import WrappedPaginator, PaginatorInterface
 from collections import Counter
-from cogsf.defs import is_team
+from util.defs import is_team, get_size, line_count
 import psutil
 import platform
-import pathlib
-
-def line_count():
-    p = pathlib.Path('./')
-    cm = cr = fn = cl = ls = fc = 0
-    for f in p.rglob('*.py'):
-        if str(f).startswith("venv"):
-            continue
-        fc += 1
-        with f.open() as of:
-            for l in of.readlines():
-                l = l.strip()
-                if l.startswith('class'):
-                    cl += 1
-                if l.startswith('def'):
-                    fn += 1
-                if l.startswith('async def'):
-                    cr += 1
-                if '#' in l:
-                    cm += 1
-                ls += 1
-    return f"Files: {fc}\nLines: {ls:,}\nFunctions: {fn}\nComments: {cm:,}"
-
-
-def get_size(bytes, suffix="B"):
-    """
-    Scale bytes to its proper format
-    e.g:
-        1253656 => '1.20MB'
-        1253656678 => '1.17GB'
-    """
-    factor = 1024
-    for unit in ["", "K", "M", "G", "T", "P"]:
-        if bytes < factor:
-            return f"{bytes:.2f}{unit}{suffix}"
-        bytes /= factor
-
-class PaginateGuilds(menus.ListPageSource):
-    """Player queue paginator class."""
-
-    def __init__(self, entries, *, per_page=1):
-        entries = [f'{name}' for name in entries]
-        super().__init__(entries, per_page=per_page)
-
-    async def format_page(self, menu: menus.Menu, page):
-        embed = discord.Embed(color = 0xffcff1)
-        embed.description = ''.join(page)
-
-        return embed
+import secrets
+import googletrans
 
 class Utility(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Utility"
+        self.session = aiohttp.ClientSession()
         self.bot.command_counter = 0
         self.bot.commandsusages = Counter()
+        self.trans = googletrans.Translator()
 
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Utility Loaded")
+
+    @commands.command(help=f"Translate the given message to english.\nYou can also reply with the command to a message to translate it.", aliases=["tr"])
+    async def translate(self, ctx, *, message: commands.clean_content = None):
+
+        if message is None:
+            ref = ctx.message.reference
+            if ref and isinstance(ref.resolved, discord.Message):
+                message = ref.resolved.content
+            else:
+                return await ctx.send('<:4318crossmark:848857812565229601> You need to specify also the message to translate.\nYou can also reply to a message with this command to translate it.')
+
+        try:
+            trans = await self.bot.loop.run_in_executor(None, self.trans.translate, message)
+        except Exception:
+            return
+
+        source_laungage = googletrans.LANGUAGES.get(trans.src, '(auto-detected)').title()
+        language_destination = googletrans.LANGUAGES.get(trans.dest, 'Unknown').title()
+        embed = discord.Embed(title='<:googletransPink:860988658252120084> Translation',
+                            description = f"**Original ({source_laungage})**\n{trans.origin}\n\n**Translated ({language_destination})**\n{trans.text}",
+                            color=0xffcff1)
+        await ctx.send(embed=embed)
+
+    @commands.command(help="Retrive the urban definition for the given term.")
+    async def urban(self, ctx, term):
+        async with self.session.get(f"https://api.urbandictionary.com/v0/define?term={term}") as resp:
+            d = await resp.json()
+            definition = d['list'][0]['definition']
+            example = d['list'][0]['example']
+            t_up = d['list'][0]['thumbs_up']
+            t_down = d['list'][0]['thumbs_down']
+            author = d['list'][0]['author']
+            written = d['list'][0]['written_on']
+            url_ref = d['list'][0]['permalink']
+            word = d['list'][0]['word']
+
+        format = "%a, %d %b %Y %I:%M %p"
+
+        em = discord.Embed(description=f"**Urban definition for [{word}]({url_ref})**\n\n Written By **`{author}`**\n\n__**Definition**__\n{definition}\n\n__**Example**__\n{example}", color = 0xffcff1)
+        em.set_footer(text=f"👍 {t_up} | 👎 {t_down}")
+        return await ctx.send(embed=em)
+
+    @commands.command(help="Convert the given phrase to binary format.")
+    async def binary(self, ctx, *, to_convert:str):
+        return await ctx.safe_send(" ".join(f"`{ord(i):08b}`" for i in to_convert))
+
+
+    @commands.command(help="Generate a random password giving an appropriate length which can't be over 75.", aliases = ["psw", "pass", "passw", "passwd"])
+    async def password(self, ctx, length:int=None):
+        if length is None:
+            length = 17
+
+        if length == 76 or length == 0:
+            return await ctx.reply("<:4318crossmark:848857812565229601> Lenght must be between 1 and 75")
+
+        password_length = length
+        try:
+            await ctx.reply("<:4430checkmark:848857812632076314> Check your DMs!", mention_author=False)
+            return await ctx.author.send(f"<:4430checkmark:848857812632076314> Hi buddy, that's your generated password:\n`{secrets.token_urlsafe(password_length)}`")
+        except Exception:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Can't send DMs to **{ctx.author.name}**.")
 
     @commands.command()
     @is_team()
@@ -180,7 +196,7 @@ class Utility(commands.Cog):
         em.add_field(name="CPU", value=f"```prolog\nPhysical Cores : {physical_cores}\nTotal Cores : {total_cores}\nFreq : {current_cpu_freq}\nUsage : {cpu_usage}\n```")
         em.add_field(name="Memory", value=f"```prolog\nTotal : {total_mem}\nAvailable : {available_mem}\nUsed : {used_mem}\nPercentage : {mem_perc}\n```")
         em.add_field(name="Swap", value=f"```prolog\nTotal : {total_swap}\nFree : {free_swap}\nUsed : {used_swap}\nPercentage : {perc_swap}\n```")
-        em.add_field(name="Network (disk io & net io)", value=f"```prolog\nRead : {disk_io_bytes_read}\nSent : {disk_io_bytes_send}\nSent : {net_io_bytes_sent}\nRecived : {net_io_bytes_recv}\n```")
+        em.add_field(name="Network (DISK & NET)", value=f"```prolog\nRead : {disk_io_bytes_read}\nSent : {disk_io_bytes_send}\nSent : {net_io_bytes_sent}\nReceived : {net_io_bytes_recv}\n```")
         em.add_field(name="Code", value=f"```prolog\n{line_counter}\n```")
 
 
@@ -224,6 +240,68 @@ class Utility(commands.Cog):
         em.add_field(name="<:settings:585767366743293952> Commands", value=f"<:upward_stonks:739614245997641740> Total Commands: `{cmds}`\n<:upward_stonks:739614245997641740> Runnable by you: `{count}`\n<:upward_stonks:739614245997641740> Invoked: `{self.bot.command_counter}`",inline=False)
         em.set_thumbnail(url=self.bot.user.avatar_url)
         em.timestamp = datetime.datetime.utcnow()
+        await ctx.send(embed=em)
+
+    @commands.command(help="Get information about the guild where this commmand get executed.", aliases=["si"])
+    async def serverinfo(self, ctx):
+
+        format = "%a, %d %b %Y %I:%M %p"
+
+        afk_channel = ctx.guild.afk_channel or "No AFK Channel."
+        afk_timeout = ctx.guild.afk_timeout or "No AFK Timeout."
+        banner = f"[Click Here!]({ctx.guild.banner_url})" if ctx.guild.banner_url else "No Banner."
+        bitrate = f"{humanize.naturalsize(ctx.guild.bitrate_limit, True)}/s"
+        categories = len(ctx.guild.categories)
+        channels = len(ctx.guild.channels)
+        created = ctx.guild.created_at.strftime(format)
+        since = humanize.naturaltime(ctx.guild.created_at)
+        default_role = ctx.guild.default_role or "No Default Role"
+        desc = ctx.guild.description or "No Description"
+        emoji_limit = ctx.guild.emoji_limit
+        ecf = ctx.guild.explicit_content_filter or "No Explicit Filter"
+        filesize_limit = f"{humanize.naturalsize(ctx.guild.filesize_limit)}"
+        icon = ctx.guild.icon_url
+        id = ctx.guild.id
+        max_members = ctx.guild.max_members
+        members = ctx.guild.member_count
+        mfa_level = ctx.guild.mfa_level or "No MFA"
+        name = ctx.guild.name
+        owner = self.bot.get_user(ctx.guild.owner_id)
+        p_count = ctx.guild.premium_subscription_count
+        p_role = ctx.guild.premium_subscriber_role.mention
+        p_tier = ctx.guild.premium_tier
+        region = ctx.guild.region
+        v_level = ctx.guild.verification_level
+
+
+        em = discord.Embed(
+            title=name, 
+            url=icon,
+            description = f"**`{id}`** (Owner : {owner.mention})\n{desc}\n\n"
+                        f"<:8790dash:848857813111668817> **AFK Channel** : {afk_channel}\n"
+                        f"<:8790dash:848857813111668817> **AFK Timeout** : {afk_timeout}\n"
+                        f"<:8790dash:848857813111668817> **Banner** : {banner}\n"
+                        f"<:8790dash:848857813111668817> **Bitrate** : {bitrate}\n"
+                        f"<:8790dash:848857813111668817> **Categories** : {categories}\n"
+                        f"<:8790dash:848857813111668817> **Channels** : {channels}\n"
+                        f"<:8790dash:848857813111668817> **Created** : {created} ({since})\n"
+                        f"<:8790dash:848857813111668817> **Default Role** : {default_role}\n"
+                        f"<:8790dash:848857813111668817> **Emojis Limit** : {emoji_limit}\n"
+                        f"<:8790dash:848857813111668817> **Explicit Content Filter** : {ecf}\n"
+                        f"<:8790dash:848857813111668817> **Filesize Limit** : {filesize_limit}\n"
+                        f"<:8790dash:848857813111668817> **Max Members** : {max_members}\n"
+                        f"<:8790dash:848857813111668817> **Members** : {members}\n"
+                        f"<:8790dash:848857813111668817> **MFA** : {mfa_level}\n"
+                        f"<:8790dash:848857813111668817> **Boosts** : {p_count}\n"
+                        f"<:8790dash:848857813111668817> **Nitro Role** : {p_role}\n"
+                        f"<:8790dash:848857813111668817> **Guild Tier** : {p_tier}\n"
+                        f"<:8790dash:848857813111668817> **Region** : {region}\n"
+                        f"<:8790dash:848857813111668817> **Verification Level** : {v_level}", color = 0xffcff1
+        )
+
+        em.set_thumbnail(url=icon)
+        if ctx.guild.banner:
+            em.set_image(url=ctx.guild.banner_url)
         await ctx.send(embed=em)
 
     @commands.command(help="See info about a member", aliases=["ui"])
@@ -270,7 +348,7 @@ class Utility(commands.Cog):
             
         boosting = "Not Boosting"
         if user.premium_since:
-            boosting = f"Boosting The Server ({humanize.naturaltime(user.premium_since)})"
+            boosting = f"Boosting The Server (Since {humanize.naturaltime(user.premium_since)})"
             flags.append("<:booster3:585764446220189716>")
             flags.append("<:nitro:314068430611415041>")
 
@@ -278,7 +356,7 @@ class Utility(commands.Cog):
         if user.nick:
             nickname = user.nick
 
-        joined = sorted(ctx.guild.members, key=lambda m: m.joined_at, reverse=True).index(ctx.me)
+        joined = sorted(ctx.guild.members, key=lambda m: m.joined_at, reverse=False).index(user) + 1
 
         embed = discord.Embed(color=0xdfa3ff, description=f"<:gsarrow:819706480714055681> **ID** » {user.id}\n"
                                                         f"<:gsarrow:819706480714055681> **Joined** » {user.joined_at.strftime(date_format)} ({humanize.naturaltime(user.joined_at)})\n"
@@ -292,6 +370,7 @@ class Utility(commands.Cog):
                                                         f"<:gsarrow:819706480714055681> **Guild Permissions** » {perm_string}")
 
         embed.set_author(name=str(user), icon_url=user.avatar_url)
+        embed.set_thumbnail(url=user.avatar_url)
         embed.timestamp = datetime.datetime.utcnow()
         return await ctx.send(embed=embed)
 
