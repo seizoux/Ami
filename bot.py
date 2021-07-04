@@ -7,15 +7,13 @@ import logging
 from collections import Counter
 import time
 import datetime
-import util.config as config
 import random
+import ratelimiter
+import asyncio
+
+import util.config as config
 from util.defs import is_team
 from util.subclasses import Ami
-import ratelimiter
-import logging
-import discord
-import asyncio
-from discord.ext import commands, tasks
 
 client = Ami()
 
