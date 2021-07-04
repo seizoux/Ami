@@ -11,23 +11,21 @@ import util.config as config
 import random
 from util.defs import is_team
 from util.subclasses import Ami
-import logging, discord, asyncio
+import ratelimiter
+import logging
+import discord
+import asyncio
 from discord.ext import commands, tasks
 
 client = Ami()
 
 class LoggerHandler(logging.Handler):
-    def setBot(self, bot: commands.Bot):
-        self._bot = bot
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        super().__init__(logging.INFO)
 
     def send_via_hook(self, log: str):
-        try:
-            _ = self._bot
-        except AttributeError:
-            print("Bot was not set dumbass.")
-            return
-        
-        asyncio.create_task(self._bot.send_via_hook("https://discord.com/api/webhooks/861361395004997643/Ysjbz8gyj_NNxdmbnnfXBhLzREuox7k17YabbYHb_oi6TeqqutWzZhL1tVGf8ja-5Zx9", log)) # create task to send data through webhook
+        self.bot.loop.create_task(self._bot.send_via_hook("https://discord.com/api/webhooks/861361395004997643/Ysjbz8gyj_NNxdmbnnfXBhLzREuox7k17YabbYHb_oi6TeqqutWzZhL1tVGf8ja-5Zx9", log)) # create task to send data through webhook
 
     def handle(self, record: logging.LogRecord):
         fmted_string = self.formatter.format(record)
@@ -37,7 +35,7 @@ class LoggerHandler(logging.Handler):
 logger = logging.getLogger("discord")
 logger.setLevel(logging.INFO)
 
-handler = LoggerHandler(logging.INFO)
+handler = LoggerHandler(client)
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 
