@@ -8,15 +8,15 @@
 </p>
 
 # FAQ's
-1 - Can i run my own bot instance with this code?
+**1 - Can i run my own bot instance with this code?**
 
 No, if that instance was not private no. You can run private instances to improve the code with your stuff and then commit changes here to improve ami.
 
-2 - Can i invite new collaborators?
+**2 - Can i invite new collaborators?**
 
 If you asked and talked with all the team, and all are fine with that, yes.
 
-3 - Can i push directly instead make pull requests?
+**3 - Can i push directly instead make pull requests?**
 
 If you are totally sure your code works and you have tested it for a while, yes.
 
