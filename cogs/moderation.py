@@ -2,9 +2,9 @@ import discord
 from discord.ext import commands, menus
 import asyncio
 import re
+import humanize
 
 class Paginate(menus.ListPageSource):
-    """Player queue paginator class."""
 
     def __init__(self, entries, *, per_page=15):
         entries = [f'`{index}.` {name}' for index, name in enumerate(entries, 1)]
@@ -13,6 +13,18 @@ class Paginate(menus.ListPageSource):
     async def format_page(self, menu: menus.Menu, page):
         embed = discord.Embed(color = 0xffcff1)
         embed.set_author(name=f"{menu.ctx.guild.name} member list ({len(menu.ctx.guild.members)})")
+        embed.description = '\n'.join(page)
+
+        return embed
+
+class Paginate2(menus.ListPageSource):
+
+    def __init__(self, entries, *, per_page=15):
+        entries = [f'`{index}.` {name}' for index, name in enumerate(entries, 1)]
+        super().__init__(entries, per_page=per_page)
+
+    async def format_page(self, menu: menus.Menu, page):
+        embed = discord.Embed(color = 0xffcff1)
         embed.description = '\n'.join(page)
 
         return embed
@@ -31,7 +43,7 @@ class Moderation(commands.Cog):
 
     async def cache(self):
         await self.bot.wait_until_ready()
-        db = await self.bot.pg_con.fetch("SELECT * FROM antispam")
+        db = await self.bot.db.fetch("SELECT * FROM antispam")
         for i in db:
             if i["toggle"] == "on":
                 self.guilds_dict[int(i["guild_id"])] = True
@@ -46,7 +58,7 @@ class Moderation(commands.Cog):
     async def on_ready(self):
         print(f"Moderation Loaded")
 
-    @commands.command(help="Retrive a paginated list with all members in the guild, and the member top role (returns `@everyone` if no roles).",aliases=["ml"])
+    @commands.command(help="Retrive a paginated list with all members in the guild, and the member top role (returns `No Roles` if no roles).",aliases=["ml"])
     async def memberlist(self, ctx):
         p = sorted(ctx.guild.members, key=lambda m: m.top_role.position, reverse=True)
         entries = [f"**{member.name}#{member.discriminator}** | `{member.id}` | {f'<@&{member.top_role.id}>' if member.roles[1:] else 'No Roles'}" for member in p]
@@ -54,6 +66,44 @@ class Moderation(commands.Cog):
         paginator = menus.MenuPages(source=pages, timeout=None, delete_message_after=True)
         await paginator.start(ctx)
 
+    @commands.command(help="Retrive information about the mentioned role for the server, such like date creation.", aliases=["ri"])
+    async def roleinfo(self, ctx, role: discord.Role):
+        role = discord.utils.get(ctx.guild.roles, id=role.id)
+
+        format = "%a, %d %b %Y %I:%M %p"
+
+        em = discord.Embed(description=f"**Mention** : {role.mention}\n"
+                            f"**ID** : {role.id}\n"
+                            f"**Name** : {role.name}\n"
+                            f"**Color** : {role.color}\n"
+                            f"**Created** : {role.created_at.strftime(format)} ({humanize.naturaltime(role.created_at)})\n"
+                            f"**Position** : {role.position}\n"
+                            f"**Members** : {len(role.members)}\n"
+                            f"**Permissions** : {', '.join([str(p[0]).replace('_', ' ').title() for p in role.permissions if p[1]])}", color=role.color)
+
+        em.set_footer(text="Click the reaction to see the list with all members with the role.")
+        msg = await ctx.send(embed=em)
+        await msg.add_reaction("<:greenTick:596576670815879169>")
+
+        def check(payload):
+            return payload.message_id == msg.id and payload.emoji.name == "greenTick" and payload.user_id == ctx.author.id
+
+        try:
+            payload = await self.bot.wait_for("raw_reaction_add", check=check, timeout=30)
+        except asyncio.TimeoutError:
+            return await msg.delete()
+
+        await msg.delete()
+
+        d = []
+        for i in ctx.guild.members:
+            if role in i.roles:
+                d.append(i)
+
+        entries = [f"**{member.name}#{member.discriminator}** | `{member.id}` | {role.mention}" for member in d]
+        pages = Paginate2(entries)
+        paginator = menus.MenuPages(source=pages, timeout=None, delete_message_after=True)
+        await paginator.start(ctx)
 
     @commands.command()
     @commands.is_owner()
@@ -72,6 +122,9 @@ class Moderation(commands.Cog):
     @commands.has_permissions(manage_roles=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def giverole(self, ctx, member: discord.Member, role: commands.Greedy[discord.Role]):
+        if ctx.author.top_role < member.top_role:
+            return await ctx.send(f"<:redTick:596576672149667840> You can't add roles to **{member.name}** because they have higher role than you.")
+
         try:
             await member.add_roles(role)
             await ctx.send(f"<:greenTick:596576670815879169> Added {''.join(role)} role(s) to **{member.name}**.")
@@ -83,8 +136,11 @@ class Moderation(commands.Cog):
     @commands.bot_has_permissions(manage_roles=True)
     async def removerole(self, ctx, member: discord.Member, role: commands.Greedy[discord.Role]):
         if member.top_role > ctx.me.top_role:
-            return await ctx.send(f"<:redTick:596576672149667840> Can't remove roles to **{member.name}** because he has higher top role than me.")
+            return await ctx.send(f"<:redTick:596576672149667840> Can't remove roles to **{member.name}** because they have higher top role than me.")
         
+        if ctx.author.top_role < member.top_role:
+            return await ctx.send(f"<:redTick:596576672149667840> You can't remove roles to **{member.name}** because they have higher role than you.")
+
         for i in role:
             if i in member.roles:
                 roled = discord.utils.get(ctx.guild.roles, name=i.name)
@@ -165,7 +221,7 @@ class Moderation(commands.Cog):
         if len(words) >= 100:
             return await ctx.send("<:redTick:596576672149667840> You can't set more than __20__ bad words.")
         
-        word = await self.bot.pg_con.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", str(ctx.guild.id))
+        word = await self.bot.db.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", str(ctx.guild.id))
         if not word:
             return await ctx.reply("<:redTick:596576672149667840> You need first to enable the automoderation (`ami automod on`).")
 
@@ -177,7 +233,7 @@ class Moderation(commands.Cog):
             if word["bad_words"]:
                 if i in word["bad_words"]:
                     return await ctx.reply(f"<:redTick:596576672149667840> {i} is already set as a __bad word__.")
-            d = await self.bot.pg_con.fetchval("UPDATE antispam SET bad_words = array_append(bad_words, $1) WHERE guild_id = $2 RETURNING bad_words", i, str(ctx.guild.id))
+            d = await self.bot.db.fetchval("UPDATE antispam SET bad_words = array_append(bad_words, $1) WHERE guild_id = $2 RETURNING bad_words", i, str(ctx.guild.id))
 
         self.bad_words[ctx.guild.id] = d
         await ctx.send(f"<:greenTick:596576670815879169> Set **{', '.join(words)}** as bad words to detect.")
@@ -185,7 +241,7 @@ class Moderation(commands.Cog):
     @commands.command(help="Remove words from the bad words list set before, you can see the words with `ami automod badwords`.\nYou can remove also multiple words at same time.")
     @commands.has_permissions(manage_guild=True)
     async def rembadwords(self, ctx, *words:str):
-        word = await self.bot.pg_con.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", str(ctx.guild.id))
+        word = await self.bot.db.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", str(ctx.guild.id))
         if not word:
             return await ctx.reply("<:redTick:596576672149667840> You need first to enable the automoderation (`ami automod on`).")
 
@@ -196,7 +252,7 @@ class Moderation(commands.Cog):
             if i not in word["bad_words"]:
                 return await ctx.send(f"<:redTick:596576672149667840> {i} isn't in the __bad words__ list.")
         
-            d = await self.bot.pg_con.fetchval("UPDATE antispam SET bad_words = array_remove(bad_words, $1) WHERE guild_id = $2 RETURNING bad_words", i, str(ctx.guild.id))
+            d = await self.bot.db.fetchval("UPDATE antispam SET bad_words = array_remove(bad_words, $1) WHERE guild_id = $2 RETURNING bad_words", i, str(ctx.guild.id))
 
         self.bad_words[ctx.guild.id] = d
         await ctx.send(f"<:greenTick:596576670815879169> Removed **{', '.join(words)}** as bad words to detect.")
@@ -204,38 +260,60 @@ class Moderation(commands.Cog):
 
 # Clear Command
     @commands.command(help="Clear messages in `<amount>` range from the channel sent by the member specified.\nLeave `[target]` (member) blank to delete ami messages.")
-    @commands.bot_has_permissions(manage_messages=True)
     async def cleanup(self, ctx, amount: int, target: discord.Member=None):
         if amount > 500 or amount < 0:
             return await ctx.send("<:redTick:596576672149667840> Maximum is `500` due to __Discord API Limitations__.")
 
         if not target:
-            target = self.bot.user.id
+            target = ctx.me
 
         team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302]
 
         for i in team:
-            if ctx.author.id in team or ctx.author.guild_permissions.manage_messages:
+            if ctx.author.id in team:
                 continue
-            return await ctx.send("<:redTick:596576672149667840> You don't have the `Manage Messages` permission to run this command.")
+            elif not ctx.author.id in team:
+                if not ctx.author.guild_permissions.manage_messages:
+                    return await ctx.send("<:redTick:596576672149667840> You don't have the `Manage Messages` permission to run this command.")
 
-        deleted = 0
 
-        deleted = 0
-        messages = []
-        async for m in ctx.channel.history(limit=amount):
-            messages.append(m)
-            if m.author == self.bot.user:
-                try:
-                    deleted += 1
-                    await m.delete()
-                except Exception:
-                    pass
-                else:
-                    deleted += 1
+        if target.id == ctx.me.id:
+            deleted = 0
 
-        await ctx.send(f'<:greenTick:596576670815879169> Cleared **{deleted}/{amount}** messages.', delete_after=10)
-        
+            deleted = 0
+            messages = []
+            async for m in ctx.channel.history(limit=amount):
+                messages.append(m)
+                if m.author == ctx.me:
+                    try:
+                        deleted += 1
+                        await m.delete()
+                    except Exception:
+                        pass
+                    else:
+                        deleted += 1
+
+            await ctx.send(f'<:greenTick:596576670815879169> Cleared **{deleted}/{amount}** messages.', delete_after=10)
+        else:
+            if not ctx.me.guild_permissions.manage_messages:
+                return await ctx.send("<:redTick:596576672149667840> I need the `Manage Messages` permission to run this command.")
+
+            deleted = 0
+
+            deleted = 0
+            messages = []
+            async for m in ctx.channel.history(limit=amount):
+                messages.append(m)
+                if m.author == target:
+                    try:
+                        deleted += 1
+                        await m.delete()
+                    except Exception:
+                        pass
+                    else:
+                        deleted += 1
+
+            await ctx.send(f'<:greenTick:596576670815879169> Cleared **{deleted}/{amount}** messages.', delete_after=10)        
 
 # Ban Command
     @commands.command(help="Ban a member from the guild.\nThis supports multiple mentions.")
@@ -320,12 +398,12 @@ class Moderation(commands.Cog):
             return await ctx.reply(f"<:redTick:596576672149667840> {role} was not found in the guild roles.")
 
         guild_id = str(ctx.guild.id)
-        db = await self.bot.pg_con.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
+        db = await self.bot.db.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
         if not db:
-            await self.bot.pg_con.execute("INSERT INTO moderation (guild_id, muted_role) VALUES ($1, $2)", guild_id, role.id)
+            await self.bot.db.execute("INSERT INTO moderation (guild_id, muted_role) VALUES ($1, $2)", guild_id, role.id)
             return await ctx.reply(f"<:greenTick:596576670815879169> {role.mention} set as muted role. This role will be used for `ami mute`, so check out if this role have the permissions you want muted members have.")
 
-        await self.bot.pg_con.execute("UPDATE moderation SET muted_role = $1 WHERE guild_id = $2", role.id, guild_id)
+        await self.bot.db.execute("UPDATE moderation SET muted_role = $1 WHERE guild_id = $2", role.id, guild_id)
         await ctx.reply(f"<:greenTick:596576670815879169> {role.mention} set as the new muted role.")
 
     @commands.command(help="Mute a member in the guild giving to him/her the muted role set with `ami muterole`.\nThis supports also multiple members provied.")
@@ -339,7 +417,7 @@ class Moderation(commands.Cog):
             return await ctx.reply(f"<:redTick:596576672149667840> You can't mute more than `{limit}` people at same time.")
 
         guild_id = str(ctx.guild.id)
-        db = await self.bot.pg_con.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
+        db = await self.bot.db.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
         if not db:
             return await ctx.reply("<:redTick:596576672149667840> This guild has no muted role set up yet, use `ami muterole` to set the muted role and can use this command.")
 
@@ -372,7 +450,7 @@ class Moderation(commands.Cog):
             return await ctx.reply(f"<:redTick:596576672149667840> You can't unmute more than `{limit}` people at same time.")
 
         guild_id = str(ctx.guild.id)
-        db = await self.bot.pg_con.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
+        db = await self.bot.db.fetch("SELECT * FROM moderation WHERE guild_id = $1", guild_id)
         if not db:
             return await ctx.reply("<:redTick:596576672149667840> This guild has no muted role set up yet, use `ami muterole` to set the muted role and can use this command.")
 
@@ -405,11 +483,11 @@ class Moderation(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def automod(self, ctx, toggle):
         guild_id = str(ctx.guild.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", guild_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM antispam WHERE guild_id = $1", guild_id)
 
         if not data:
             s = toggle
-            await self.bot.pg_con.execute("INSERT INTO antispam (guild_id, toggle) VALUES ($1, $2)", guild_id, s)
+            await self.bot.db.execute("INSERT INTO antispam (guild_id, toggle) VALUES ($1, $2)", guild_id, s)
             return await ctx.send(f"<:greenTick:596576670815879169> Automod was succesfully set to **`{toggle}`**.")
 
         if toggle == "badwords":
@@ -430,7 +508,7 @@ class Moderation(commands.Cog):
         if toggle == tg:
             return await ctx.send(f"<:greenTick:596576670815879169> The automod for this guild is already on `{toggle}`.")
 
-        await self.bot.pg_con.execute("UPDATE antispam SET toggle = $1 WHERE guild_id = $2", toggle, guild_id)
+        await self.bot.db.execute("UPDATE antispam SET toggle = $1 WHERE guild_id = $2", toggle, guild_id)
         if toggle == "on":
             self.guilds_dict[ctx.guild.id] = True
             return await ctx.send(f"<:greenTick:596576670815879169> Automod was succesfully set to **`{toggle}`**.")
