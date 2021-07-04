@@ -1,418 +1,294 @@
-import alexflipnote
-import asyncio
-import discord
+import asyncpraw
+import random
 from discord.ext import commands
-import vacefron
-from asyncdagpi import Client, ImageFeatures
-import typing
+import discord
+import TenGiphPy
+import scathach
 import aiohttp
-from polaroid import Image as imdagpi
-import cv2 as cv
-from urllib.request import Request, urlopen
-import numpy as np
-from io import BytesIO
-from PIL import Image ,ImageDraw
 
 
-dagpi = Client("token")
-vac_api = vacefron.Client()
-alex_api = alexflipnote.Client("token")
-
-def round_func(pfp: discord.Member):
-    with Image.open(pfp).convert("RGBA") as pfp_1:
-        im = pfp_1.resize((370,370))
-        bgs = Image.new("RGBA", (0,0), 0)
-        bg = bgs.resize(im.size, Image.ANTIALIAS)
-        bigsize = (im.size[0] * 3, im.size[1] * 3)
-        mask = Image.new('L', bigsize, 0)
-        draw = ImageDraw.Draw(mask) 
-        draw.ellipse((0, 0) + bigsize, fill=255)
-        mask = mask.resize(im.size, Image.ANTIALIAS)
-        im.putalpha(mask)
-        bg.paste(im,(0,0),im)
-        im.close()
-
-    buffer = BytesIO()
-    bg.save(buffer, format="PNG")
-    buffer.seek(0)
-
-    return buffer
-
-
-class Imagesm(commands.Cog):
+class Images(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.category = "Image(s)"
+        self.category = "Images"
+        self.session = aiohttp.ClientSession()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        print(f"Image(s) Loaded")
-
-    @commands.command(help="Have an image you want to round (circle)? This command is for you. (Works only with member avatars).")
-    async def round(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            member = ctx.author
-        else:
-            member = member
-
-        try:
-            asset1 = member.avatar_url_as(size=512)
-            pfp= BytesIO(await asset1.read())
-        except Exception:
-            return await ctx.reply("<:redTick:596576672149667840> Unable to round, remember it works only with avatars, so if you want to round an external image, set that as your avatar.")
-
-        buffer = await self.bot.loop.run_in_executor(None, round_func, pfp)
-        file=discord.File(fp=buffer, filename="round.png")
-
-        await ctx.send(f"<:greenTick:596576670815879169> Image rounded in `{round(self.bot.latency*1000, 2)}ms`!", file=file)
-
-            
-
-    @commands.command(help="Get an achievement", aliases = ["ach"])
-    async def achievment(self, ctx, *,text: str, icon = None):
-        image = await alex_api.achievement(text=text, icon=icon)
-        embed = discord.Embed(color=0xffcff1).set_image(url="attachment://achievement.png")
-        image = discord.File(await (await alex_api.achievement(text=text)).read(), "achievement.png")
-        await ctx.send(embed=embed, file=image)
+        print(f"Images Loaded")
 
 
-    @commands.command(help="Make a text in supreme font/style", aliases = ["sup"])
-    async def supreme(self, ctx, *,text, dark=False, light=False):
-        image = await alex_api.supreme(text, dark, light)
-        embed = discord.Embed(color=0xffcff1).set_image(url="attachment://supreme.png")
-        image = discord.File(await (await alex_api.supreme(text=text)).read(), "supreme.png")
-        await ctx.send(embed=embed, file=image)
+    @commands.command(help="Be good and give hugs to members!")
+    async def hug(self, ctx, member: discord.Member):
+        async with self.session.get('http://api.sasaki.me:4444/hug') as resp:
+            d = await resp.text()
+            data = await self.bot.db.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.db.execute("INSERT INTO numbers (user_id, hugs) VALUES ($1, 0)", str(member.id))
+                em = discord.Embed(description=f"❤ **{ctx.author.name}** has hugged **{member.name}**!", color = 0xffcff1)
+                em.set_image(url=d)
+                em.set_footer(text=f"{member.name} got hugged 0 times from people globally! 💫")
+                await ctx.send(embed=em)
+                return
+            times = data['hugs']
+            if times == None:
+                times = 0
+            em = discord.Embed(description=f"❤ **{ctx.author.name}** has hugged **{member.name}**!", color = 0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got hugged {times+1} times from people globally! 💫")
+            await ctx.send(embed=em)
 
-    @commands.command(help="Generate an '.. is not the impostor' or '... is the impostor' meme", aliases = ["amg"])
-    async def amongus(self, ctx, color, false_or_true, *, text):
-        if len(text) > 14:
-            return await ctx.send("The text can't be over 14 characters.")
-        s = ["True", "true", "False", "false"]
-        if false_or_true in s:
-            if false_or_true == "true":
-                false_or_true = True
-            elif false_or_true == "True":
-                false_or_true = True
-            else:
-                if false_or_true == "false":
-                    false_or_true = False
-                if false_or_true == "False":
-                    false_or_true = False
-        else:
-            return await ctx.reply("Only `False` & `True` are allowed in `<false_or_true>` argument.")
+        await self.bot.db.execute("UPDATE numbers SET hugs = $1 WHERE user_id = $2", data['hugs'] + 1, str(member.id))
 
-        colors = ["red", "blue", "black", "white", "pink", "purple", "brown", "green", "cyan", "yellow", "orange"]
-        if color not in colors:
-            d = ", ".join(colors)
-            return await ctx.reply(f"This color isn't supported, available colors are:\n{d}", mention_author=False)
+    @commands.command(help="When someone make you angry, slap him!")
+    async def slap(self, ctx, member: discord.Member):
+        async with self.session.get('http://api.sasaki.me:4444/slap') as resp:
+            d = await resp.text()
+            data = await self.bot.db.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.db.execute("INSERT INTO numbers (user_id, slaps) VALUES ($1, 0)", str(member.id))
+                em = discord.Embed(description=f"🎼 **{ctx.author.name}** slaps **{member.name}**!", color = 0xffcff1)
+                em.set_image(url=d)
+                em.set_footer(text=f"{member.name} got slapped 0 times from people globally! 🖐")
+                await ctx.send(embed=em)
+                return
+            times = data['slaps']
+            if times == None:
+                times = 0
+            em = discord.Embed(description=f"🎼 **{ctx.author.name}** slaps **{member.name}**!", color = 0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got slapped {times+1} times from people globally! 🖐")
+            await ctx.send(embed=em)
 
-        image = await vac_api.ejected(text, color, false_or_true)
-        image_out = discord.File(fp = await image.read(), filename = "ejected.png")
-        await ctx.send(file = image_out)
+        await self.bot.db.execute("UPDATE numbers SET slaps = $1 WHERE user_id = $2", data['slaps'] + 1, str(member.id))
 
-    @commands.command(help="Get a little bit wide an avatar of a member")
-    async def wide(self, ctx, user: discord.Member = None):
-        if user == None:
-            user = ctx.author
+    @commands.command(help="Kill someone, if you hate him/her!")
+    async def kill(self, ctx, member: discord.Member):
+        async with self.session.get('http://api.sasaki.me:4444/kill') as resp:
+            d = await resp.text()
+            data = await self.bot.db.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.db.execute("INSERT INTO numbers (user_id, kills) VALUES ($1, 0)", str(member.id))
+                em = discord.Embed(description=f"✨ **{ctx.author.name}** killed **{member.name}**!", color = 0xffcff1)
+                em.set_image(url=d)
+                em.set_footer(text=f"{member.name} got killed 0 times from people globally! 🔪")
+                await ctx.send(embed=em)
+                return
+            times = data['kills']
+            if times == None:
+                times = 0
+            em = discord.Embed(description=f"✨ **{ctx.author.name}** killed **{member.name}**!", color = 0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got killed {times+1} times from people globally! 🔪")
+            await ctx.send(embed=em)
 
-        image = await vac_api.wide(user.avatar_url)
-        filen = ""
-        if user.is_avatar_animated:
-            filen = "wide.gif"
-        if not user.is_avatar_animated:
-            filen = "wide.png"
-        image_out = discord.File(fp = await image.read(), filename = filen)
-        await ctx.send(file = image_out)
+        await self.bot.db.execute("UPDATE numbers SET kills = $1 WHERE user_id = $2", data['kills'] + 1, str(member.id))
 
+    @commands.command(help="Be nice and kiss members!")
+    async def kiss(self, ctx, member: discord.Member):
+        async with self.session.get('http://api.sasaki.me:4444/kiss') as resp:
+            d = await resp.text()
+            data = await self.bot.db.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.db.execute("INSERT INTO numbers (user_id, kisses) VALUES ($1, 0)", str(member.id))
+                em = discord.Embed(description=f"👄 **{ctx.author.name}** kissed **{member.name}**!", color = 0xffcff1)
+                em.set_image(url=d)
+                em.set_footer(text=f"{member.name} got kissed 0 times from people globally! 🥰")
+                await ctx.send(embed=em)
+                return
+            times = data['kisses']
+            if times == None:
+                times = 0
+            em = discord.Embed(description=f"👄 **{ctx.author.name}** kissed **{member.name}**!", color = 0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got kissed {times+1} times from people globally! 🥰")
+            await ctx.send(embed=em)
 
-    @commands.command(help="Generate a stonks/not stonks meme image", aliases = ["stk"])
-    async def stonks(self, ctx, user: discord.Member = None, not_stonks = None):
-        if user == None:
-            user = ctx.author
-        
-        if not_stonks == None:
-            not_stonks = False
+        await self.bot.db.execute("UPDATE numbers SET kisses = $1 WHERE user_id = $2", data['kisses'] + 1, str(member.id))
 
-        if not_stonks == "true":
-            not_stonks = False
+    @commands.command(help="Lick a member if it looks eatable")
+    async def lick(self, ctx, member: discord.Member):
+        async with self.session.get('http://api.sasaki.me:4444/lick') as resp:
+            d = await resp.text()
+            data = await self.bot.db.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.db.execute("INSERT INTO numbers (user_id, licks) VALUES ($1, 0)", str(member.id))
+                em = discord.Embed(description=f"👄 **{ctx.author.name}** licked **{member.name}**!", color = 0xffcff1)
+                em.set_image(url=d)
+                em.set_footer(text=f"{member.name} got licked 0 times from people globally! 🥰")
+                await ctx.send(embed=em)
+                return
+            times = data['licks']
+            if times == None:
+                times = 0
+            em = discord.Embed(description=f"👄 **{ctx.author.name}** licked **{member.name}**!", color = 0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got licked {times+1} times from people globally! 🥰")
+            await ctx.send(embed=em)
 
-        if not_stonks == "false":
-            not_stonks = True
-
-        image = await vac_api.stonks(user.avatar_url, not_stonks)
-        image_out = discord.File(fp = await image.read(), filename = "stonks.png")
-        await ctx.send(file = image_out)
-
-
-
-    @commands.command(help="Apply the pixel effect on a member avatar", aliases = ["px"])
-    async def pixel(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
-
-        img = await dagpi.image_process(ImageFeatures.pixel(), url)
-        file = discord.File(fp=img.image,filename=f"pixel.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://pixel.{img.format}")
-        return await ctx.send(embed=embed, file=file)
-
-
-    @commands.command(help="Apply the polaroid effect on a member avatar", aliases = ["pl"])
-    async def polaroid(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
-
-        img = await dagpi.image_process(ImageFeatures.polaroid(), url)
-        file = discord.File(fp=img.image,filename=f"polaroid.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://polaroid.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+        await self.bot.db.execute("UPDATE numbers SET licks = $1 WHERE user_id = $2", data['licks'] + 1, str(member.id))
 
 
-    @commands.command(help="Apply the ascii effect on a member avatar", aliases = ["asc"])
-    async def ascii(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
+    @commands.command(help="Punch someone if you hate him.")
+    async def punch(self, ctx, member: discord.Member):
+        async with self.session.get('http://api.sasaki.me:4444/punch') as resp:
+            d = await resp.text()
+            data = await self.bot.db.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.db.execute("INSERT INTO numbers (user_id, punches) VALUES ($1, 0)", str(member.id))
+                em = discord.Embed(description=f"👊 **{ctx.author.name}** punched **{member.name}**!", color = 0xffcff1)
+                em.set_image(url=d)
+                em.set_footer(text=f"{member.name} got punched 0 times from people globally! 😈")
+                await ctx.send(embed=em)
+                return
+            times = data['punches']
+            if times == None:
+                times = 0
+            em = discord.Embed(description=f"👊 **{ctx.author.name}** punched **{member.name}**!", color = 0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got punched {times+1} times from people globally! 😈")
+            await ctx.send(embed=em)
 
-        img = await dagpi.image_process(ImageFeatures.ascii(), url)
-        file = discord.File(fp=img.image,filename=f"ascii.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://ascii.{img.format}")
-        return await ctx.send(embed=embed, file=file)
-
-
-    @commands.command(help="Apply the angel effect on a member avatar", aliases = ["agl"])
-    async def angel(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
-
-        img = await dagpi.image_process(ImageFeatures.angel(), url)
-        file = discord.File(fp=img.image,filename=f"angel.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://angel.{img.format}")
-        return await ctx.send(embed=embed, file=file)
-
-    @commands.command(help="Apply the paint effect on a member avatar", aliases = ["pnt"])
-    async def paint(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
-
-        img = await dagpi.image_process(ImageFeatures.paint(), url)
-        file = discord.File(fp=img.image,filename=f"paint.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://paint.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+        await self.bot.db.execute("UPDATE numbers SET punches = $1 WHERE user_id = $2", data['punches'] + 1, str(member.id))
 
 
-    @commands.command(help="See the hexa colors of a member avatar or an url image", aliases = ["clr"])
-    async def colors(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
+    @commands.command(help="Pat someone to make it happy")
+    async def pat(self, ctx, member: discord.Member):
+        async with self.session.get('http://api.sasaki.me:4444/pat') as resp:
+            d = await resp.text()
+            data = await self.bot.db.fetchrow("SELECT * FROM numbers WHERE user_id = $1", str(member.id))
+            if not data:
+                await self.bot.db.execute("INSERT INTO numbers (user_id, pats) VALUES ($1, 0)", str(member.id))
+                em = discord.Embed(description=f"👀 **{ctx.author.name}** pat **{member.name}**!", color = 0xffcff1)
+                em.set_image(url=d)
+                em.set_footer(text=f"{member.name} got patted 0 times from people globally! 💌")
+                await ctx.send(embed=em)
+                return
+            times = data['pats']
+            if times == None:
+                times = 0
+            em = discord.Embed(description=f"👀 **{ctx.author.name}** pat **{member.name}**!", color = 0xffcff1)
+            em.set_image(url=d)
+            em.set_footer(text=f"{member.name} got patted {times+1} times from people globally! 💌")
+            await ctx.send(embed=em)
 
-        img = await dagpi.image_process(ImageFeatures.colors(), url)
-        file = discord.File(fp=img.image,filename=f"colors.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://colors.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+        await self.bot.db.execute("UPDATE numbers SET pats = $1 WHERE user_id = $2", data['pats'] + 1, str(member.id))
 
+    @commands.command(help="Retrive waifu's images based on the type you provide\n`ami waifu sfw` to retrive sfw waifu's\n`ami waifu nsfw` to retrive nsfw waifu's\nLeave `[type]` blank for sfw")
+    async def waifu(self, ctx, type:str=None):
+        if type is None:
+            type = "sfw"
 
-    @commands.command(help="Apply the triangle effect on a member avatar", aliases = ["trl"])
-    async def triangle(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
+        if type:
+            if type == "nsfw":
+                if not ctx.channel.nsfw:
+                    return await ctx.send(embed=discord.Embed(description="<:alert:819704994612904017> You can use this command only in **NSFW** channels.", color = 0x2F3136))
 
-        img = await dagpi.image_process(ImageFeatures.triangle(), url)
-        file = discord.File(fp=img.image,filename=f"triangle.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://triangle.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+        async with self.session.get(f'https://api.waifu.pics/{type}/waifu') as resp:
+            d = await resp.json()
+            s = d["url"]
+            em = discord.Embed(color=0xffcff1)
+            em.set_image(url=s)
+            msg = await ctx.send(embed=em)
+            await msg.add_reaction("<:4318crossmark:848857812565229601>")
+            await msg.add_reaction("<a:4484pinkarrow:848857813085716520>")
 
+            emojis = ["4318crossmark", "4484pinkarrow"]
 
-    @commands.command(help="Apply the satan effect on a member avatar", aliases = ["st"])
-    async def satan(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
+            def check(payload):
+                return payload.message_id == msg.id and payload.emoji.name in emojis and payload.user_id == ctx.author.id
 
-        img = await dagpi.image_process(ImageFeatures.satan(), url)
-        file = discord.File(fp=img.image,filename=f"satan.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://satan.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+            while True:
+                payload = await self.bot.wait_for("raw_reaction_add", check=check)
 
+                if payload.emoji.name == "4318crossmark":
+                    return await msg.delete()
 
-    @commands.command(help="Apply the wasted effect on a member avatar", aliases = ["wst"])
-    async def wasted(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
+                if payload.emoji.name == "4484pinkarrow":
+                    async with self.session.get(f'https://api.waifu.pics/{type}/waifu') as resp:
+                        r = await resp.json()
+                        c = r["url"]
+                        embed = discord.Embed(color=0xffcff1)
+                        embed.set_image(url=c)
+                        await msg.edit(embed=embed)
 
-        img = await dagpi.image_process(ImageFeatures.wasted(), url)
-        file = discord.File(fp=img.image,filename=f"wasted.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://wasted.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+    @commands.command(help="Retrive neko's images based on the type you provide\n`ami neko sfw` to retrive sfw neko's\n`ami neko nsfw` to retrive nsfw neko's\nLeave `[type]` blank for sfw")
+    async def neko(self, ctx, type:str=None):
+        if type is None:
+            type = "sfw"
+        if type == "nsfw":
+            if not ctx.channel.nsfw:
+                return await ctx.send(embed=discord.Embed(description="<:alert:819704994612904017> You can use this command only in **NSFW** channels.", color = 0x2F3136))
+        async with self.session.get(f'https://api.waifu.pics/{type}/neko') as resp:
+            d = await resp.json()
+            s = d["url"]
+            em = discord.Embed(color=0xffcff1)
+            em.set_image(url=s)
+            msg = await ctx.send(embed=em)
+            await msg.add_reaction("<:4318crossmark:848857812565229601>")
+            await msg.add_reaction("<a:4484pinkarrow:848857813085716520>")
 
+            emojis = ["4318crossmark", "4484pinkarrow"]
 
-    @commands.command(help="Apply the jail effect on a member avatar", aliases = ["jl"])
-    async def jail(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
+            def check(payload):
+                return payload.message_id == msg.id and payload.emoji.name in emojis and payload.user_id == ctx.author.id
 
-        img = await dagpi.image_process(ImageFeatures.jail(), url)
-        file = discord.File(fp=img.image,filename=f"jail.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://jail.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+            while True:    
+                payload = await self.bot.wait_for("raw_reaction_add", check=check)
 
+                if payload.emoji.name == "4318crossmark":
+                    await msg.delete()
 
-    @commands.command(help="Apply the charchoal effect on a member avatar", aliases = ["chc"])
-    async def charchoal(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if member == None:
-            url = str(ctx.author.avatar_url_as(format="png"))
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = str(member.avatar_url_as(format="png"))
-        else:
-            if member.startswith("https"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            if member.startswith("http"):
-                url = member
-                url = member.replace("cdn.discordapp.com", "media.discordapp.net")
-            else:
-                return await ctx.send("Image not found.")
+                if payload.emoji.name == "4484pinkarrow":
+                    async with self.session.get(f'https://api.waifu.pics/{type}/neko') as resp:
+                        r = await resp.json()
+                        c = r["url"]
+                        embed = discord.Embed(color=0xffcff1)
+                        embed.set_image(url=c)
+                        await msg.edit(embed=embed)
 
-        img = await dagpi.image_process(ImageFeatures.charcoal(), url)
-        file = discord.File(fp=img.image,filename=f"charcoal.{img.format}")
-        embed = discord.Embed(color=0xffcff1).set_image(url=f"attachment://charcoal.{img.format}")
-        return await ctx.send(embed=embed, file=file)
+    @commands.command(help="Retrive shinobu's images based on the type you provide\n`ami shinobu sfw` to retrive sfw shinobu's\n`ami shinobu nsfw` to retrive nsfw shinobu's\nLeave `[type]` blank for sfw")
+    async def shinobu(self, ctx, type:str=None):
+        if type is None:
+            type = "sfw"
+        if type == "nsfw":
+            if not ctx.channel.nsfw:
+                return await ctx.send(embed=discord.Embed(description="<:alert:819704994612904017> You can use this command only in **NSFW** channels.", color = 0x2F3136))
+        async with self.session.get(f'https://api.waifu.pics/{type}/shinobu') as resp:
+            d = await resp.json()
+            s = d["url"]
+            em = discord.Embed(color=0xffcff1)
+            em.set_image(url=s)
+            msg = await ctx.send(embed=em)
+            await msg.add_reaction("<:4318crossmark:848857812565229601>")
 
+            def check(payload):
+                return payload.message_id == msg.id and payload.emoji.name == "4318crossmark" and payload.user_id == ctx.author.id
+                    
+            payload = await self.bot.wait_for("raw_reaction_add", check=check)
+            await msg.delete()
 
-    @commands.command(help="Roast someone")
-    async def roast(self, ctx, member: discord.Member = None):
-        if member == None:
-            member = ctx.author
-        
-        if member.id == self.bot.user.id:
-            return await ctx.send("Nah, roast someone else.")
+    @commands.command(help="Retrive megumin's images based on the type you provide\n`ami megumin sfw` to retrive sfw megumin's\n`ami megumin nsfw` to retrive nsfw megumin's\nLeave `[type]` blank for sfw")
+    async def megumin(self, ctx, type:str=None):
+        if type is None:
+            type = "sfw"
+        if type == "nsfw":
+            if not ctx.channel.nsfw:
+                return await ctx.send(embed=discord.Embed(description="<:alert:819704994612904017> You can use this command only in **NSFW** channels.", color = 0x2F3136))
+        async with self.session.get(f'https://api.waifu.pics/{type}/megumin') as resp:
+            d = await resp.json()
+            s = d["url"]
+            em = discord.Embed(color=0xffcff1)
+            em.set_image(url=s)
+            msg = await ctx.send(embed=em)
+            await msg.add_reaction("<:4318crossmark:848857812565229601>")
 
-        roast = await dagpi.roast()
-        await ctx.send(f"**{member.name}**, " + roast)
-
-    @commands.command(help="Get the rainbow effect with a member avatar.", aliases = ["rnbw"])
-    async def rainbow(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]] = None):
-        if member == None:
-            member = ctx.author
-
-        av = await member.avatar_url_as(format="png").read()
-        im = imdagpi(av)
-        im.apply_gradient()
-        im.save("rnbw.png")
-        file = discord.File("rnbw.png")
-        em = discord.Embed(color = 0xffcff1)
-        em.set_image(url="attachment://rnbw.png")
-        await ctx.send(file=file, embed=em)
-            
-
-
+            def check(payload):
+                return payload.message_id == msg.id and payload.emoji.name == "4318crossmark" and payload.user_id == ctx.author.id
+                    
+            payload = await self.bot.wait_for("raw_reaction_add", check=check)
+            await msg.delete()
 
 def setup(bot):
-    bot.add_cog(Imagesm(bot))
+    bot.add_cog(Images(bot))
+    
