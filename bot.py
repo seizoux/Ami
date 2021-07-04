@@ -1,38 +1,30 @@
-# There is an amateur and simple python source to config a really useful discord bot.
-# Contact me on Discord for any issues ↪ Daishiky#0828.
-# Discord Server : https://discord.gg/8ppmk2MyM4
-
-
-# Requirements, Command Prefix & Start Console Message
 import os
-import discord # library
-from discord import client  # library
-from discord.ext import commands, tasks  # library
+import discord
+from discord import client
+from discord.ext import commands, tasks
 import asyncpg
 import logging
 from collections import Counter
 import time
 import datetime
-import os
+import util.config as config
+import random
+from util.defs import is_team
+from util.subclasses import Ami
 
-
-# THIS IS THE TRIGGER PREFIX OF UR COMMANDS, LIKE ".BAN" "/BAN" "!BAN" "?BAN" "$BAN"
-intents=discord.Intents.default()
-intents.members=True
-client = commands.Bot(allowed_mentions=discord.AllowedMentions(everyone=False), command_prefix=["ami ", "Ami ", "a!"], intents=intents, chunk_guilds_at_startup=False)
+client = Ami()
 start_time = datetime.datetime.utcnow()
-async def create_db_pool():
-    client.pg_con = await asyncpg.create_pool('stuff')
-client.loop.run_until_complete(create_db_pool())
+
+async def create_bl():
+    await client.wait_until_ready()
+    db = await client.db.fetch("SELECT * FROM blacklist")
+    for i in db:
+        client.bl[i["user_id"]] = i["reason"]
+client.loop.create_task(create_bl())
 
 os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
 os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
 client.load_extension('jishaku')
-
-for filename in os.listdir('./cogs'):
-  if filename.endswith('.py'):
-    client.load_extension(f'cogs.{filename[:-3]}')
-
 
 client.socket_receive = 0
 client.socket_stats = Counter()
@@ -55,12 +47,11 @@ client.codes = {
 
 logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 
-# WARNING: HERE PUT THE TOKEN OF UR BOT!!
-token="token"
 
 @tasks.loop(minutes=30)
 async def status():
-    await client.change_presence(status=discord.Status.online,activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(client.guilds)}/1000 |  {round(client.latency*1000, 2)}ms"))
+    watcher = random.choice(['The Sky.', 'The Earth.', 'The Moon.', 'The Sun.', f'{len(client.users)} users', f'{len(client.guilds)} guilds'])
+    await client.change_presence(status=discord.Status.online,activity=discord.Activity(type=discord.ActivityType.watching, name=watcher))
 
 @client.check
 def check_commands(ctx):
@@ -71,6 +62,51 @@ async def on_ready():
     print(f"Name : {client.user.name}\nID : {client.user.id}\nLoading all cogs...")
     await status.start()
 
+@client.group(invoke_without_command=True)
+@is_team()
+async def blacklist(ctx):
+    await ctx.invoke(client.get_command("help"), **{"command":"blacklist"})
+
+@blacklist.command()
+async def add(ctx, user : discord.User, *, reason):
+    if len(reason) >= 150:
+        return await ctx.send("`reason` argument must be less than 150 chars.")
+
+    await client.db.execute("INSERT INTO blacklist (user_id, reason) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET reason = $2", user.id, reason)
+    client.bl[user.id] = reason
+    return await ctx.send(f"<:4430checkmark:848857812632076314> **`{user.name}#{user.discriminator}`** has been blacklisted for : {reason}")
+
+@blacklist.command()
+async def remove(ctx, user: discord.User):
+    db = await client.db.fetch("SELECT * FROM blacklist WHERE user_id = $1", user.id)
+    if not db:
+        return await ctx.send("<:4318crossmark:848857812565229601> This dude is not blacklisted.")
+
+    if user.id not in client.bl:
+        return await ctx.send("<:4318crossmark:848857812565229601> This dude is not blacklisted.")
+
+    await client.db.execute("DELETE FROM blacklist WHERE user_id = $1", user.id)
+    del client.bl[user.id]
+    return await ctx.send(f"<:4430checkmark:848857812632076314> **`{user.name}#{user.discriminator}`** has been unblacklisted poggies.")
+
+@client.check
+async def is_blacklisted(ctx):
+    if ctx.author.id in client.bl:
+        try:
+            em = discord.Embed(description=f"Hi buddy, looks like you were blacklisted from the bot, "
+                                "usually this happens when you got caught doing something with the bot which you are not allowed to do. "
+                                f"In this case, the reason why you get blacklisted is : `{client.bl[ctx.author.id]}`\n\nSupport : https://discord.gg/ZcErEwmVYu", color = 0xffcff1)
+            em.set_author(name=f"{ctx.author.name}#{ctx.author.discriminator}, you are blacklisted.", icon_url=ctx.author.avatar_url)
+            await ctx.author.send(embed=em)
+            return False
+        except Exception:
+            em = discord.Embed(description=f"Hi buddy, looks like you were blacklisted from the bot, "
+                                "usually this happens when you got caught doing something with the bot which you are not allowed to do. "
+                                f"In this case, the reason why you get blacklisted is : `{client.bl[ctx.author.id]}`\n\nSupport : https://discord.gg/ZcErEwmVYu", color = 0xffcff1)
+            em.set_author(name=f"{ctx.author.name}#{ctx.author.discriminator}, you are blacklisted.", icon_url=ctx.author.avatar_url)
+            await ctx.reply(embed=em)  
+            return False
+    return True
 
 @client.command(help="See the ami uptime from the last reboot", pass_context=True)
 async def uptime(ctx: commands.Context):
@@ -84,9 +120,7 @@ async def uptime(ctx: commands.Context):
     else:
         time_format = "**{h}** hours, **{m}** minutes, and **{s}** seconds."
     uptime_stamp = time_format.format(d=days, h=hours, m=minutes, s=seconds)
-    em = discord.Embed(description="{}".format(uptime_stamp), color=0xffcff1)
-    await ctx.send(embed=em)
+    await ctx.send(uptime_stamp)
 
-
-# RUN CLIENT -- IF U DELETE THIS, THE BOT DON'T WORK!!
-client.run(token)
+if __name__ == "__bot""__:
+    client.run(config.BOT_TOKEN)
