@@ -10,70 +10,8 @@ from io import BytesIO
 from wonderwords import RandomWord
 import humanize
 import typing
-from cogsf.defs import is_team
-
-def lead_func(pfp: typing.List[BytesIO], user_name:str, user_bal:str):
-    with Image.open("assets/leaderboard.png") as bg:
-
-        font = ImageFont.truetype("fonts/bebas.ttf", 90)
-        font2 = ImageFont.truetype("fonts/antom.ttf", 125)
-        draw = ImageDraw.Draw(bg)
-
-        text = f"{user_name}"
-
-        text2 = f"{user_bal}"
-
-        x, y = 130, 200
-
-        x2, y2 = x+1300, y
-
-        fillcolor = "#6495ED"
-        shadowcolor = "black"
-
-        fillcolor2 = "#DC143C"
-        shadowcolor2 = "black"
-
-        # thin border
-        draw.text((x-1, y), text, font=font, fill=shadowcolor)
-        draw.text((x+1, y), text, font=font, fill=shadowcolor)
-        draw.text((x, y-1), text, font=font, fill=shadowcolor)
-        draw.text((x, y+1), text, font=font, fill=shadowcolor)
-
-        # thicker border
-        draw.text((x-1, y-1), text, font=font, fill=shadowcolor)
-        draw.text((x+1, y-1), text, font=font, fill=shadowcolor)
-        draw.text((x-1, y+1), text, font=font, fill=shadowcolor)
-        draw.text((x+1, y+1), text, font=font, fill=shadowcolor)
-
-        draw.text((x, y), text, font=font, fill=fillcolor)
-
-        # thin border
-        draw.text((x2-1, y2), text2, font=font, fill=shadowcolor2)
-        draw.text((x2+1, y2), text2, font=font, fill=shadowcolor2)
-        draw.text((x2, y2-1), text2, font=font, fill=shadowcolor2)
-        draw.text((x2, y2+1), text2, font=font, fill=shadowcolor2)
-
-        # thicker border
-        draw.text((x2-1, y2-1), text2, font=font, fill=shadowcolor2)
-        draw.text((x2+1, y2-1), text2, font=font, fill=shadowcolor2)
-        draw.text((x2-1, y2+1), text2, font=font, fill=shadowcolor2)
-        draw.text((x2+1, y2+1), text2, font=font, fill=shadowcolor2)
-
-        draw.text((x2, y2), text2, font=font, fill=fillcolor2)
-
-        x3, y3 = x-90, y
-        for i in pfp:
-            y3 += 86
-            with Image.open(i).convert("RGBA") as pfp:
-                image1 = pfp.resize((80,80), resample=Image.NEAREST, reducing_gap=1)
-                bg.paste(image1,(x3,y3-80))
-                image1.close()
-
-        buffer = BytesIO()
-        bg.save(buffer, format="PNG")
-        buffer.seek(0)
-
-        return buffer
+from util.defs import is_team
+from util.pil_funcs import lead_func
 
 class Eco(commands.Cog):
     def __init__(self, bot):
@@ -89,7 +27,7 @@ class Eco(commands.Cog):
     @commands.cooldown(1, 30, commands.BucketType.guild)
     async def leaderboard(self, ctx):
         msg = await ctx.send("<:4430checkmark:848857812632076314> Loading leaderboard...")
-        user = await self.bot.pg_con.fetch("SELECT user_id, sum(wallet+bank) AS total, RANK() OVER (ORDER BY sum(bank+wallet) DESC) FROM users GROUP BY user_id LIMIT $1", 10)
+        user = await self.bot.db.fetch("SELECT user_id, sum(wallet+bank) AS total, RANK() OVER (ORDER BY sum(bank+wallet) DESC) FROM users GROUP BY user_id LIMIT $1", 10)
         top = []
         amount = []
         avatar_list = []
@@ -120,88 +58,55 @@ class Eco(commands.Cog):
     # Economy system commands
     @commands.command(help="Take a look on your actual balance, else mention a member to see the balance of that member.\nWith this command you can check your wallet, bank, investments and your awful pet.", aliases=["bal"])
     async def balance(self, ctx, member: discord.User = None):
-        author_id = str(ctx.author.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+
+        if not member:
+            user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", str(ctx.author.id))
+            if not user:
+                await self.bot.db.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", str(ctx.author.id))
+                em = discord.Embed(description="<:greenTick:596576670815879169> Dude, your balance is now ready to store <:cupcake:845632403405012992>! Start doing `ami bal` again to see your actual balance.", color = 0xffcff1)
+                await ctx.send(embed=em)
+                return
+
+        if member is None:
+            member = ctx.author
+
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", str(member.id))
 
         if not user:
-            await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
-            em = discord.Embed(description="<:greenTick:596576670815879169> Dude, your balance is now ready to store <:cupcake:845632403405012992>! Start doing `ami bal` again to see your actual balance.", color = 0xffcff1)
-            await ctx.send(embed=em)
-            return
+            return await ctx.reply("<:redTick:596576672149667840> This member doesn't have a balance.")
 
-        if member == None:
-            member = ctx.author if not member else member
+        invest = user[0]['investments']
+        if not invest:
+            invest = "0"
 
-        if member:
-            member_id = str(member.id)
-            user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", member_id)
+        earned = user[0]['total_earn']
+        if not earned:
+            earned = "0"
 
-            if not user:
-                return await ctx.reply("<:redTick:596576672149667840> This member doesn't have a balance.")
+        petsd = user[0]["pet_name"]
+        petse = user[0]["pet_tag"]
 
-            invest = user[0]['investments']
-            if not invest:
-                invest = "0"
-
-            earned = user[0]['total_earn']
-            if not earned:
-                earned = "0"
-
-            petsd = user[0]["pet_name"]
-            petse = user[0]["pet_tag"]
-
-            phrase = ''
+        phrase = ''
             
-            if petse == None:
-                petse = petsd
+        if petse is None:
+            petse = petsd
 
-            if petsd == None:
-                phrase = "Seems you don't have **`a pet`**, hurry up, and go to buy one to get __useful__ mining boosts!"
-            else:
-                phrase = f'You also have a companion of mine called <:doggo:820992892515778650> **`{petse}`**'
-
-            z = f"You have <:cupcake:845632403405012992> **`{user[0]['wallet']}`** in your **wallet** and <:cupcake:845632403405012992> **`{user[0]['bank']}`** in your **bank**. You've profited with <:stats:852923361948467240> **`{invest} investments`** and you've earned <:cupcake:845632403405012992> **`{earned}`** since you've started. {phrase}"
-            user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
-            em=discord.Embed(color=0xffcff1)
-            em.add_field(name="<a:9123_red_circle:819689872821583960> Balance", value =f"{z}", inline = False)
-            em.set_author(name=f"{member.name}", icon_url=f"{member.avatar_url}")
-            em.set_thumbnail(url=member.avatar_url)
-            em.set_footer(text="Ami S.R.L Bank ®", icon_url=self.bot.user.avatar_url)
-            await ctx.send(embed=em)
+        if petsd is None:
+            phrase = "N/A"
         else:
-            member_id = str(member.id)
-            user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+            phrase = f'<:doggo:820992892515778650> **`{petse}`**'
 
-            invest = user[0]['investments']
-            if not invest:
-                invest = "0"
+        em=discord.Embed(description=f"**Wallet** : <:cupcake:845632403405012992> {humanize.intcomma(user[0]['wallet'])}\n"
+                        f"**Bank** : <:cupcake:845632403405012992> {humanize.intcomma(user[0]['bank'])}\n"
+                        f"**Earned (Total)** : <:cupcake:845632403405012992> {humanize.intcomma(earned)}\n"
+                        f"**Investments (Profited)** : <:stats:852923361948467240> {humanize.intcomma(invest)}\n"
+                        f"**Pet** : {phrase}",
+                        color=0xffcff1)
 
-            earned = user[0]['total_earn']
-            if not earned:
-                earned = "0"
-
-            petsd = user[0]["pet_name"]
-            petse = user[0]["pet_tag"]
-
-            phrase = ''
-            
-            if petse == None:
-                petse = petsd
-
-            if petsd == None:
-                phrase = "Seems you don't have **`a pet`**, hurry up, and go to buy one to get __useful__ mining boosts!"
-            else:
-                phrase = f'You also have a companion of mine called <:doggo:820992892515778650> **`{petse}`**'
-
-
-            z = f"You have <:cupcake:845632403405012992> **`{user[0]['wallet']}`** in your **wallet** and <:cupcake:845632403405012992> **`{user[0]['bank']}`** in your **bank**. You've profited with <:stats:852923361948467240> **`{invest} investments`** and you've earned <:cupcake:845632403405012992> **`{earned}`** since you've started. {petse}"
-            user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
-            em=discord.Embed(color=0xffcff1)
-            em.add_field(name="<a:9123_red_circle:819689872821583960> Balance", value =f"{z}", inline = False)
-            em.set_author(name=f"{member.name}", icon_url=f"{member.avatar_url}")
-            em.set_thumbnail(url=member.avatar_url)
-            em.set_footer(text="Ami S.R.L Bank ®", icon_url=self.bot.user.avatar_url)
-            await ctx.send(embed=em)
+        em.set_author(name=f"{member.name}", icon_url=f"{member.avatar_url}")
+        em.set_thumbnail(url=member.avatar_url)
+        em.set_footer(text="Incoming new features for cuppy, stay tuned.", icon_url=self.bot.user.avatar_url)
+        await ctx.send(embed=em)
 
 
 
@@ -209,14 +114,14 @@ class Eco(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def mine(self, ctx):
         author_id = str(ctx.author.id)
-        users = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        users = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not users:
-            await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
+            await self.bot.db.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
             em = discord.Embed(description="<:greenTick:596576670815879169> Seems you're trying to mine without a balance.. i've opened one for you, now you can earn and store <:cupcake:845632403405012992>!", color = 0xffcff1)
             await ctx.send(embed=em)
 
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
 
         earnings=random.randrange(100, 700)
         pickaxe=random.randrange(1, 100)
@@ -280,16 +185,16 @@ class Eco(commands.Cog):
             em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
             await ctx.send(embed=em)
 
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + 1*earning, author_id)
-            await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + 1*earning, author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + 1*earning, author_id)
+            await self.bot.db.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + 1*earning, author_id)
 
         else:
             em = discord.Embed(description=f"⛏️ You used **{pickaxe}%** of your pickaxe's power, and earned <:cupcake:845632403405012992> **{earnings}**!\n(Seems you didn't have a pet.. why not? Check it in `ami petshop`!)", color = 0xffcff1)
             em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
             await ctx.send(embed=em)
 
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + 1*earnings + 1*earning1, author_id)  
-            await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + 1*earnings + 1*earning1, author_id)  
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + 1*earnings + 1*earning1, author_id)  
+            await self.bot.db.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + 1*earnings + 1*earning1, author_id)  
 
     @commands.command(help="Invest your awful <:cupcake:845632403405012992> and maybe earn more <:cupcake:845632403405012992>!\n50% of doubling the investment, 50% to lose the total investment.")
     @commands.cooldown(1, 3600, commands.BucketType.user)
@@ -298,7 +203,7 @@ class Eco(commands.Cog):
             return self.bot.get_command("invest").reset_cooldown(ctx)
 
         author_id = str(ctx.author.id)
-        data = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        data = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         wallet = data[0]["wallet"]
 
@@ -339,36 +244,36 @@ class Eco(commands.Cog):
             em = discord.Embed(description=f"<a:ayamecloser:820999193199509554> You've invested <:cupcake:845632403405012992> **`{amount}`** in **`{answer}`** and earned <:cupcake:845632403405012992> **`{earn}`**, with a profit of <:cupcake:845632403405012992> **`{profit}`**! You can invest again in **`1 hour`**!", color = 0xffcff1)
             em.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
             await ctx.send(embed=em)
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data[0]["wallet"] - int(amount), author_id)
-            await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data[0]["bank"] + int(earn), author_id)
-            await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", data[0]["total_earn"] + int(earn), author_id)
-            await self.bot.pg_con.execute("UPDATE users SET investments = $1 WHERE user_id = $2", data[0]["investments"] + 1, author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data[0]["wallet"] - int(amount), author_id)
+            await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data[0]["bank"] + int(earn), author_id)
+            await self.bot.db.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", data[0]["total_earn"] + int(earn), author_id)
+            await self.bot.db.execute("UPDATE users SET investments = $1 WHERE user_id = $2", data[0]["investments"] + 1, author_id)
 
         elif pon == "no":
             em = discord.Embed(description=f"<a:ayamecloser:820999193199509554> You've invested <:cupcake:845632403405012992> **`{amount}`** in **`{answer}`** but your investment was a total mistake and u lost all. You can invest again in **`1 hour`**!", color = 0xffcff1)
             em.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
             await ctx.send(embed=em)
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data[0]["wallet"] - int(amount), author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data[0]["wallet"] - int(amount), author_id)
 
 
     @commands.command(help="Get your daily gift with <:cupcake:845632403405012992> and items!\nYou can reedem this gift every 24h.")
     @commands.cooldown(1, 86400, commands.BucketType.user)
     async def daily(self, ctx):
         author_id = str(ctx.author.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not user:
-            await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
+            await self.bot.db.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
             em = discord.Embed(description="<:greenTick:596576670815879169> Ayo, i've open a balance for you: now you can redeem your daily gift!", color = 0xffcff1)
             await ctx.send(embed=em)
             self.bot.get_command("daily").reset_cooldown(ctx)
             return
 
-        await self.bot.pg_con.execute("UPDATE users SET daily_streak = $1 WHERE user_id = $2", user[0]["daily_streak"] + 1, author_id)
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        await self.bot.db.execute("UPDATE users SET daily_streak = $1 WHERE user_id = $2", user[0]["daily_streak"] + 1, author_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
 
         earnings=random.randrange(1500, 15000)
-        ite = await self.bot.pg_con.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
+        ite = await self.bot.db.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
         items = ["<:waterbottle:831186859056562277> Water Bottle", "<:redrum:831182405444173855> RedRum"]
         itemsc = random.choice(items)
         word = ""
@@ -376,10 +281,10 @@ class Eco(commands.Cog):
         if ite:
             if itemsc == "<:waterbottle:831186859056562277> Water Bottle":
                 word = "water_bottles"
-                await self.bot.pg_con.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", ite['water_bottles'] + 1, author_id)
+                await self.bot.db.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", ite['water_bottles'] + 1, author_id)
             elif itemsc == "<:redrum:831182405444173855> RedRum":
                 word = "redrums"
-                await self.bot.pg_con.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", ite['redrums'] + 1, author_id)
+                await self.bot.db.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", ite['redrums'] + 1, author_id)
 
             user_daily = user["daily_streak"]
 
@@ -393,8 +298,8 @@ class Eco(commands.Cog):
 
             await asyncio.sleep(3)
 
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
-            await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
+            await self.bot.db.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
         
         else:
             user_daily = user["daily_streak"]
@@ -409,18 +314,18 @@ class Eco(commands.Cog):
 
             await asyncio.sleep(3)
 
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
-            await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
+            await self.bot.db.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
 
 
 
     @commands.command(help="Withdraw <:cupcake:845632403405012992> from your bank.\nBe careful, people can rob your <:cupcake:845632403405012992> from your wallet.", aliases = ["wd"])
     async def withdraw(self, ctx, amount=None):
         author_id = str(ctx.author.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not user:
-            await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
+            await self.bot.db.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
             em = discord.Embed(description="<:greenTick:596576670815879169> Seems you haven't open a balance.. no problem, i've opened one for you, have fun!", color = 0xffcff1)
             await ctx.send(embed=em)
 
@@ -430,7 +335,7 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
         bal=user["bank"]
 
         if amount == "all":
@@ -450,8 +355,8 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, author_id)
-        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + amount, author_id)
+        await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, author_id)
+        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + amount, author_id)
 
         em = discord.Embed(description=f"<:greenTick:596576670815879169> You have **withdrawn** <:cupcake:845632403405012992> `{amount}`!", color = 0xffcff1)
         em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
@@ -461,10 +366,10 @@ class Eco(commands.Cog):
     @commands.command(help="Deposit your <:cupcake:845632403405012992> into your bank to block other people from robbing it.", aliases = ["dep"])
     async def deposit(self, ctx, amount=None):
         author_id = str(ctx.author.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not user:
-            await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
+            await self.bot.db.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", author_id)
             em = discord.Embed(description="<:greenTick:596576670815879169> You didn't open a balance, so i've opened one new for you, have fun!", color = 0xffcff1)
             await ctx.send(embed=em)
 
@@ -474,7 +379,7 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
         bal=user["wallet"]
 
         if amount == "all":
@@ -494,8 +399,8 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] - 1*amount, author_id)
-        await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] + amount, author_id)
+        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] - 1*amount, author_id)
+        await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] + amount, author_id)
 
         em = discord.Embed(description=f"<:greenTick:596576670815879169> You have **deposited** <:cupcake:845632403405012992> `{amount}`!", color = 0xffcff1)
         em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
@@ -506,10 +411,10 @@ class Eco(commands.Cog):
     async def send(self, ctx, member: discord.Member, amount=None):
         author_id = str(ctx.author.id)
         member_id = str(member.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not user:
-            await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", member_id)
+            await self.bot.db.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", member_id)
             em = discord.Embed(description="<:greenTick:596576670815879169> From now you have a balance! Start to earn some <:cupcake:845632403405012992> with mining!", color = 0xffcff1)
             await ctx.send(embed=em)
 
@@ -519,8 +424,8 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
-        user1 = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        user1 = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
         if not user1:
             return await ctx.send(f"<:redTick:596576672149667840> {ctx.author.mention}, this member doesn't have a balance, so you can't send <:cupcake:845632403405012992> at him.")
             
@@ -549,13 +454,13 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, author_id)
+        await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, author_id)
 
 
         em = discord.Embed(description=f"<:greenTick:596576670815879169> You've sent <:cupcake:845632403405012992> **`{amount}`** at **{member.name}**!", color = 0xffcff1)
         em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
         await ctx.send(embed=em)
-        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user1["wallet"] + amount, member_id)
+        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user1["wallet"] + amount, member_id)
 
 
     @commands.command(help="Rob <:cupcake:845632403405012992> to other members wallets!\nIf the member have less than <:cupcake:845632403405012992> 100, the rob will fail.")
@@ -563,15 +468,15 @@ class Eco(commands.Cog):
     async def rob(self, ctx, member: discord.Member):
         author_id = str(ctx.author.id)
         member_id = str(member.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", member_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", member_id)
 
         if not user:
             self.bot.get_command("rob").reset_cooldown(ctx)
-            await self.bot.pg_con.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", member_id)
+            await self.bot.db.execute("INSERT INTO users (user_id, wallet, bank) VALUES ($1, 100, 100)", member_id)
             em = discord.Embed(description="<:greenTick:596576670815879169> Ok, you're trying to rob someone, but where you store the coins?.. I've opened a balance for you, use it.", color = 0xffcff1)
             await ctx.send(embed=em)
 
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
         bal=user["wallet"]
 
         if member.id == ctx.author.id:
@@ -587,14 +492,14 @@ class Eco(commands.Cog):
 
         earnings=random.randrange(0, int(bal))
 
-        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] - earnings, member_id)
-        await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
+        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] - earnings, member_id)
+        await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", user["wallet"] + earnings, author_id)
 
         em = discord.Embed(description=f"<:greenTick:596576670815879169> You've robbed <:cupcake:845632403405012992> **`{earnings}`** at **{member.name}**!", color = 0xffcff1)
         em.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
         await ctx.send(embed=em)
 
-        await self.bot.pg_con.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
+        await self.bot.db.execute("UPDATE users SET total_earn = $1 WHERE user_id = $2", user["total_earn"] + earnings, author_id)
 
     @commands.command(help="Change the name of your pet!\nThis name will stay also for future bought pets, you can change it whenever you want to.")
     async def petname(self, ctx, *, petname):
@@ -607,18 +512,18 @@ class Eco(commands.Cog):
             return await ctx.send("<:redTick:596576672149667840> Pet name not provided. Usage: `ami petname <newpetname>`")
 
         author_id = str(ctx.author.id)
-        pet = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        pet = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
         petn = pet[0]["pet_name"]
         if not petn:
             return await ctx.send("<:redTick:596576672149667840> You don't have a pet, buy one before try to set a name to it.")
 
-        await self.bot.pg_con.execute("UPDATE users SET pet_tag = $1 WHERE user_id = $2", petname, author_id)
+        await self.bot.db.execute("UPDATE users SET pet_tag = $1 WHERE user_id = $2", petname, author_id)
         await ctx.send(f"<:greenTick:596576670815879169> Perfect! Your pet (**`{petn}`**) now has the name **{petname}**")
 
     @commands.command(help="Check your current pet and what boost it gave to you!")
     async def mypet(self, ctx):
         author_id = str(ctx.author.id)
-        pet = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        pet = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
         petn = pet[0]["pet_name"]
         pett = pet[0]["pet_tag"]
         
@@ -661,7 +566,7 @@ class Eco(commands.Cog):
     @commands.command(help="Buy the pet you've choosed from the petshop!\nPrices are the number next to the <:cupcake:845632403405012992>!")
     async def buypet(self, ctx, *, petname):
         author_id = str(ctx.author.id)
-        pet = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        pet = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if petname == None:
             return await ctx.send("<:redTick:596576672149667840> Missing the name of the pet you want to buy, check in `ami petshop`.")
@@ -700,95 +605,95 @@ class Eco(commands.Cog):
                 if pet[0]["wallet"] < 3000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", n, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 3000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", n, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 3000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+5%** in `ami mine`!")
 
             if petname == "White Ocelot":
                 if pet[0]["wallet"] < 20000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", n, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 20000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", n, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 20000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+20%** in `ami mine`!")
             
             if petname == "Baby Dragon":
                 if pet[0]["wallet"] < 35000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 35000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 35000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+25%** in `ami mine`!")
             
             if petname == "Black Rabbit":
                 if pet[0]["wallet"] < 50000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 50000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 50000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+30%** in `ami mine`!")
             
             if petname == "Ice Golem":
                 if pet[0]["wallet"] < 75000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 75000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 75000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+50%** in `ami mine`!")
 
             if petname == "Super Roo":
                 if pet[0]["wallet"] < 125000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 125000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 125000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+55%** in `ami mine`!")
 
             if petname == "Silver Cat":
                 if pet[0]["wallet"] < 150000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 150000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 150000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+60%** in `ami mine`!")
 
             if petname == "Iron Turtle":
                 if pet[0]["wallet"] < 200000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 200000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 200000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+65%** in `ami mine`!")
 
             if petname == "Primordial Butterfly":
                 if pet[0]["wallet"] < 300000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 300000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 300000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain **+70%** coins in `ami mine`!")
 
             if petname == "Mystic Pig":
                 if pet[0]["wallet"] < 350000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 350000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 350000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+75%** in `ami mine`!")
 
             if petname == "Gold Crocodile":
                 if pet[0]["wallet"] < 400000:
                     return await ctx.send("<:redTick:596576672149667840> You don't have sufficent <:cupcake:845632403405012992> to buy this pet.")
 
-                await self.bot.pg_con.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 400000, author_id)
+                await self.bot.db.execute("UPDATE users SET pet_name = $1 WHERE user_id = $2", petname, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", pet[0]["wallet"] - 400000, author_id)
                 await ctx.send(f"<:greenTick:596576670815879169> Congratulations! You've bought **{petname}**! This pet will make you gain <:cupcake:845632403405012992> **+80%** in `ami mine`!")
         else:
             return await ctx.reply("Dude, idk what are you searching but this pet isn't in the petshop", mention_author=False)
 
     @commands.command(help="This command is mostly used as a developer tool, this wont affect any balance.\nThis command just say the total <:cupcake:845632403405012992> cupcakes stored in our databse.")
     async def glbc(self,ctx,x = 5):
-        gblcs = await self.bot.pg_con.fetchval("SELECT SUM(COALESCE(wallet,0) + COALESCE(bank,0)) FROM users")
+        gblcs = await self.bot.db.fetchval("SELECT SUM(COALESCE(wallet,0) + COALESCE(bank,0)) FROM users")
         em = discord.Embed(title=f"<:cupcake:845632403405012992> storage!", description = f"```py\n» {gblcs}\n```", color = 0xffcff1)
         em.timestamp = datetime.datetime.utcnow()
         em.set_thumbnail(url=self.bot.user.avatar_url)
@@ -798,7 +703,7 @@ class Eco(commands.Cog):
     @commands.max_concurrency(1, commands.BucketType.channel)
     async def openchat(self, ctx):
         member_id = str(ctx.author.id)
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
 
         cleverbot = ac.Cleverbot("W.UQ2.O[ewxop*;3M'qa") # Create the Cleverbot client
         await ctx.reply("Started a chat, type `closechat` to end the conversation.\nHow it work? Just, talk with me as much more time you can:\n- **`> or = at 60 seconds`** = from __100__ to __1200__ <:cupcake:845632403405012992> (random).\n- **`between 60 & 120 seconds`** = from __400__ to __2300__ <:cupcake:845632403405012992> (random)\n- **`= or > of 120 seconds`** = from __1600__ to __12000__ <:cupcake:845632403405012992> (random)\n(You can't start the chat and not type, after 1 minute without messages, the chat will be automatically closed.)")
@@ -821,7 +726,7 @@ class Eco(commands.Cog):
                     earn = random.randint(1600, 12000)
 
                 await ctx.send(f"**{ctx.author.name}**, ending your chat with me because you didn't send a message for `1 minute`.\nYou talked with me for **`{round(tot)} seconds`**, so you got **<:cupcake:845632403405012992> `{earn}`**, but because you ran out of time, the earn will be the half of the half of the total, so you got **<:cupcake:845632403405012992> `{round(earn/4)}`**!")
-                await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] +1*earn/4, member_id)
+                await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] +1*earn/4, member_id)
                 return await cleverbot.close()
 
             if msg.content == "closechat":
@@ -838,7 +743,7 @@ class Eco(commands.Cog):
                     earn = random.randint(1600, 12000)
 
                 await msg.reply(f"Closing the chat, also you talked with me for **`{round(tots)} seconds`**, so you won **<:cupcake:845632403405012992> `{round(earn)}`** as a reward!")
-                await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] +1*earn, member_id)
+                await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] +1*earn, member_id)
                 return await cleverbot.close()
             else:
                 response = await cleverbot.ask(msg.content)
@@ -875,9 +780,9 @@ class Eco(commands.Cog):
     @commands.command(help="Open your personal garage, where you can store your items.\nPeople can't rob you items, don't worry ;)")
     async def buygarage(self, ctx):
         author_id = str(ctx.author.id)
-        d = await self.bot.pg_con.fetchrow("SELECT user_id FROM items WHERE user_id = $1", author_id)
+        d = await self.bot.db.fetchrow("SELECT user_id FROM items WHERE user_id = $1", author_id)
         if not d:
-            await self.bot.pg_con.execute("INSERT INTO items (user_id, water_bottles, redrums, rifles, weed, fish_rods, computers, ami_flowers, common_chests, rare_chests, epic_chests) VALUES ($1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)", author_id)
+            await self.bot.db.execute("INSERT INTO items (user_id, water_bottles, redrums, rifles, weed, fish_rods, computers, ami_flowers, common_chests, rare_chests, epic_chests) VALUES ($1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)", author_id)
             await ctx.reply("Your garage is now ready! You can now buy and store items from the shop. Use `ami garage` to take a look on your garage!", mention_author=False)
         else:
             return await ctx.reply("<:redTick:596576672149667840> You already have a garage dude, go sleep.", mention_author=False)
@@ -886,7 +791,7 @@ class Eco(commands.Cog):
     @commands.command(help="Buy items from the shop with your <:cupcake:845632403405012992>!\nThis items will be stored in your personal garage, and no one can steal it.")
     async def buyitem(self, ctx, item=None, amount=None):
         author_id = str(ctx.author.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
         if not data:
             return await ctx.reply("<:redTick:596576672149667840> Dude, you can't buy items if you don't buy a place where store it.. use `ami buygarage` to setup your personal garage!", mention_author=False)
 
@@ -897,20 +802,20 @@ class Eco(commands.Cog):
             amount = 1
 
         price = 0
-        its = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        its = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
         if item in items_names:
             if item == 'Water Bottle':
                 price = 25000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", data['water_bottles'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", data['water_bottles'] + int(amount), author_id)
             elif item == 'RedRum':
                 price = 75000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", data['redrums'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", data['redrums'] + int(amount), author_id)
             elif item == 'Hunting Rifle':
                 if data['rifles'] >= 1:
                     return await ctx.reply("<:redTick:596576672149667840> You already have a rifle, you can't buy another one.", mention_author=False)
@@ -918,13 +823,13 @@ class Eco(commands.Cog):
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = 1
-                await self.bot.pg_con.execute("UPDATE items SET rifles = $1 WHERE user_id = $2", data['rifles'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET rifles = $1 WHERE user_id = $2", data['rifles'] + int(amount), author_id)
             elif item == 'Weed':
                 price = 150000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET weed = $1 WHERE user_id = $2", data['weed'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET weed = $1 WHERE user_id = $2", data['weed'] + int(amount), author_id)
             elif item == 'Fishing Rod':
                 if data['fish_rods'] >= 1:
                     return await ctx.reply("<:redTick:596576672149667840> You already have a fishing rod, you can't buy another one.", mention_author=False)
@@ -932,19 +837,19 @@ class Eco(commands.Cog):
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = 1
-                await self.bot.pg_con.execute("UPDATE items SET fish_rods = $1 WHERE user_id = $2", data['fish_rods'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET fish_rods = $1 WHERE user_id = $2", data['fish_rods'] + int(amount), author_id)
             elif item == 'Computer':
                 price = 400000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET computers = $1 WHERE user_id = $2", data['computers'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET computers = $1 WHERE user_id = $2", data['computers'] + int(amount), author_id)
             elif item == 'Ami Flower':
                 price = 10000000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET ami_flowers = $1 WHERE user_id = $2", data['ami_flowers'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET ami_flowers = $1 WHERE user_id = $2", data['ami_flowers'] + int(amount), author_id)
 
 
         elif item in items_numbers:
@@ -954,14 +859,14 @@ class Eco(commands.Cog):
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", data['water_bottles'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", data['water_bottles'] + int(amount), author_id)
             elif item == '2':
                 item = "RedRum"
                 price = 75000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", data['redrums'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", data['redrums'] + int(amount), author_id)
             elif item == '3':
                 item = "Hunting Rifle"
                 if data['rifles'] >= 1:
@@ -970,14 +875,14 @@ class Eco(commands.Cog):
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = 1
-                await self.bot.pg_con.execute("UPDATE items SET rifles = $1 WHERE user_id = $2", data['rifles'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET rifles = $1 WHERE user_id = $2", data['rifles'] + int(amount), author_id)
             elif item == '4':
                 item = "Weed"
                 price = 150000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET weed = $1 WHERE user_id = $2", data['weed'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET weed = $1 WHERE user_id = $2", data['weed'] + int(amount), author_id)
             elif item == '5':
                 item = 'Fishing Rod'
                 if data['fish_rods'] >= 1:
@@ -986,32 +891,32 @@ class Eco(commands.Cog):
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = 1
-                await self.bot.pg_con.execute("UPDATE items SET fish_rods = $1 WHERE user_id = $2", data['fish_rods'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET fish_rods = $1 WHERE user_id = $2", data['fish_rods'] + int(amount), author_id)
             elif item == '6':
                 item = "Computer"
                 price = 400000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET computers = $1 WHERE user_id = $2", data['computers'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET computers = $1 WHERE user_id = $2", data['computers'] + int(amount), author_id)
             elif item == '7':
                 item = "Ami Flower"
                 price = 10000000*int(amount)
                 if its['bank'] < price:
                     return await ctx.reply(f"<:redTick:596576672149667840> You can't buy this item because you don't have <:cupcake:845632403405012992> **`{price}`** in your bank.", mention_author=False)
                 amount = amount
-                await self.bot.pg_con.execute("UPDATE items SET ami_flowers = $1 WHERE user_id = $2", data['ami_flowers'] + int(amount), author_id)
+                await self.bot.db.execute("UPDATE items SET ami_flowers = $1 WHERE user_id = $2", data['ami_flowers'] + int(amount), author_id)
         else:
             return await ctx.reply("<:redTick:596576672149667840> I didn't found this itemname / itemnumber in the shop.", mention_author=False)
 
         await ctx.reply(f"🌟 Well done, you've bought `{amount}` **{item}** for <:cupcake:845632403405012992> **{price}**!", mention_author=False)
-        await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", its['bank'] - price, author_id)
+        await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", its['bank'] - price, author_id)
 
 
     @commands.command(help="Check what items you have in your personal garage!\nItems will stay forever here, until you use it.")
     async def garage(self, ctx):
         author_id = str(ctx.author.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
         if not data:
             return await ctx.reply("<:redTick:596576672149667840> You don't have a garage, and for consequent no items. Use `ami buygarage` to can use this command.", mention_author=False)
 
@@ -1065,8 +970,8 @@ class Eco(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def drink(self, ctx, item):
         author_id = str(ctx.author.id)
-        ite = await self.bot.pg_con.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        ite = await self.bot.db.fetchrow("SELECT * FROM items WHERE user_id = $1", author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
 
         if not ite:
             return await ctx.reply("<:redTick:596576672149667840> Dude, you don't have a garage, and in consequent no items. Use `ami buygarage` to open your personal garage and store items bought.", mention_author=False)
@@ -1097,12 +1002,12 @@ class Eco(commands.Cog):
                 if f == "yes":
                     r = random.randint(0, 12000)
                     await ctx.reply(f"You drinked a <:waterbottle:831186859056562277> **water bottle** and you accidentally found <:cupcake:845632403405012992> **`{r}`** O.o/", mention_author=False)
-                    await self.bot.pg_con.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", ite['water_bottles'] - 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", ite['water_bottles'] - 1, author_id)
                     await asyncio.sleep(2)
-                    await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + r, author_id)
+                    await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + r, author_id)
                 else:
                     await ctx.reply(f"You drinked a <:waterbottle:831186859056562277> **water bottle** but this time you found **nothing**.", mention_author=False)
-                    await self.bot.pg_con.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", ite['water_bottles'] - 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", ite['water_bottles'] - 1, author_id)
 
         if item == "RedRum":
             if not rum:
@@ -1113,25 +1018,25 @@ class Eco(commands.Cog):
                 if f == "yes":
                     r = random.randint(0, 12000)
                     await ctx.reply(f"You drinked a <:redrum:831182405444173855> **RedRum**, you got a little bit drunky and you accidentally found <:cupcake:845632403405012992> **`{r}`** O.o/", mention_author=False)
-                    await self.bot.pg_con.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", ite['redrums'] - 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", ite['redrums'] - 1, author_id)
                     await asyncio.sleep(2)
-                    await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + r, author_id)
+                    await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + r, author_id)
                 else:
                     tot = data["wallet"] + data["bank"]
                     await ctx.reply(f"You drinked a <:redrum:831182405444173855> **RedRum**, you got a little bit drunky and you get sleep, losing **__all__** your balance (**<:cupcake:845632403405012992> `{tot}`**).", mention_author=False)
-                    await self.bot.pg_con.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", ite['redrums'] - 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", ite['redrums'] - 1, author_id)
                     await asyncio.sleep(1)
-                    await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", 0, author_id)
+                    await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", 0, author_id)
                     await asyncio.sleep(1)
-                    await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", 0, author_id)
+                    await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", 0, author_id)
 
 
     @commands.command(help="Go hunting with your hunting rifle!\nYou can buy one in our shop, without hunting rifle, you can't hunt.")
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def hunt(self, ctx):
         author_id = str(ctx.author.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
-        ite = await self.bot.pg_con.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        ite = await self.bot.db.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
 
         if not ite:
             return await ctx.reply("<:redTick:596576672149667840> Dude, you don't have a garage, and in consequent no items. Use `ami buygarage` to open your personal garage and store items bought.", mention_author=False)
@@ -1151,15 +1056,15 @@ class Eco(commands.Cog):
         else:
             reward = random.randint(1, 10000)
             await ctx.reply(f"You went hunting with your <:huntingrifle:831182405686657034> **hunting rifle** and you shot a **{animals2}**, you got <:cupcake:845632403405012992> **`{reward}`** as a reward!", mention_author=False)
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + reward, author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + reward, author_id)
 
 
     @commands.command(help="Smoke the weed you have in your garage!\nWeed are bad, be careful when smoke: something bad can happen.")
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def smoke(self, ctx, item, g=None):
         author_id = str(ctx.author.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
-        ite = await self.bot.pg_con.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        ite = await self.bot.db.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
 
         can_smoke = ['weed', 'Weed']
         if item not in can_smoke:
@@ -1188,15 +1093,15 @@ class Eco(commands.Cog):
         
         if cstatus == "good":
             await ctx.reply(f"You smoked **`{g}g`** of <:8680_Weed_shinier:819689872750280775> **{item}**. you take it so good, and you've sent **all** your bank amount to your mom! What a good son 😍", mention_author=False)
-            await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] - data['bank'], author_id)
-            await self.bot.pg_con.execute("UPDATE items SET weed = $1 WHERE user_id = $2", ite['weed'] - int(g), author_id)
+            await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] - data['bank'], author_id)
+            await self.bot.db.execute("UPDATE items SET weed = $1 WHERE user_id = $2", ite['weed'] - int(g), author_id)
             return
 
         if cstatus == "normal":
             amount = random.randint(0, data['wallet'])
             await ctx.reply(f"You smoked **`{g}g`** of <:8680_Weed_shinier:819689872750280775> **{item}**. you take it normal, but you got confused and you lost <:cupcake:845632403405012992> **`{amount}`** from your wallet, maybe you dropped your portfolio somewhere..", mention_author=False)
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] - amount, author_id)
-            await self.bot.pg_con.execute("UPDATE items SET weed = $1 WHERE user_id = $2", ite['weed'] - int(g), author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] - amount, author_id)
+            await self.bot.db.execute("UPDATE items SET weed = $1 WHERE user_id = $2", ite['weed'] - int(g), author_id)
             return
 
         if cstatus == "bad":
@@ -1204,16 +1109,16 @@ class Eco(commands.Cog):
             mfetch = await self.bot.fetch_user(member.id)
             amount = random.randint(0, data['bank'])
             await ctx.reply(f"You smoked **`{g}g`** of <:8680_Weed_shinier:819689872750280775> **{item}**. you take it really bad, and you killed **{mfetch.name}**, after you get sended in jail, but you've paid <:cupcake:845632403405012992> **{amount}** to be released.", mention_author=False)
-            await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] - amount, author_id)
-            await self.bot.pg_con.execute("UPDATE items SET weed = $1 WHERE user_id = $2", ite['weed'] - int(g), author_id)
+            await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] - amount, author_id)
+            await self.bot.db.execute("UPDATE items SET weed = $1 WHERE user_id = $2", ite['weed'] - int(g), author_id)
             return
 
     @commands.command(help="Go fishing with your fishing rod as a pro fisher!\nFishing can be so annoying, since you find a chest.")
     @commands.cooldown(1, 7, commands.BucketType.user)
     async def fish(self, ctx):
         author_id = str(ctx.author.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
-        ite = await self.bot.pg_con.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        ite = await self.bot.db.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
 
         if not ite:
             return await ctx.reply("<:redTick:596576672149667840> Dude, you don't have a garage, and in consequent no items. Use `ami buygarage` to open your personal garage and store items bought.", mention_author=False)
@@ -1235,21 +1140,21 @@ class Eco(commands.Cog):
 
             if d == "<:common_chest:838028933920325633> Common Chest":
                 await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __so lucky__! You found a **{d}**! You can open it with `ami openchest common`!", mention_author=False)
-                await self.bot.pg_con.execute("UPDATE items SET common_chests = $1 WHERE user_id = $2", ite['common_chests'] + 1, author_id)
+                await self.bot.db.execute("UPDATE items SET common_chests = $1 WHERE user_id = $2", ite['common_chests'] + 1, author_id)
             
             if d == "<:rare_chest:838028934598885417> Rare Chest":
                 await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __fucking lucky__! You found a **{d}**! You can open it with `ami openchest rare`!", mention_author=False)
-                await self.bot.pg_con.execute("UPDATE items SET rare_chests = $1 WHERE user_id = $2", ite['rare_chests'] + 1, author_id)
+                await self.bot.db.execute("UPDATE items SET rare_chests = $1 WHERE user_id = $2", ite['rare_chests'] + 1, author_id)
 
             if d == "<:epic_chest:838028935479820319> Epic Chest":
                 await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __extremely lucky__! You found a **{d}**! You can open it with `ami openchest epic`!", mention_author=False)
-                await self.bot.pg_con.execute("UPDATE items SET epic_chests = $1 WHERE user_id = $2", ite['epic_chests'] + 1, author_id)
+                await self.bot.db.execute("UPDATE items SET epic_chests = $1 WHERE user_id = $2", ite['epic_chests'] + 1, author_id)
 
         else:
             d = random.choice(fishes)
             earn = random.randint(1, 300)
             await ctx.reply(f"You went fishing with your <:fishingpole:831182405717065729> **Fishing Rod**, and you got __so **`unlucky`**__! You found a **{d}** and you sold it for <:cupcake:845632403405012992> **{earn}** O.o/", mention_author=False)
-            await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + earn, author_id)
+            await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + earn, author_id)
 
 
     @commands.command(help="Became an hacker with the computer you've bought from the shop, and hack the bank of a member.\nThis is so risky, there's a chance to lose all your balance.")
@@ -1257,9 +1162,9 @@ class Eco(commands.Cog):
     async def bankrob(self, ctx, member: discord.Member):
         author_id = str(ctx.author.id)
         member_id = str(member.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
-        data1 = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
-        ite = await self.bot.pg_con.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        data1 = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
+        ite = await self.bot.db.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
 
         if not ite:
             return await ctx.reply("<:redTick:596576672149667840> Dude, you don't have a garage, and in consequent no items. Use `ami buygarage` to open your personal garage and store items bought.", mention_author=False)
@@ -1283,26 +1188,26 @@ class Eco(commands.Cog):
             hacked = random.randint(0, data1['bank'])
             nudes = random.randint(1, 100)
             await ctx.reply(f"You became a __professional__ hacker with your <:computer:831186859287642122> **Computer**, and in the meanwhile you've **found & got**:\n\n⁕ `{nudes}` **{member.name}** nudes 😏\n⁕ `{hacked}` <:cupcake:845632403405012992> hacked from the **{member.name}** bank 😎")
-            await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] + hacked, author_id)
+            await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] + hacked, author_id)
             await asyncio.sleep(2)
-            await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data1['bank'] - hacked, member_id)
+            await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data1['bank'] - hacked, member_id)
             await asyncio.sleep(2)
-            await self.bot.pg_con.execute("UPDATE items SET computers = $1 WHERE user_id = $2", ite['computers'] - 1, author_id)
+            await self.bot.db.execute("UPDATE items SET computers = $1 WHERE user_id = $2", ite['computers'] - 1, author_id)
         else:
             hacked = random.randint(0, data1['bank'])
             losed = random.randint(0, data['bank'])
             await ctx.reply(f"You became a __professional__ hacker with your <:computer:831186859287642122> **Computer**, and **you've got**:\n\n<:cupcake:845632403405012992> **{hacked*1000}** 🤩🤩🤩\n\n**`Joking`**, you failed to hack the member bank, and you got **arrested**, losing <:cupcake:845632403405012992> **{losed}**.")
-            await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] - losed, author_id)
+            await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", data['bank'] - losed, author_id)
             await asyncio.sleep(2)
-            await self.bot.pg_con.execute("UPDATE items SET computers = $1 WHERE user_id = $2", ite['computers'] - 1, author_id)
+            await self.bot.db.execute("UPDATE items SET computers = $1 WHERE user_id = $2", ite['computers'] - 1, author_id)
 
 
     @commands.command(help="Found a chest fishing? Open it with this command!\nChest have always amazing loots.")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def openchest(self, ctx, chest):
         author_id = str(ctx.author.id)
-        data = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
-        ite = await self.bot.pg_con.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
+        data = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        ite = await self.bot.db.fetchrow('SELECT * FROM items WHERE user_id = $1', author_id)
 
         if not ite:
             return await ctx.reply("<:redTick:596576672149667840> Dude, you don't have a garage, and in consequent no items. Use `ami buygarage` to open your personal garage and store items bought.", mention_author=False)
@@ -1328,9 +1233,9 @@ class Eco(commands.Cog):
                 await msg.edit(content="<a:chest_opening:838028934708592650> Opening a <:common_chest:838028933920325633> **Common Chest**...", mention_author=False)
                 await asyncio.sleep(1)
                 await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:common_chest:838028933920325633> **Common Chest**!\n\n× <:cupcake:845632403405012992> **`{coins}`** found!", mention_author=False)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
                 await asyncio.sleep(2)
-                await self.bot.pg_con.execute("UPDATE items SET common_chests = $1 WHERE user_id = $2", ite['common_chests'] - 1, author_id)
+                await self.bot.db.execute("UPDATE items SET common_chests = $1 WHERE user_id = $2", ite['common_chests'] - 1, author_id)
             
             if chest == "rare":
                 if not ite['rare_chests']:
@@ -1343,9 +1248,9 @@ class Eco(commands.Cog):
                 await msg.edit(content="<a:chest_opening:838028934708592650> Opening a <:rare_chest:838028934598885417> **Rare Chest**...", mention_author=False)
                 await asyncio.sleep(1)
                 await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:rare_chest:838028934598885417> **Rare Chest**!\n\n× <:cupcake:845632403405012992> **`{coins}`** found!", mention_author=False)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
                 await asyncio.sleep(2)
-                await self.bot.pg_con.execute("UPDATE items SET rare_chests = $1 WHERE user_id = $2", ite['rare_chests'] - 1, author_id)
+                await self.bot.db.execute("UPDATE items SET rare_chests = $1 WHERE user_id = $2", ite['rare_chests'] - 1, author_id)
 
             if chest == "epic":
                 if not ite['epic_chests']:
@@ -1358,19 +1263,19 @@ class Eco(commands.Cog):
 
                 if eee == "**<:pixel_flower:831186859055906847> Ami Flower**":
                     z = ite["ami_flowers"]
-                    await self.bot.pg_con.execute("UPDATE items SET ami_flowers = $1 WHERE user_id = $2", z + 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET ami_flowers = $1 WHERE user_id = $2", z + 1, author_id)
 
                 elif eee == "**<:waterbottle:831186859056562277> Water Bottle**":
                     z = ite["water_bottles"]
-                    await self.bot.pg_con.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", z + 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET water_bottles = $1 WHERE user_id = $2", z + 1, author_id)
 
                 elif eee == "**<:redrum:831182405444173855> RedRum**":
                     z = ite["redrums"]
-                    await self.bot.pg_con.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", z + 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET redrums = $1 WHERE user_id = $2", z + 1, author_id)
 
                 elif eee == "**<:8680_Weed_shinier:819689872750280775> Weed**":
                     z = ite["weed"]
-                    await self.bot.pg_con.execute("UPDATE items SET weed = $1 WHERE user_id = $2", z + 1, author_id)
+                    await self.bot.db.execute("UPDATE items SET weed = $1 WHERE user_id = $2", z + 1, author_id)
 
 
                 msg = await ctx.reply("<a:chest_opening:838028934708592650> Opening a <:epic_chest:838028935479820319> **Epic Chest**.", mention_author=False)
@@ -1380,9 +1285,9 @@ class Eco(commands.Cog):
                 await msg.edit(content="<a:chest_opening:838028934708592650> Opening a <:epic_chest:838028935479820319> **Epic Chest**...", mention_author=False)
                 await asyncio.sleep(1)
                 await msg.edit(content=f"<a:chest_opening:838028934708592650> Opened <:epic_chest:838028935479820319> **Epic Chest**!\n\n× <:cupcake:845632403405012992> **`{coins}`** found!\n**x1** {eee}", mention_author=False)
-                await self.bot.pg_con.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
+                await self.bot.db.execute("UPDATE users SET wallet = $1 WHERE user_id = $2", data['wallet'] + coins, author_id)
                 await asyncio.sleep(2)
-                await self.bot.pg_con.execute("UPDATE items SET epic_chests = $1 WHERE user_id = $2", ite['epic_chests'] - 1, author_id)
+                await self.bot.db.execute("UPDATE items SET epic_chests = $1 WHERE user_id = $2", ite['epic_chests'] - 1, author_id)
         else:
             return await ctx.reply("This chest doesn't exist. Chests avilable are:\n\n<:common_chest:838028933920325633> **Common Chest** (`ami openchest common`)\n<:rare_chest:838028934598885417> **Rare Chest** (`ami openchest rare`)\n<:epic_chest:838028935479820319> **Epic Chest** (`ami openchest epic`)", mention_author=False)
 
@@ -1391,7 +1296,7 @@ class Eco(commands.Cog):
     async def givc(self,ctx,member:discord.Member,amount=None):
         member_id = str(member.id)
         author_id = str(ctx.author.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
         amount=int(amount)
 
         if member == None:
@@ -1403,8 +1308,8 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
-        await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] +1*amount, member_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
+        await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] +1*amount, member_id)
         await ctx.send(f"Added <:cupcake:845632403405012992> {amount} at {member} balance!")
 
 
@@ -1413,7 +1318,7 @@ class Eco(commands.Cog):
     async def remc(self,ctx,member:discord.Member,amount=None):
         member_id = str(member.id)
         author_id = str(ctx.author.id)
-        user = await self.bot.pg_con.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
         amount=int(amount)
 
         if member == None:
@@ -1425,8 +1330,8 @@ class Eco(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        user = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
-        await self.bot.pg_con.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, member_id)
+        user = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", member_id)
+        await self.bot.db.execute("UPDATE users SET bank = $1 WHERE user_id = $2", user["bank"] -1*amount, member_id)
         await ctx.send(f"Removed <:cupcake:845632403405012992> {amount} at {member} balance!")
 
 
