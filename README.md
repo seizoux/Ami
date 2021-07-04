@@ -20,6 +20,10 @@ If you asked and talked with all the team, and all are fine with that, yes.
 
 If you are totally sure your code works and you have tested it for a while, yes.
 
+**4 - Can i took code sources from here and put them into my application?**
+
+No, codes from this source needs to stay there, unless your application is private and you want just to test.
+
 # Requirements
 - PostgreSQL 13
 - Python 3.9+
