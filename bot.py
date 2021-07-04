@@ -11,8 +11,36 @@ import util.config as config
 import random
 from util.defs import is_team
 from util.subclasses import Ami
+import logging, discord, asyncio
+from discord.ext import commands, tasks
 
 client = Ami()
+
+class LoggerHandler(logging.Handler):
+    def setBot(self, bot: commands.Bot):
+        self._bot = bot
+
+    def send_via_hook(self, log: str):
+        try:
+            _ = self._bot
+        except AttributeError:
+            print("Bot was not set dumbass.")
+            return
+        
+        asyncio.create_task(self._bot.send_via_hook("https://discord.com/api/webhooks/861361395004997643/Ysjbz8gyj_NNxdmbnnfXBhLzREuox7k17YabbYHb_oi6TeqqutWzZhL1tVGf8ja-5Zx9", log)) # create task to send data through webhook
+
+    def handle(self, record: logging.LogRecord):
+        fmted_string = self.formatter.format(record)
+        self.send_via_hook(f"```sh\n{fmted_string}\n```")
+
+
+logger = logging.getLogger("discord")
+logger.setLevel(logging.INFO)
+
+handler = LoggerHandler(logging.INFO)
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
+
 start_time = datetime.datetime.utcnow()
 
 async def create_bl():
@@ -122,5 +150,6 @@ async def uptime(ctx: commands.Context):
     uptime_stamp = time_format.format(d=days, h=hours, m=minutes, s=seconds)
     await ctx.send(uptime_stamp)
 
-if __name__ == "__bot""__:
-    client.run(config.BOT_TOKEN)
+# RUN CLIENT -- IF U DELETE THIS, THE BOT DON'T WORK!!
+handler.setBot(client)
+client.run(config.BOT_TOKEN)
