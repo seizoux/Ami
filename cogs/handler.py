@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.errors import CommandNotFound, BotMissingPermissions
 import humanize
+import difflib
+import asyncio
 
 class Handler(commands.Cog):
     def __init__(self, bot):
@@ -12,25 +14,11 @@ class Handler(commands.Cog):
         print(f"Handler Loaded")
 
     @commands.Cog.listener()
-    async def on_command(self, ctx):
-        channel = 832647521536573500
-        try:
-            try:
-                invite = await ctx.guild.invites()
-                name = ctx.guild.name
-                hyp = f'[**{name}**]({invite[0]})'
-            except Exception:
-                invite = ""
-                name = ctx.guild.name
-                hyp = f'**{name}**'
-        except Exception:
-            return
-        ch = self.bot.get_channel(channel)
-        em = discord.Embed(description=f"<a:blackribbon:819739315004637194> **{ctx.author.name}#{ctx.author.discriminator}** has used `ami {ctx.command.qualified_name}` in {hyp}", color = 0x2F3136)
-        await ch.send(embed=em)
-
-    @commands.Cog.listener()
     async def on_command_error(self,ctx,error):
+        try:
+            ctx.command.reset_cooldown(ctx)
+        except Exception:
+            pass
 
         if isinstance(error, commands.CommandInvokeError):
             error = error.original
@@ -65,8 +53,11 @@ class Handler(commands.Cog):
                 pass
 
         elif isinstance(error, commands.CommandOnCooldown):
-            em = discord.Embed(description="<a:cless:819712309919744000> You're on cooldown, retry in **{}**.".format(humanize.precisedelta(error.retry_after)), color = 0x2F3136)
-            await ctx.reply(embed=em)
+            return await ctx.reply("<a:cless:819712309919744000> Chill dude, retry in **{}**.".format(humanize.precisedelta(error.retry_after)))
+
+        elif isinstance(error, commands.MemberNotFound):
+            d = "".join(error.args)
+            return await ctx.send(f"<:alert:819704994612904017> {d}")
 
         elif isinstance(error, commands.BadArgument):
             pass
@@ -74,15 +65,23 @@ class Handler(commands.Cog):
         elif isinstance(error, commands.NotOwner):
             return
 
-        elif isinstance(ctx.channel, discord.DMChannel):
-            pass
-
         elif isinstance(error, CommandNotFound):
-            pass
+            return
 
         elif isinstance(error, commands.MaxConcurrencyReached):
+            cmd = ctx.command.qualified_name
+            return await ctx.send(f"<:alert:819704994612904017> There's already a **{cmd}** command running.")
+
+        elif isinstance(error, commands.CheckFailure):
             pass
         else:
+            chan = self.bot.get_channel(854669240228773898)
+            auth = "No author, is an event."
+            if ctx.author:
+                auth = f"{ctx.author.name}#{ctx.author.discriminator}"
+                command = ctx.command.qualified_name
+            em = discord.Embed(title="Something fucked up badly.", description=f"Errored in **{ctx.guild.name}** by : **{auth}** with **{command}**\n```py\n{error}\n```", color = 0x2F3136)
+            await chan.send(embed=em)
             raise error
 
 def setup(bot):
