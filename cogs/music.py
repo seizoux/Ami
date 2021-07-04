@@ -280,7 +280,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                         rest_uri="http://127.0.0.1:2333",
                         password="youshallnotpass",
                         identifier="Ami",
-                        region="europe",
+                        region="us_central",
                         heartbeat=60,
                     )
 
@@ -318,6 +318,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        await self.bot.wait_until_ready()
         if member.bot:
             return
 
@@ -406,7 +407,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         """Check whether the user is an Admin or DJ."""
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
-        team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302]
+        team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302, 343019667511574528]
 
         return ctx.author.id in team or player.dj == ctx.author or ctx.author.guild_permissions.kick_members
 
