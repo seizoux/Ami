@@ -1,9 +1,6 @@
 import discord
 from discord.ext import commands
 from discord.ext.commands.errors import CommandNotFound
-from asyncdagpi import Client, ImageFeatures
-
-dagpi = Client("token")
 
 class Help(commands.Cog):
     def __init__(self, bot):
@@ -19,23 +16,27 @@ class Help(commands.Cog):
     async def help(self, ctx, *, command=None):
         if command:
             if command.lower() == "moderation":
-                embed=discord.Embed(title="<:moderation:846314041991102474> Moderation commands", description=f"Moderation, i think you know what type of commands they are. Manage your server with easy commands, ban people when they break the rules, mute fast people who are spamming, and other stuff you can just read after!\n\n• `ban`, `kick`, `mute`, `muterole`, `unban`, `unmute`, `cleanup`, `slowmode`, `automod`, `addbadwords`, `rembadwords`, `deletechannel`, `createchannel`, `removerole`, `giverole`", color=0xffcff1)
+                embed=discord.Embed(title="<:moderation:846314041991102474> Moderation commands", description=f"Moderation, i think you know what type of commands they are. Manage your server with easy commands, ban people when they break the rules, mute fast people who are spamming, and other stuff you can just read after!\n\n• `ban`, `kick`, `mute`, `muterole`, `unban`, `unmute`, `cleanup`, `roleinfo`, `slowmode`, `automod`, `addbadwords`, `rembadwords`, `deletechannel`, `createchannel`, `removerole`, `giverole`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "cuppy":
-                embed=discord.Embed(title="<:cupcake:845632403405012992> Cuppy commands", description=f"Cuppy is a type of economy, well that's an economy, but with some major features, such like mining, games, investments, pet's and a currency based on **cupcakes**! Start farming cupcakes and be the richest one.\n\n• `bal`, `dep`, `wd`, `shop`, `buyitem`, `garage`, `drink`, `hunt`, `smoke`, `fish`, `bankrob`, `openchest`, `openchat`, `rob`, `send`, `daily`, `mine`, `tictactoe`, `invest`, `petshop`, `buypet`, `petname`, `leaderboard`, `glbc`", color=0xffcff1)
+                embed=discord.Embed(title="<:cupcake:845632403405012992> Cuppy commands", description=f"Cuppy is a type of economy, well that's an economy, but with some major features, such like mining, games, investments, pet's and a currency based on **cupcakes**! Start farming cupcakes and be the richest one.\n\n• `bal`, `dep`, `wd`, `shop`, `buyitem`, `garage`, `drink`, `hunt`, `smoke`, `fish`, `bankrob`, `openchest`, `openchat`, `rob`, `send`, `daily`, `mine`, `tictactoe`, `rockpaperscissors`, `invest`, `petshop`, `buypet`, `petname`, `leaderboard`, `glbc`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "music":
                 embed=discord.Embed(title="<:music:846314041743114272> Music commands", description=f"Make your members enjoy in one of the best music, online 24/7h, with support of live stream videos from youtube! Add equalizers to your favorite song, move the seek to skip segments, loop the song to can listen it forever!\n\n• `play`, `join`, `leave`, `volume`, `stop`, `24/7`, `lyrics`, `pause`, `resume`, `remove`, `seek`, `shuffle`, `loop`, `queue`, `skip`, `np`, `equalizer`, `filter`, `swap`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
-            elif command.lower() == "manip":
-                embed=discord.Embed(title="<:image:846316572812509184> Manipulation commands", description=f"Apply filters to member avatars, round avatars, create images with your texts, get the colors in HEXA from a member avatar, and other funny commands: have fun with our image manipulation!\n\n• `achievement`, `supreme`, `pixel`, `polaroid`, `ascii`, `angel`, `paint`, `colors`, `triangle`, `satan`, `wasted`, `jail`, `charchoal`, `rainbow`, `wide`, `round`, `stonks`, `amongus`", color = 0xffcff1)
+            elif command.lower() == "image":
+                embed=discord.Embed(title="<:image:846316572812509184> Image commands", description=f"Apply filters to member avatars, round avatars, create images with your texts, get the colors in HEXA from a member avatar, and other funny commands: have fun with our image manipulation!\n\n• `achievement`, `supreme`, `pixel`, `polaroid`, `ascii`, `angel`, `paint`, `colors`, `triangle`, `satan`, `wasted`, `jail`, `charchoal`, `rainbow`, `wide`, `round`, `stonks`, `amongus`, `waifu`, `neko`, `shinobu`, `megumin`", color = 0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
-            elif command.lower() == "misc":
-                embed=discord.Embed(title="<:misc:846314042071056384> Misc commands", description=f"Miscellaneous, commands which have no category, placed here for that. Retrive info about users, search something on google directly here, and yes, ton of other commands.\n\n• `nitro`, `ship`, `gaymeter`, `reactspeed`, `choose`, `fact`, `textttospeech`, `time`, `roast`, `count`, `membercount`, `info`, `invite`, `calculate`, `vote`, `userinfo`, `memberlist`, `google`, `html`, `avatar`, `searchanime`, `check`, `afk`, `remind`, `rtfm`, `waifu`, `neko`, `shinobu`, `megumin`, `lick`, `kiss`, `kill`, `slap`, `hug`, `punch`, `pat`", color=0xffcff1)
+            elif command.lower() == "fun":
+                embed=discord.Embed(title="<:misc:846314042071056384> Fun commands", description=f"Fun commands. Have fun with some cool commands such like a gaymeter, a pp size generator, ship, fake nitro gift and ton of others.\n\n• `nitro`, `ship`, `gaymeter`, `reactspeed`, `penis-size`, `textttospeech`, `roast`, `count`, `lick`, `kiss`, `kill`, `slap`, `hug`, `punch`, `pat`", color=0xffcff1)
+                embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
+                return await ctx.send(embed=embed)
+            elif command.lower() == "utility":
+                embed=discord.Embed(title="<:AGC_k3llyLUL:771033767434518539> Utility commands", description=f"Utility commands. Retrive info about users, search something on google directly here, and yes, ton of other commands.\n\n• `choose`, `fact`, `password`, `binary`, `reverse`, `twitch`, `time`, `translate`, `membercount`, `urban`, `info`, `invite`, `calculate`, `vote`, `userinfo`, `serverinfo`, `memberlist`, `google`, `html`, `avatar`, `searchanime`, `check`, `afk`, `remind`, `rtfm`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "leveling":
@@ -47,7 +48,7 @@ class Help(commands.Cog):
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "welcome":
-                embed=discord.Embed(title="<:welcome:846316342226845746> Welcome commands (click here for youtube tutorial)", url="https://youtu.be/dKFYxT3Yn3g", description="Setup a total customizable welcome for your discord server, customize the message, enable the embed for the message, choose what role give at new members (up to 20), choose in what channel send the message, and give a cute welcome to new people! Oh right, there's also a cute image when embed is enabled ;)\n\n• `setwelc`, `welcset`, `setmex`, `setroles`, `delroles`, `setassign`, `setchannel`, `emb`, `wel`\n\n**You can also use some variables in the welcome message!**\n```py\n{name} > will return the member name\n{member} > will return like Name#1234\n{mention} > will return the member mention\n{count} > will return the position where it joined\n{age} > will return the account date creation\n{guild} > will return the guild name\n```", color = 0xffcff1)
+                embed=discord.Embed(title="<:welcome:846316342226845746> Welcome commands (click here for youtube tutorial)", url="https://youtu.be/dKFYxT3Yn3g", description="Setup a total customizable welcome for your discord server, customize the message, enable the embed for the message, choose what role give at new members (up to 20), choose in what channel send the message, and give a cute welcome to new people! Oh right, there's also a cute image when embed is enabled ;)\n\n• `welcome set`, `welcome settings`, `welcome message`, `welcome setroles`, `welcome delroles`, `welcome assignrole`, `welcome channel`, `welcome embed`, `welcome wel`\n\n**You can also use some variables in the welcome message!**\n```py\n{name} > will return the member name\n{member} > will return like Name#1234\n{mention} > will return the member mention\n{count} > will return the position where it joined\n{age} > will return the account date creation\n{guild} > will return the guild name\n```", color = 0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
 
@@ -59,8 +60,9 @@ class Help(commands.Cog):
             em.add_field(name="<:moderation:846314041991102474> Moderation", value = f"`ami help moderation`")
             em.add_field(name="<:cupcake:845632403405012992> Cuppy", value = f"`ami help cuppy`")
             em.add_field(name="<:music:846314041743114272> Music", value = f"`ami help music`")
-            em.add_field(name="<:image:846316572812509184> Manipulation", value = f"`ami help manip`")
-            em.add_field(name="<:misc:846314042071056384> Misc", value = f"`ami help misc`")
+            em.add_field(name="<:image:846316572812509184> Image", value = f"`ami help image`")
+            em.add_field(name="<:misc:846314042071056384> Fun", value = f"`ami help fun`")
+            em.add_field(name="<:AGC_k3llyLUL:771033767434518539> Utility", value = f"`ami help utility`")
             em.add_field(name="<:welcome:846316342226845746> Welcome", value = f"`ami help welcome`")
             em.add_field(name="<:8853_Uno_Nanbaka_Hum:852002554691059724> Leveling", value="`ami help leveling`")
             em.add_field(name="<:2158takolaugh:852220010830889021> Boosting", value="`ami help boosting`")
