@@ -27,7 +27,7 @@ class Top(commands.Cog):
     async def on_dbl_vote(self, data):
         channel = 832837401264914442
         d = self.bot.get_channel(channel)
-        user = await self.bot.fetch_user(data["user"])
+        user = (self.bot.get_user(data["user"])) or (await self.bot.fetch_user(data["user"]))
         user_id = str(data['user'])
         message = ""
         coins = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
@@ -48,7 +48,7 @@ class Top(commands.Cog):
     async def on_dbl_test(self, data):
         channel = 832837401264914442
         d = self.bot.get_channel(channel)
-        user = await self.bot.fetch_user(data["user"])
+        user = (self.bot.get_user(data["user"])) or (await self.bot.fetch_user(data["user"]))
         user_id = str(data['user'])
         message = ""
         coins = await self.bot.pg_con.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
