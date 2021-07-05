@@ -49,7 +49,7 @@ class Welcome(commands.Cog):
                 return
 
             try:
-                channel = await self.bot.fetch_channel(chan)
+                channel = self.bot.get_channel(chan)
             except Exception:
                 return
 
