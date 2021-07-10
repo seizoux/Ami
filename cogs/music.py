@@ -441,7 +441,8 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         channel = getattr(ctx.author.voice, 'channel', channel)
         if channel is None:
-            return await ctx.send("<:4318crossmark:848857812565229601> | You are not connected to any voice channel.")
+            await ctx.send("<:4318crossmark:848857812565229601> | You are not connected to any voice channel.")
+            raise IncorrectChannelError
 
         await player.connect(channel.id)
         if isinstance(channel, discord.StageChannel):
