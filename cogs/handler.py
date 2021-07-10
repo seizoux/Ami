@@ -15,10 +15,11 @@ class Handler(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self,ctx,error):
-        try:
-            ctx.command.reset_cooldown(ctx)
-        except Exception:
-            pass
+        if ctx.command.qualified_name != "daily":
+            try:
+               ctx.command.reset_cooldown(ctx)
+            except Exception:
+               pass
 
         if isinstance(error, commands.CommandInvokeError):
             error = error.original
