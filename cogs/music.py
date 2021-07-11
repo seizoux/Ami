@@ -504,7 +504,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             if ctx.author.voice:
                 await ctx.invoke(self.join)
             else:
-                return
+                return await ctx.send("<:4318crossmark:848857812565229601> | You are not connected to any voice channel.")
 
         query = query.strip('<>')
 
