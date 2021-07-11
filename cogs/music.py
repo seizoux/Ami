@@ -501,7 +501,8 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return await ctx.send(embed=em)
 
         if not player.is_connected:
-            await ctx.invoke(self.join)
+            if ctx.author.voice;
+                await player.connect(ctx.author.voice.channel.id)
 
         query = query.strip('<>')
 
