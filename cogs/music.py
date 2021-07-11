@@ -442,7 +442,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         channel = getattr(ctx.author.voice, 'channel', channel)
         if channel is None:
             await ctx.send("<:4318crossmark:848857812565229601> | You are not connected to any voice channel.")
-            raise IncorrectChannelError
+            return
 
         await player.connect(channel.id)
         if isinstance(channel, discord.StageChannel):
@@ -501,8 +501,10 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return await ctx.send(embed=em)
 
         if not player.is_connected:
-            if ctx.author.voice;
-                await player.connect(ctx.author.voice.channel.id)
+            try:
+                await ctx.invoke(self.join)
+            except Exception:
+                return
 
         query = query.strip('<>')
 
