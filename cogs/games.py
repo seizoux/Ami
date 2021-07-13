@@ -184,6 +184,9 @@ class Games(commands.Cog):
 
     @commands.command(aliases=["ttt"], help="Play a fun tictactoe game with bet your <:cupcake:845632403405012992>!\nThe winner gets as reward the **bet placed * 2** (one from his balance, and one from the opponent balance), example: if you bet **35000**, who wins get **70000** (__35k__ are from his balance and __35k__ from opponent balance)\nIf the game ends as draw, no <:cupcake:845632403405012992> will be taken from eithers balances.")
     async def tictactoe(self, ctx, opponent: discord.Member, bet: int):
+        if opponent == ctx.author:
+            return await ctx.send("<:4318crossmark:848857812565229601> You can't play against yourself.")
+
         db2 = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", str(opponent.id))
         if not db2:
             return await ctx.send(
