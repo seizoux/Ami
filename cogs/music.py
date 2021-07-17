@@ -365,6 +365,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         """
         player: Player = self.bot.wavelink.get_player(ctx.guild.id, cls=Player, context=ctx)
 
+        if not player.context.channel:
+           return False
+
         if player.context:
             if player.context.channel != ctx.channel:
                 em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention}, i am already in {player.context.channel.mention}", color = 0xffcff1)
