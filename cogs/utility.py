@@ -208,17 +208,9 @@ class Utility(commands.Cog):
         cpu_usage = psutil.cpu_percent()
         m = psutil.Process().memory_full_info()
         ram_usage=humanize.naturalsize(m.rss)
-        cmds = len(self.bot.commands)
+        cmds = len(list(self.bot.walk_commands()))
         vc = sum(len(guild.voice_channels) for guild in self.bot.guilds)
         txt = sum(len(guild.text_channels) for guild in self.bot.guilds)
-
-        count = 0
-        for cmd in self.bot.commands:
-            try:
-                await cmd.can_run(ctx)
-                count += 1
-            except:
-                continue
 
         time_1 = time.perf_counter()
         await ctx.trigger_typing()
@@ -237,7 +229,7 @@ class Utility(commands.Cog):
         em.add_field(name="<:settings:585767366743293952> Stats", value=f"<:upward_stonks:739614245997641740> Guilds: `{len(self.bot.guilds)}`\n<:upward_stonks:739614245997641740> Users: `{len(self.bot.users)}`",inline=False)
         em.add_field(name="<:settings:585767366743293952> Latency", value=f"<:greenTick:596576670815879169> Websocket: `{round(self.bot.latency*1000, 2)}ms`\n<:greenTick:596576670815879169> Typing: `{ping}ms`", inline=False)
         em.add_field(name="<:settings:585767366743293952> VPS (Usage)", value=f"<:rich_presence:658538493521166336> RAM: `{ram_usage}`\n<:rich_presence:658538493521166336> CPU: `{cpu_usage}%`")
-        em.add_field(name="<:settings:585767366743293952> Commands", value=f"<:upward_stonks:739614245997641740> Total Commands: `{cmds}`\n<:upward_stonks:739614245997641740> Runnable by you: `{count}`\n<:upward_stonks:739614245997641740> Invoked: `{self.bot.command_counter}`",inline=False)
+        em.add_field(name="<:settings:585767366743293952> Commands", value=f"<:upward_stonks:739614245997641740> Total Commands: `{cmds}`\n<:upward_stonks:739614245997641740> Invoked: `{self.bot.command_counter}`",inline=False)
         em.set_thumbnail(url=self.bot.user.avatar_url)
         em.timestamp = datetime.datetime.utcnow()
         await ctx.send(embed=em)
