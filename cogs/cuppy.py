@@ -7,9 +7,17 @@ import humanize
 
 class Pickaxe:
     def check_durability(dur:int):
+        """
+        Checking if the pickaxe durability isn't 0.
+        """
         return dur != 0
 
     def upgrade_pick(pick_type:str):
+        """
+        Simple function to get the upgraded
+        pickaxe with the actual one. Everything
+        is managed after in the command.
+        """
         pickaxes_upgrade = {
             "wood": "golden",
             "golden": "ephemeral",
@@ -25,9 +33,15 @@ class Pickaxe:
         return pickaxes_upgrade[pick_type]
 
     def check_xp(pick_xp:int, pick_needed_xp:int):
+        """
+        XP Pickaxe checker for upgrade.
+        """
         return pick_xp >= pick_needed_xp
 
     def emoji(pick_type:str):
+        """
+        Pickaxe emojis.
+        """
         pickaxes_emoji = {
             "wood": "<:wood_pickaxe:862694657845755924>",
             "golden": "<:golden_pickaxe:862694657833304094>",
@@ -41,6 +55,9 @@ class Pickaxe:
         return pickaxes_emoji[pick_type]
 
     def name(pick_type:str):
+        """
+        Pickaxe readable names.
+        """
         pickaxes_names = {
             "wood": "Wooden Pickaxe",
             "golden": "Golden Pickaxe",
@@ -53,7 +70,11 @@ class Pickaxe:
 
         return pickaxes_names[pick_type]
 
-    def can_drop(pick_type:str):
+class Lootbox:
+    def can_drop(l_type:str):
+        """
+        What each lootbox can drop.
+        """
         lootbox_can_drop = {
             "common" : ["bronze"],
             "uncommon" : ["bronze", "silver"],
@@ -61,10 +82,12 @@ class Pickaxe:
             "epic" :["bronze", "silver", "gold", "diamond"]
         }
 
-        return lootbox_can_drop[pick_type]
-
-class Lootbox:
+        return lootbox_can_drop[l_type]
+    
     def emoji(l_type:str):
+        """
+        Lootboxes emojis.
+        """
         lootboxes = {
             "common": "<:lootbox:867758260622590002>",
             "uncommon": "<:uncommon:867764757733834793>",
@@ -75,6 +98,10 @@ class Lootbox:
         return lootboxes[l_type]
 
     def coins(l_type:str):
+        """
+        How many cupcakes can drop
+        each lootbox.
+        """
         lootboxes_drop_cupcakes = {
             "common" : random.randint(100, 350),
             "uncommon" : random.randint(350, 750),
@@ -85,6 +112,10 @@ class Lootbox:
         return lootboxes_drop_cupcakes[l_type]
 
     def minerals(self, l_type:str):
+        """
+        How many minerals can drop
+        each lootbox.
+        """
         lootboxes_drop_minerals = {
             "common" : {"bronze" : random.randint(1, 45)},
             "uncommon" : {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20)},
