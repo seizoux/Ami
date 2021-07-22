@@ -5,6 +5,41 @@ import random
 import asyncio
 import humanize
 
+class Mineral:
+    def emoji(mineral:str):
+        emo = {
+            "bronze": "<:bronze:867815549144530944>",
+            "silver": "<:silver:867815548950413313>",
+            "gold": "<:gold:867815549042819113>",
+            "diamond": "<:diamond:867815548862332969>"
+        }
+
+        return emo[mineral]
+
+    def name(mineral:str):
+        name = {
+            "bronze": "Bronze",
+            "silver": "Silver",
+            "gold": "Gold",
+            "diamond": "Diamond"
+        }
+
+        return name[mineral]
+
+    def amount(mineral_name:str):
+        rates = {
+            "bronze": random.randint(1, 100),
+            "silver": random.randint(1, 50),
+            "gold": random.randint(1, 20),
+            "diamond": random.randint(1, 5)
+        }
+
+        return rates[mineral_name]
+
+    def luck_cupcake():
+        r = random.randint(1, 100)
+        return r in range(1, 10)
+
 class Pickaxe:
     def check_durability(dur:int):
         """
@@ -70,16 +105,32 @@ class Pickaxe:
 
         return pickaxes_names[pick_type]
 
+    def perks(pick_type:str):
+        """
+        Pickaxe perks.
+        """
+        pickaxes_perks = {
+            "wood": "No Special Perks.",
+            "golden": "+5% chance to get gold.",
+            "ephemeral": "+10% chance to get gold.",
+            "candy": "+20% chance to get gold.",
+            "sky": "+5% chance to get diamonds.",
+            "nebula": "+10% chance to get diamonds.",
+            "divine": "+20% chance to get diamonds."
+        }
+
+        return pickaxes_perks[pick_type]
+
 class Lootbox:
     def can_drop(l_type:str):
         """
         What each lootbox can drop.
         """
         lootbox_can_drop = {
-            "common" : ["bronze"],
-            "uncommon" : ["bronze", "silver"],
-            "rare" : ["bronze", "silver", "gold"],
-            "epic" :["bronze", "silver", "gold", "diamond"]
+            "common": ["bronze"],
+            "uncommon": ["bronze", "silver"],
+            "rare": ["bronze", "silver", "gold"],
+            "epic": ["bronze", "silver", "gold", "diamond"]
         }
 
         return lootbox_can_drop[l_type]
@@ -103,10 +154,10 @@ class Lootbox:
         each lootbox.
         """
         lootboxes_drop_cupcakes = {
-            "common" : random.randint(100, 350),
-            "uncommon" : random.randint(350, 750),
-            "rare" : random.randint(750, 1250),
-            "epic" : random.randint(1250, 2500)
+            "common": random.randint(10, 35),
+            "uncommon": random.randint(35, 75),
+            "rare": random.randint(75, 125),
+            "epic": random.randint(125, 250)
         }
 
         return lootboxes_drop_cupcakes[l_type]
@@ -117,10 +168,10 @@ class Lootbox:
         each lootbox.
         """
         lootboxes_drop_minerals = {
-            "common" : {"bronze" : random.randint(1, 45)},
-            "uncommon" : {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20)},
-            "rare" : {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20), "gold" : random.randint(1, 10)},
-            "epic" : {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20), "gold" : random.randint(1, 10), "diamond" : random.randint(1, 5)}
+            "common": {"bronze" : random.randint(1, 45)},
+            "uncommon": {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20)},
+            "rare": {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20), "gold" : random.randint(1, 10)},
+            "epic": {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20), "gold" : random.randint(1, 10), "diamond" : random.randint(1, 5)}
         }
 
         return lootboxes_drop_minerals[l_type]
@@ -138,7 +189,7 @@ class Cuppy(commands.Cog):
     async def test_balance(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            await self.bot.db.execute("INSERT INTO cuppy (user_id, balance, pickaxe_type, pickaxe_exp, pickaxe_durability, pickaxe_earnings, pickaxe_diamonds, pickaxe_golds, pickaxe_silvers, pickaxe_bronzes, pickaxe_needed_xp) VALUES ($1, 10, $2, 0, 100, 0, 0, 0, 0, 0, $3)", ctx.author.id, "wood", 2000)
+            await self.bot.db.execute("INSERT INTO cuppy (user_id, balance, pickaxe_type, pickaxe_exp, pickaxe_durability, pickaxe_earnings, pickaxe_diamonds, pickaxe_golds, pickaxe_silvers, pickaxe_bronzes, pickaxe_needed_xp, bronze, silver, gold, diamond) VALUES ($1, 10, $2, 0, 100, 0, 0, 0, 0, 0, $3, 0, 0, 0, 0)", ctx.author.id, "wood", 2000)
             return await ctx.send(f"{ctx.author.mention} **your balance is now ready!**\n<:alert_pink:867758260707000380> Earn minerals mining with your pickaxe using `ami mine`!\n"
                         f"<:alert_pink:867758260707000380> Vote to get <:lootbox:867758260622590002> and (**luckly**) <:uncommon:867764757733834793> <:rare:867764757670002698> or <:epic:867764757708406824> with `ami vote`!\n"
                         f"<:alert_pink:867758260707000380> Upgrade your pickaxe to even more good ones (<:nebula_pickaxe:862694657959395348> <:sky_pickaxe:862694658055340032> <:divine_pickaxe:862694657891631114>) with `ami pickaxe upgrade`!\n"
@@ -200,7 +251,7 @@ class Cuppy(commands.Cog):
             if upgrade_it == "Your pickaxe is already upgraded to its maximum!":
                 return await ctx.send("<:alert_pink:867758260707000380> Your pickaxe is already upgraded to its maximum!")
 
-            await self.bot.db.execute("UPDATE cuppy SET pickaxe_type = $1, pickaxe_exp = $2, pickaxe_durability = $3, pickaxe_needed_xp = $4 WHERE user_id = $5", upgrade_it, 0, 100, pick_exp + 500, ctx.author.id)
+            await self.bot.db.execute("UPDATE cuppy SET pickaxe_type = $1, pickaxe_exp = $2, pickaxe_durability = $3, pickaxe_needed_xp = $4 WHERE user_id = $5", upgrade_it, pick_exp-pick_needed_xp, 100, pick_exp + 500, ctx.author.id)
             await asyncio.sleep(1)
             data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
             pick2 = data2[0]["pickaxe_type"]
@@ -208,7 +259,77 @@ class Cuppy(commands.Cog):
             name = Pickaxe.name(pick2)
             await ctx.send(f"<:alert_pink:867758260707000380> Congratulasions, **{ctx.author.name}**! You pickaxe was upgraded to {emoji} **{name}!**")
         else:
-            return await ctx.reply(f"<:alert_pink:867758260707000380> Your pickaxe has **{humanize.intcomma(pick_exp)} / 2,000 XP**, you can't upgrade it now.")
+            return await ctx.reply(f"<:alert_pink:867758260707000380> Your pickaxe has **{humanize.intcomma(pick_exp)} / {humanize.intcomma(pick_needed_xp)}** <:xp:867817838941437974>, you can't upgrade it now.")
+
+    @pickaxe.command()
+    async def list(self, ctx):
+        types = ["wood", "golden", "ephemeral", "candy", "sky", "nebula", "divine"]
+
+
+        em = discord.Embed(title="All Pickaxes List", color=self.bot.color)
+        for pick in types:
+            name = Pickaxe.name(pick)
+            emoji = Pickaxe.emoji(pick)
+            perks = Pickaxe.perks(pick)
+            em.add_field(name=f"{emoji} {name}", value=perks, inline=False)
+
+        await ctx.send(embed=em)
+
+    @commands.command()
+    async def test_mine(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.test_balance)
+
+        pick = data[0]["pickaxe_type"]
+
+        emoji = Pickaxe.emoji(pick)
+        name = Pickaxe.name(pick)
+        message = ""
+        mineral = ""
+        query = ""
+
+        cc = random.randint(1, 100)
+        if cc in range(1, 50):
+            mineral = "bronze"
+            query = "bronze"
+            query2 = "bronzes"
+        elif cc in range(50, 75):
+            mineral = "silver"
+            query = "silver"
+            query2 = "silvers"
+        elif cc in range(75, 95):
+            mineral = "gold"
+            query = "gold"
+            query2 = "golds"
+        elif cc in range(95, 100):
+            mineral = "diamond"
+            query = "diamond"
+            query2 = "diamonds"
+
+        fc = Mineral.amount(mineral)
+        full_emoji = Mineral.emoji(mineral)
+        full_name = Mineral.name(mineral)
+
+        await self.bot.db.execute(f"UPDATE cuppy SET {query} = $1 WHERE user_id = $2", data[0][query] + fc, ctx.author.id)
+
+        data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+
+        bronze = data2[0]["bronze"]
+        silver = data2[0]["silver"]
+        gold = data2[0]["gold"]
+        diamond = data2[0]["diamond"]
+
+        message = f"<:alert_pink:867758260707000380> **{ctx.author.name}** you've earned {full_emoji} **{fc}x {full_name}** thanks to your {emoji} **{name}**!\n<:alert_pink:867758260707000380> Now you have <:bronze:867815549144530944> {bronze}x <:silver:867815548950413313> {silver}x <:gold:867815549042819113> {gold}x <:diamond:867815548862332969> {diamond}x"
+
+        luck = Mineral.luck_cupcake()
+        if luck:
+            fg = random.randint(1, 5)
+            message + "\n" + f"<:alert_pink:867758260707000380> You were a bit lucky and you got also <:cupcake:845632403405012992> **{fg}x**!"
+            await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", data2[0]["balance"] + fg, ctx.author.id)
+            
+        await ctx.send(message)
+        await self.bot.db.execute(f"UPDATE cuppy SET pickaxe_{query2} = $1 WHERE user_id = $2", data2[0][query], ctx.author.id)
 
 def setup(bot):
     bot.add_cog(Cuppy(bot))
