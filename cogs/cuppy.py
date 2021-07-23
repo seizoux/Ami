@@ -41,6 +41,55 @@ class Mineral:
         return r in range(1, 10)
 
 class Pickaxe:
+    def calculate_charge(pick_type:str):
+        pickaxes_recharges = {
+            "wood": 1,
+            "golden": 2,
+            "ephemeral": 5,
+            "candy": 10,
+            "sky": 20,
+            "nebula": 50,
+            "divine": 100
+        }
+
+        return pickaxes_recharges[pick_type]
+
+    def use(pick_type:str):
+        """
+        Durability usage based on
+        each pickaxe.
+        """
+        pickaxes_rates_durability = {
+            "wood": random.choice(range(1, 10)),
+            "golden": random.choice(range(1, 8)),
+            "ephemeral": random.choice(range(1, 6)),
+            "candy": random.choice(range(1, 4)),
+            "sky": random.choice(range(1, 3)),
+            "nebula": random.choice(range(1, 2)),
+            "divine": 1
+        }
+
+        return pickaxes_rates_durability[pick_type]
+
+    def add_xp(pick_type:str):
+        """
+        Adding xp on each mine
+        command invoked based on
+        the pickaxe of the user.
+        """
+        pickaxes_rates_xp = {
+            "wood": random.randint(1, 23),
+            "golden": random.randint(1, 20),
+            "ephemeral": random.randint(1, 18),
+            "candy": random.randint(1, 15),
+            "sky": random.randint(1, 14),
+            "nebula": random.randint(1, 12),
+            "divine": random.randint(1, 10)
+        }
+
+        exp = pickaxes_rates_xp[pick_type]
+        return exp
+
     def check_durability(dur:int):
         """
         Checking if the pickaxe durability isn't 0.
@@ -110,13 +159,23 @@ class Pickaxe:
         Pickaxe perks.
         """
         pickaxes_perks = {
-            "wood": "No Special Perks.",
-            "golden": "+5% chance to get gold.",
-            "ephemeral": "+10% chance to get gold.",
-            "candy": "+20% chance to get gold.",
-            "sky": "+5% chance to get diamonds.",
-            "nebula": "+10% chance to get diamonds.",
-            "divine": "+20% chance to get diamonds."
+            "wood": "<:alert_pink:867758260707000380> No Special Perks.\n<:xp:867817838941437974> `1` > `23`.\n<:durability:867818581864218654> `1` > `10`.\n<:cupcake:845632403405012992> `1`",
+            "golden": "<:alert_pink:867758260707000380> +5% Gold Drop.\n<:xp:867817838941437974> `1` > `20`.\n<:durability:867818581864218654> `1` > `8`.\n<:cupcake:845632403405012992> `2`",
+            "ephemeral": "<:alert_pink:867758260707000380> +10% Gold Drop.\n<:xp:867817838941437974> `1` > `18`.\n<:durability:867818581864218654> `1` > `6`.\n<:cupcake:845632403405012992> `5`",
+            "candy": "<:alert_pink:867758260707000380> +20% Gold Drop.\n<:xp:867817838941437974> `1` > `15`.\n<:durability:867818581864218654> `1` > `4`.\n<:cupcake:845632403405012992> `10`",
+            "sky": "<:alert_pink:867758260707000380> +5% Diamond Drop.\n<:xp:867817838941437974> `1` > `14`.\n<:durability:867818581864218654> `1` > `3`.\n<:cupcake:845632403405012992> `20`",
+            "nebula": "<:alert_pink:867758260707000380> +10% Diamond Drop.\n<:xp:867817838941437974> `1` > `12`.\n<:durability:867818581864218654> `1` > `2`.\n<:cupcake:845632403405012992> `50`",
+            "divine": "<:alert_pink:867758260707000380> +20% Diamond Drop.\n<:xp:867817838941437974> `1` > `10`.\n<:durability:867818581864218654> `1` > `1`.\n<:cupcake:845632403405012992> `100`"
+        }
+
+        pickaxes_recharges = {
+            "wood": 1,
+            "golden": 2,
+            "ephemeral": 5,
+            "candy": 10,
+            "sky": 20,
+            "nebula": 50,
+            "divine": 100
         }
 
         return pickaxes_perks[pick_type]
@@ -189,7 +248,7 @@ class Cuppy(commands.Cog):
     async def test_balance(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            await self.bot.db.execute("INSERT INTO cuppy (user_id, balance, pickaxe_type, pickaxe_exp, pickaxe_durability, pickaxe_earnings, pickaxe_diamonds, pickaxe_golds, pickaxe_silvers, pickaxe_bronzes, pickaxe_needed_xp, bronze, silver, gold, diamond) VALUES ($1, 10, $2, 0, 100, 0, 0, 0, 0, 0, $3, 0, 0, 0, 0)", ctx.author.id, "wood", 2000)
+            await self.bot.db.execute("INSERT INTO cuppy (user_id, balance, pickaxe_type, pickaxe_exp, pickaxe_durability, pickaxe_earnings, pickaxe_diamonds, pickaxe_golds, pickaxe_silvers, pickaxe_bronzes, pickaxe_needed_xp, bronze, silver, gold, diamond) VALUES ($1, 10, $2, 0, 100, 0, 0, 0, 0, 0, $3, 0, 0, 0, 0)", ctx.author.id, "wood", 3500)
             return await ctx.send(f"{ctx.author.mention} **your balance is now ready!**\n<:alert_pink:867758260707000380> Earn minerals mining with your pickaxe using `ami mine`!\n"
                         f"<:alert_pink:867758260707000380> Vote to get <:lootbox:867758260622590002> and (**luckly**) <:uncommon:867764757733834793> <:rare:867764757670002698> or <:epic:867764757708406824> with `ami vote`!\n"
                         f"<:alert_pink:867758260707000380> Upgrade your pickaxe to even more good ones (<:nebula_pickaxe:862694657959395348> <:sky_pickaxe:862694658055340032> <:divine_pickaxe:862694657891631114>) with `ami pickaxe upgrade`!\n"
@@ -251,7 +310,7 @@ class Cuppy(commands.Cog):
             if upgrade_it == "Your pickaxe is already upgraded to its maximum!":
                 return await ctx.send("<:alert_pink:867758260707000380> Your pickaxe is already upgraded to its maximum!")
 
-            await self.bot.db.execute("UPDATE cuppy SET pickaxe_type = $1, pickaxe_exp = $2, pickaxe_durability = $3, pickaxe_needed_xp = $4 WHERE user_id = $5", upgrade_it, pick_exp-pick_needed_xp, 100, pick_exp + 500, ctx.author.id)
+            await self.bot.db.execute("UPDATE cuppy SET pickaxe_type = $1, pickaxe_exp = $2, pickaxe_durability = $3, pickaxe_needed_xp = $4 WHERE user_id = $5", upgrade_it, pick_exp-pick_needed_xp, 100, pick_exp + 750, ctx.author.id)
             await asyncio.sleep(1)
             data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
             pick2 = data2[0]["pickaxe_type"]
@@ -259,21 +318,45 @@ class Cuppy(commands.Cog):
             name = Pickaxe.name(pick2)
             await ctx.send(f"<:alert_pink:867758260707000380> Congratulasions, **{ctx.author.name}**! You pickaxe was upgraded to {emoji} **{name}!**")
         else:
-            return await ctx.reply(f"<:alert_pink:867758260707000380> Your pickaxe has **{humanize.intcomma(pick_exp)} / {humanize.intcomma(pick_needed_xp)}** <:xp:867817838941437974>, you can't upgrade it now.")
+            return await ctx.reply(f"<:alert_pink:867758260707000380> Your pickaxe has <:xp:867817838941437974> **{humanize.intcomma(pick_exp)} / {humanize.intcomma(pick_needed_xp)}**, you can't upgrade it now.")
 
     @pickaxe.command()
     async def list(self, ctx):
         types = ["wood", "golden", "ephemeral", "candy", "sky", "nebula", "divine"]
 
 
-        em = discord.Embed(title="All Pickaxes List", color=self.bot.color)
+        em = discord.Embed(title="All Pickaxes List", description = "<:xp:867817838941437974> Will tell you what is the XP drop range for each pickaxe\n<:durability:867818581864218654> Will tell you what is the usage range of durability for each pickaxe\n<:cupcake:845632403405012992> Will tell you how many cupcakes are needed to recharge it", color=self.bot.color)
         for pick in types:
             name = Pickaxe.name(pick)
             emoji = Pickaxe.emoji(pick)
             perks = Pickaxe.perks(pick)
-            em.add_field(name=f"{emoji} {name}", value=perks, inline=False)
+            em.add_field(name=f"{emoji} {name}", value=perks)
 
         await ctx.send(embed=em)
+
+    @pickaxe.command()
+    async def recharge(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.test_balance)
+
+        pick = data[0]["pickaxe_type"]
+        pick_dur = data[0]["pickaxe_durability"]
+
+        balance = data[0]["balance"]
+
+        emoji = Pickaxe.emoji(pick)
+        name = Pickaxe.name(pick)
+        recharge_amount = Pickaxe.calculate_charge(pick)
+
+        if pick_dur != 0:
+            return await ctx.send(f"<:alert_pink:867758260707000380> Your {emoji} **{name}** has <:durability:867818581864218654> **{humanize.intcomma(pick_dur)} / 100**, you can recharge only at <:durability:867818581864218654> **0 / 100**.")
+
+        if balance < recharge_amount:
+            return await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.name}, recharging your {emoji} **{name}** requires <:cupcake:845632403405012992> **{recharge_amount}**, you have only <:cupcake:845632403405012992> **{balance}**.")
+
+        await self.bot.db.execute("UPDATE cuppy SET pickaxe_durability = $1, balance = $2 WHERE user_id = $3", 100, data[0]["balance"] - recharge_amount, ctx.author.id)
+        await ctx.send(f"**{ctx.author.name}**, you've spent <:cupcake:845632403405012992> **{recharge_amount}** to refill your {emoji} **{name}** durability!")
 
     @commands.command()
     async def test_mine(self, ctx):
@@ -282,9 +365,17 @@ class Cuppy(commands.Cog):
             return await ctx.invoke(self.test_balance)
 
         pick = data[0]["pickaxe_type"]
+        pick_exp = data[0]["pickaxe_exp"]
+        pick_upgrade = data[0]["pickaxe_needed_xp"]
+        pick_durability = data[0]["pickaxe_durability"]
 
         emoji = Pickaxe.emoji(pick)
         name = Pickaxe.name(pick)
+
+        info = Pickaxe.check_durability(pick_durability)
+        if info is False:
+            return await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.name}, your {emoji} **{name}** durability is **0 / 100**, recharge it with `ami picaxe recharge`!")
+
         message = ""
         mineral = ""
         query = ""
@@ -320,16 +411,29 @@ class Cuppy(commands.Cog):
         gold = data2[0]["gold"]
         diamond = data2[0]["diamond"]
 
-        message = f"<:alert_pink:867758260707000380> **{ctx.author.name}** you've earned {full_emoji} **{fc}x {full_name}** thanks to your {emoji} **{name}**!\n<:alert_pink:867758260707000380> Now you have <:bronze:867815549144530944> {bronze}x <:silver:867815548950413313> {silver}x <:gold:867815549042819113> {gold}x <:diamond:867815548862332969> {diamond}x"
+        message = f"<:alert_pink:867758260707000380> **{ctx.author.name}** you've earned {full_emoji} **{fc}x {full_name}** thanks to your {emoji} **{name}**!\n<:alert_pink:867758260707000380> Now you have <:bronze:867815549144530944> {humanize.intcomma(bronze)}x <:silver:867815548950413313> {humanize.intcomma(silver)}x <:gold:867815549042819113> {humanize.intcomma(gold)}x <:diamond:867815548862332969> {humanize.intcomma(diamond)}x"
 
         luck = Mineral.luck_cupcake()
         if luck:
             fg = random.randint(1, 5)
-            message + "\n" + f"<:alert_pink:867758260707000380> You were a bit lucky and you got also <:cupcake:845632403405012992> **{fg}x**!"
-            await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", data2[0]["balance"] + fg, ctx.author.id)
+            message += f"\n<:alert_pink:867758260707000380> You were a bit lucky and you got also <:cupcake:845632403405012992> **{fg}x**!"
+            await self.bot.db.execute("UPDATE cuppy SET balance = $1, pickaxe_earnings = $2 WHERE user_id = $3", data2[0]["balance"] + fg, data2[0]["pickaxe_earnings"] + fg, ctx.author.id)
             
+        experience = Pickaxe.add_xp(pick)
+        await self.bot.db.execute("UPDATE cuppy SET pickaxe_exp = $1 WHERE user_id = $2", data[0]["pickaxe_exp"] + experience, ctx.author.id)
+
+        if (experience + pick_exp) >= pick_upgrade:
+            message += f"\n<:alert_pink:867758260707000380> Oh! You pickaxe has <:xp:867817838941437974> **{humanize.intcomma(experience)} / {humanize.intcomma(pick_upgrade)}**, you can upgrade it!"
+        else:
+            message += f"\n<:alert_pink:867758260707000380> Your pickaxe gained <:xp:867817838941437974> **{humanize.intcomma(experience)}**!"
+
         await ctx.send(message)
-        await self.bot.db.execute(f"UPDATE cuppy SET pickaxe_{query2} = $1 WHERE user_id = $2", data2[0][query], ctx.author.id)
+        cvf = Pickaxe.use(pick)
+
+        if cvf > pick_durability:
+            cvf = pick_durability
+
+        await self.bot.db.execute(f"UPDATE cuppy SET pickaxe_{query2} = $1, pickaxe_durability = $2 WHERE user_id = $3", data2[0][query], data2[0]["pickaxe_durability"] - cvf, ctx.author.id)
 
 def setup(bot):
     bot.add_cog(Cuppy(bot))
