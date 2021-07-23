@@ -289,8 +289,8 @@ class Cuppy(commands.Cog):
         drops = Lootbox.can_drop(lootbox_rarity.lower())
 
         lb = data[0][f"lootbox_{lootbox_rarity.lower()}"]
-        if lb == 0:
-            return await ctx.send("<:4318crossmark:848857812565229601> You don't have any {emoji} **{name}** to open.")
+        if not lb:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> You don't have any {emoji} **{name}** to open.")
 
         amount = 1
         if flag == "all":
