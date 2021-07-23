@@ -197,6 +197,20 @@ class Lootbox:
 
         return lootboxes[l_type]
 
+    def name(l_type:str):
+        """
+        Lootboxes full names.
+        """
+        lootboxes = {
+            "common": "Common Lootbox",
+            "uncommon": "Uncommon Lootbox",
+            "rare": "Rare Lootbox",
+            "epic": "Epic Lootbox"
+        }
+
+        return lootboxes[l_type]
+
+
     def coins(l_type:str):
         """
         How many cupcakes can drop
@@ -211,7 +225,7 @@ class Lootbox:
 
         return lootboxes_drop_cupcakes[l_type]
 
-    def minerals(self, l_type:str):
+    def minerals(l_type:str):
         """
         How many minerals can drop
         each lootbox.
@@ -235,6 +249,7 @@ class Cuppy(commands.Cog):
 
     
     @commands.command()
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def test_balance(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
@@ -248,7 +263,57 @@ class Cuppy(commands.Cog):
         bal = data[0]["balance"]
         await ctx.send(f"<:cupcake:845632403405012992> **{ctx.author.name}** balance is **{humanize.intcomma(bal)} Cupcakes!**")
 
+    @commands.group(help="Open your lootboxes <:lootbox:867758260622590002> <:uncommon:867764757733834793> <:rare:867764757670002698> <:epic:867764757708406824>", aliases=["op"], invoke_without_command=True)
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def open(self, ctx):
+        await ctx.invoke(self.bot.get_command("help"), **{"command":"open"})
+
+    @open.command(help="Choose what box")
+    async def box(self, ctx, lootbox_rarity, flag=None):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.test_balance)
+
+        if flag:
+            if flag != "all":
+                return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention} you passed an invalid argument in `flag`. Valid flag is `all`, to open all of the choosed lootbox rarity you have.")
+
+        valid_lbs = ["common", "uncommon", "rare", "epic"]
+        if lootbox_rarity.lower() not in valid_lbs:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention} this is not a valid lootbox.")
+
+        cups = Lootbox.coins(lootbox_rarity.lower())
+        mins = Lootbox.minerals(lootbox_rarity.lower())
+        emoji = Lootbox.emoji(lootbox_rarity.lower())
+        name = Lootbox.name(lootbox_rarity.lower())
+        drops = Lootbox.can_drop(lootbox_rarity.lower())
+
+        lb = data[0][f"lootbox_{lootbox_rarity.lower()}"]
+        if lb == 0:
+            return await ctx.send("<:4318crossmark:848857812565229601> You don't have any {emoji} **{name}** to open.")
+
+        amount = 1
+        if flag == "all":
+            amount = lb
+
+        final_min = {}
+
+        for drop in drops:
+            if drop in mins:
+                final_min[drop] = mins[drop]
+
+        s = []
+        for k,v in final_min.items():
+            await self.bot.db.execute(f"UPDATE cuppy SET {k} = $1 WHERE user_id = $2", data[0][k] + v*amount, ctx.author.id)
+            m_emoji = Mineral.emoji(k)
+            s.append(f"{m_emoji} {v*amount}x ")
+
+        vcd = '\n'.join(s)
+        await ctx.send(f"**{ctx.author.name}** opened a {emoji} **{name}** and found:\n{vcd}\n<:cupcake:845632403405012992> {cups}x")
+        await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", data[0]["balance"] + cups, ctx.author.id)
+
     @commands.group(help="Check your pickaxe stats, upgrade it, and much more!", aliases=["pcx"], invoke_without_command=True)
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def pickaxe(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"pickaxe"})
 
@@ -349,6 +414,7 @@ class Cuppy(commands.Cog):
         await ctx.send(f"**{ctx.author.name}**, you've spent <:cupcake:845632403405012992> **{recharge_amount}** to refill your {emoji} **{name}** durability!")
 
     @commands.command()
+    @commands.cooldown(1, 7, commands.BucketType.user)
     async def test_mine(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
