@@ -168,16 +168,6 @@ class Pickaxe:
             "divine": "<:alert_pink:867758260707000380> +20% Diamond Drop.\n<:xp:867817838941437974> `1` > `10`.\n<:durability:867818581864218654> `1` > `1`.\n<:cupcake:845632403405012992> `100`"
         }
 
-        pickaxes_recharges = {
-            "wood": 1,
-            "golden": 2,
-            "ephemeral": 5,
-            "candy": 10,
-            "sky": 20,
-            "nebula": 50,
-            "divine": 100
-        }
-
         return pickaxes_perks[pick_type]
 
 class Lootbox:
