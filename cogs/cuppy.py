@@ -1,12 +1,132 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands, tasks, menus
 import datetime
 import random
 import asyncio
 import humanize
 from util.defs import is_team
 
+class Paginate(menus.ListPageSource):
+
+    def __init__(self, entries, *, per_page=15):
+        entries = [f'{name}' for name in entries]
+        super().__init__(entries, per_page=per_page)
+
+    async def format_page(self, menu: menus.Menu, page):
+        embed = discord.Embed(title="Monsters List",
+            description = "That's a list of all the "
+                        "currently spottable monster "
+                        "into `monsterhunt`!\n<:common:870289549052477450> `Common` <:rare:870289549543215144> `Rare` <:super_rare:870289549400616980> `Super Rare` <:mystic:870289549153165332> `Mystic`\n\n"
+                        + '\n'.join(page) + "\n\n═════ **Reactions Info**═════ \n⏮ `first` ◀ `back` ▶ `next` ⏩ `end` ⏹ `stop`\n"
+                        "*This message expires in 45.5 seconds!*",
+            color = 0xffcff1)
+
+        return embed
+
+class Rarity:
+    def find_rarity(type: int):
+        rarity = {
+            1: "Common (50% encounter rate)",
+            2: "Rare (25% encounter rate)",
+            3: "Super Rare (20% encounter rate)",
+            4: "Mystic (5% encounter rate)"
+        }
+
+        return rarity[type]
+
+    def emoji(rare: str):
+        emojis = {
+            1: "<:common:870289549052477450>",
+            2: "<:rare:870289549543215144>",
+            3: "<:super_rare:870289549400616980>",
+            4: "<:mystic:870289549153165332>"
+        }
+
+        return emojis[rare]
+
 class Monster:
+
+    def rarity_ordered(rarity: str):
+        rare_ord = {"common": ["skull slime", "shadow", "pumpkin witch", "bat", "silver crocodile",
+                            "ancient golem", "zombie", "slime", "skeleton", "oricorio", "fire magician", 
+                            "devil octopus", "chica", "fat reaper"],
+
+                    "rare": ["orc tauros", "demon spirit", "dark dragon", "blue dragon", "red oricorio",
+                            "minotaur", "ice dragon", "grodd gorilla", "cthulhu", "wolf fighter", "ice dino",
+                            "ice golem", "gtruo", "magician", "demon horse", "bugbear", "olione"],
+
+                    "super rare": ["minotaur king", "stone golem", "sea girl", "sam", "rathian", "nergigante",
+                                "kukulkan", "demon girl", "crystal golem", "t-rex", "platinum dragon", "norroth"],
+
+                    "mystic": ["molten iron golem", "magala", "imperial dragon", "godzilla", "galaxy dragon",
+                                "decalion", "holidoom", "quetzalcoatl", "magala final form", "laymon", "chaos dragon",
+                                "wyvern", "magala (gore)"]
+                }
+
+        return rare_ord[rarity]
+
+    def get_rarity(monster: str):
+        rare = {
+            "skull slime": 1,
+            "silver crocodile": 1,
+            "shadow": 1,
+            "pumpkin witch": 1,
+            "orc tauros": 2,
+            "demon spirit": 2,
+            "dark dragon": 2,
+            "blue dragon": 2,
+            "bat": 1,
+            "ancient golem": 1,
+            "zombie": 1,
+            "slime": 1,
+            "skeleton": 1,
+            "red oricorio": 2,
+            "oricorio": 1,
+            "molten iron golem": 3,
+            "minotaur king": 3,
+            "minotaur": 2,
+            "magala": 4,
+            "imperial dragon": 4,
+            "ice dragon": 2,
+            "grodd gorilla": 2,
+            "godzilla": 4,
+            "galaxy dragon": 4,
+            "fire magician": 1,
+            "devil octopus": 1,
+            "decalion": 4,
+            "cthulhu": 2,
+            "chica": 1,
+            "holidoom": 4,
+            "quetzalcoatl": 4,
+            "wolf fighter": 2,
+            "stone golem": 3,
+            "sea girl": 3,
+            "sam": 3,
+            "rathian": 3,
+            "nergigante": 3,
+            "magician": 2,
+            "magala final form": 4,
+            "laymon": 4,
+            "kukulkan": 3,
+            "ice golem": 2,
+            "ice dino": 2,
+            "gtruo": 2,
+            "fat reaper": 1,
+            "demon horse": 2,
+            "demon girl": 3,
+            "crystal golem": 3,
+            "bugbear": 2,
+            "chaos dragon": 4,
+            "magala (gore)": 4,
+            "wyvern": 4,
+            "t-rex": 3,
+            "platinum dragon": 3,
+            "norroth": 3,
+            "olione": 2
+        }
+
+        return rare[monster]
+
     def get_image(monster: str):
         link = {
             "skull slime": "https://cdn.discordapp.com/attachments/869312190119813250/869312365303312394/skull_slime.png",
@@ -58,7 +178,13 @@ class Monster:
             "demon girl": "https://cdn.discordapp.com/attachments/869250340925624371/869559992599068722/demon_girl.png",
             "crystal golem": "https://cdn.discordapp.com/attachments/869250340925624371/869559990766166096/crystal_golem.png",
             "bugbear": "https://cdn.discordapp.com/attachments/869250340925624371/869559985321938954/bugbear.png",
-            "chaos dragon": "https://cdn.discordapp.com/attachments/869250340925624371/869559988207620166/chaos_dragon.png"
+            "chaos dragon": "https://cdn.discordapp.com/attachments/869250340925624371/869559988207620166/chaos_dragon.png",
+            "magala (gore)": "https://cdn.discordapp.com/attachments/870014290374066189/870015214047875082/Magala_Gore.png",
+            "wyvern": "https://cdn.discordapp.com/attachments/870014290374066189/870015230888013844/wyvern.png",
+            "t-rex": "https://cdn.discordapp.com/attachments/870014290374066189/870015227113144330/t-rex.png",
+            "platinum dragon": "https://cdn.discordapp.com/attachments/870014290374066189/870015222864281640/platinum_dragon.png",
+            "norroth": "https://cdn.discordapp.com/attachments/870014290374066189/870015217332002826/norroth.png",
+            "olione": "https://cdn.discordapp.com/attachments/870014290374066189/870015219856986152/olione.png"
         }
 
 
@@ -115,7 +241,13 @@ class Monster:
             "demon girl",
             "crystal golem",
             "bugbear",
-            "chaos dragon"
+            "chaos dragon",
+            "magala (gore)",
+            "wyvern",
+            "t-rex",
+            "platinum dragon",
+            "norroth",
+            "olione"
         ]
 
         return here
@@ -172,7 +304,13 @@ class Monster:
             "demon girl": "<:demon_girl:869554206326013962>",
             "crystal golem": "<:crystal_golem:869553033099489330>",
             "bugbear": "<:bugbear:869550717491355678>",
-            "chaos dragon": "<:chaos_dragon:869555190951464990>"
+            "chaos dragon": "<:chaos_dragon:869555190951464990>",
+            "magala (gore)": "<:magala_gore:870014389967798313>",
+            "wyvern": "<:wyvern:870014390345277511>",
+            "t-rex": "<:trex:870014390395609098>",
+            "platinum dragon": "<:platinum_dragon:870014390034911233>",
+            "norroth": "<:norroth:870014389820993547>",
+            "olione": "<:olione:870014390206877756>"
         }
 
         return emojis[monster]
@@ -228,7 +366,13 @@ class Monster:
             "demon girl": "Demon Girl",
             "crystal golem": "Crystal Golem",
             "bugbear": "Bugbear",
-            "chaos dragon": "Chaos Dragon"
+            "chaos dragon": "Chaos Dragon",
+            "magala (gore)": "Magala (Gore)",
+            "wyvern": "Wyvern",
+            "t-rex": "T-Rex",
+            "platinum dragon": "Platinum Dragon",
+            "norroth": "Norroth",
+            "olione": "Olione"
         }
 
         return m_name[monster]
@@ -246,7 +390,7 @@ class Monster:
             "bat": 15,
             "ancient golem": 20,
             "zombie": 10,
-            "slime": 5,
+            "slime": 10,
             "skeleton": 10,
             "red oricorio": 35,
             "oricorio": 30,
@@ -271,7 +415,7 @@ class Monster:
             "sea girl": 50,
             "sam": 75,
             "rathian": 75,
-            "nergigante": 25,
+            "nergigante": 50,
             "magician": 25,
             "magala final form": 100,
             "laymon": 100,
@@ -284,7 +428,13 @@ class Monster:
             "demon girl": 50,
             "crystal golem": 50,
             "bugbear": 25,
-            "chaos dragon": 100
+            "chaos dragon": 100,
+            "magala (gore)": 100,
+            "wyvern": 100,
+            "t-rex": 50,
+            "platinum dragon": 75,
+            "norroth": 50,
+            "olione": 25
         }
 
         return xp[monster]
@@ -295,12 +445,12 @@ class Monster:
             "silver crocodile": 50,
             "shadow": 50,
             "pumpkin witch": 50,
-            "orc tauros": 150,
+            "orc tauros": 50,
             "demon spirit": 150,
             "dark dragon": 200,
             "blue dragon": 200,
             "bat": 50,
-            "ancient golem": 150,
+            "ancient golem": 50,
             "zombie": 50,
             "slime": 50,
             "skeleton": 50,
@@ -316,19 +466,19 @@ class Monster:
             "godzilla": 300,
             "galaxy dragon": 300,
             "fire magician": 50,
-            "devil octopus": 100,
+            "devil octopus": 50,
             "decalion": 300,
             "cthulhu": 250,
-            "chica": 100,
+            "chica": 50,
             "holidoom": 300,
             "quetzalcoatl": 300,
             "wolf fighter": 100,
             "stone golem": 100,
-            "sea girl": 50,
+            "sea girl": 150,
             "sam": 150,
             "rathian": 200,
             "nergigante": 100,
-            "magician": 50,
+            "magician": 100,
             "magala final form": 300,
             "laymon": 300,
             "kukulkan": 200,
@@ -339,8 +489,14 @@ class Monster:
             "demon horse": 150,
             "demon girl": 150,
             "crystal golem": 200,
-            "bugbear": 50,
-            "chaos dragon": 300
+            "bugbear": 100,
+            "chaos dragon": 300,
+            "magala (gore)": 300,
+            "wyvern": 300,
+            "t-rex": 200,
+            "platinum dragon": 250,
+            "norroth": 150,
+            "olione": 100
         }
 
         return hp[monster]
@@ -369,21 +525,21 @@ class Monster:
             "imperial dragon": 15,
             "ice dragon": 5,
             "grodd gorilla": 5,
-            "godzilla": 10,
-            "galaxy dragon": 10,
+            "godzilla": 15,
+            "galaxy dragon": 15,
             "fire magician": 3,
             "devil octopus": 3,
             "decalion": 15,
             "cthulhu": 3,
             "chica": 3,
             "holidoom": 15,
-            "quetzalcoatl": 10,
+            "quetzalcoatl": 15,
             "wolf fighter": 3,
-            "stone golem": 1,
-            "sea girl": 3,
-            "sam": 5,
+            "stone golem": 10,
+            "sea girl": 10,
+            "sam": 10,
             "rathian": 10,
-            "nergigante": 5,
+            "nergigante": 10,
             "magician": 3,
             "magala final form": 15,
             "laymon": 15,
@@ -393,10 +549,16 @@ class Monster:
             "gtruo": 3,
             "fat reaper": 1,
             "demon horse": 3,
-            "demon girl": 5,
+            "demon girl": 10,
             "crystal golem": 10,
             "bugbear": 1,
-            "chaos dragon": 15
+            "chaos dragon": 15,
+            "magala (gore)": 15,
+            "wyvern": 15,
+            "t-rex": 10,
+            "platinum dragon": 10,
+            "norroth": 10,
+            "olione": 3
         }
 
         return cup[monster]
@@ -412,7 +574,16 @@ class Team:
             "celia": {"base": ["punch", "kick"], "special" : ["black hole", "big bang"], "ultra": "void gateway"},
             "micky": {"base": ["punch", "kick"], "special" : ["hammer smash", "pick-tick"], "ultra": "mjolnir"},
             "vanessa": {"base": ["punch", "kick"], "special" : ["last flame", "subzero flame"], "ultra": "meteor fall"},
-            "ornella": {"base": ["punch", "kick"], "special" : ["ZzZ", "ZzZ 2"], "ultra": "ZzZ 3"}
+            "ornella": {"base": ["punch", "kick"], "special" : ["ZzZ", "ZzZ 2"], "ultra": "ZzZ 3"},
+            "kury (prestiged)": {"base": ["punch", "kick"], "special" : ["energy beam", "tails smash"], "ultra": "evil eyes"},
+            "anny (prestiged)": {"base": ["punch", "kick"], "special" : ["tsunami", "wave sonar"], "ultra": "ice realm"},
+            "fatima (prestiged)": {"base": ["punch", "kick"], "special" : ["energy ball", "fairy fate"], "ultra": "dream dimension"},
+            "lilly (prestiged)": {"base": ["punch", "kick"], "special" : ["loud cry", "crying punch"], "ultra": "water spin"},
+            "luna (prestiged)": {"base": ["punch", "kick"], "special" : ["angry fist", "power fist"], "ultra": "ultra fist"},
+            "celia (prestiged)": {"base": ["punch", "kick"], "special" : ["black hole", "big bang"], "ultra": "void gateway"},
+            "micky (prestiged)": {"base": ["punch", "kick"], "special" : ["hammer smash", "pick-tick"], "ultra": "mjolnir"},
+            "vanessa (prestiged)": {"base": ["punch", "kick"], "special" : ["last flame", "subzero flame"], "ultra": "meteor fall"},
+            "ornella (prestiged)": {"base": ["punch", "kick"], "special" : ["ZzZ", "ZzZ 2"], "ultra": "ZzZ 3"}
         }
 
         return moves[team_name]
@@ -532,7 +703,16 @@ class Team:
             "celia": "It is said that she is the daughter of the universe, her powers allow her to stop time and space for a few seconds, no one has ever dared to harm her since she was born.",
             "micky": "This girl was once a professional mechanic, until a meteorite fell on her workshop and since she woke up she found herself with supernatural powers, like a force equal to 200 men.",
             "vanessa": "She is a mystery, she came here through a very badly tanned dimensional portal, since she recovered she has not wanted to mention anything that had happened to her: she is thought to have challenged the gods to prove herself.",
-            "ornella": "Quiet, a normal country girl who loves to do absolutely nothing except look after her rebellious hair, except that she has practically infinite magical power, and a cheeky fortune."
+            "ornella": "Quiet, a normal country girl who loves to do absolutely nothing except look after her rebellious hair, except that she has practically infinite magical power, and a cheeky fortune.",
+            "kury (prestiged)": "An adventurous girl, has defied the laws of nature obtaining a divine power, still still unable to fully master it, is looking for the unbeatable opponent, the one who does not go down with a single blow.",
+            "anny (prestiged)": "The sea has always been his home, he has never left it, he loves living with the animals that live there and respects them from the first to the last, woe to those who harm him.",
+            "fatima (prestiged)": "She has never been able to fully understand her generation, but she has always loved the fact that she has a power that only 2% of creatures in the universe have: being a fairy! Its spells are as bad as a tank.",
+            "lilly (prestiged)": "She has the bad habit of crying even for nonsense, she never ends .. she loves to sleep and eat from morning to night, woe to those who disturb her.",
+            "luna (prestiged)": "Not much is known about her, she appeared in town one day by chance and never revealed her origins .. the only sure thing we know is that her fists really hurt.",
+            "celia (prestiged)": "It is said that she is the daughter of the universe, her powers allow her to stop time and space for a few seconds, no one has ever dared to harm her since she was born.",
+            "micky (prestiged)": "This girl was once a professional mechanic, until a meteorite fell on her workshop and since she woke up she found herself with supernatural powers, like a force equal to 200 men.",
+            "vanessa (prestiged)": "She is a mystery, she came here through a very badly tanned dimensional portal, since she recovered she has not wanted to mention anything that had happened to her: she is thought to have challenged the gods to prove herself.",
+            "ornella (prestiged)": "Quiet, a normal country girl who loves to do absolutely nothing except look after her rebellious hair, except that she has practically infinite magical power, and a cheeky fortune."
         }
 
         return story[team_name]
@@ -547,14 +727,29 @@ class Team:
             "celia": "https://cdn.discordapp.com/attachments/800189588127612979/868561064651001947/61343192396756773fb4f0162ff03f7f.gif",
             "micky": "https://cdn.discordapp.com/attachments/800189588127612979/868561054257545286/95aa2d1da0354a42226b09f6b91dde0f.gif",
             "vanessa": "https://cdn.discordapp.com/attachments/800189588127612979/868561073580675152/de4e57e4e2cdf53dba84a026fe61086e.gif",
-            "ornella": "https://cdn.discordapp.com/attachments/800189588127612979/868561069948428408/AW4101957_03.gif"
+            "ornella": "https://cdn.discordapp.com/attachments/800189588127612979/868561069948428408/AW4101957_03.gif",
+            "kury (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561058032418847/62089ee9672198cd380b938aec5f1577.gif",
+            "anny (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561062381887519/2900920e2ac0a0c8f16eba53c837315b.gif",
+            "fatima (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561049102737408/3f66bea314d5ed8dc7355c98c8e2bdf5.gif",
+            "lilly (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561077598838794/ff986c4116c1551007ff0152e2a4d85e.gif",
+            "luna (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561067528323072/AW4101957_01.gif",
+            "celia (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561064651001947/61343192396756773fb4f0162ff03f7f.gif",
+            "micky (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561054257545286/95aa2d1da0354a42226b09f6b91dde0f.gif",
+            "vanessa (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561073580675152/de4e57e4e2cdf53dba84a026fe61086e.gif",
+            "ornella (prestiged)": "https://cdn.discordapp.com/attachments/800189588127612979/868561069948428408/AW4101957_03.gif"
         }
 
         return imag[team_name]
 
-    def calc_needed_xp(acxp:int):
-        f = acxp + random.choice([500, 750, 1000])
-        return f
+    def calc_needed_xp(level: int, teammate: str):
+        vf = 3500
+        if teammate.endswith("(prestiged)"):
+            vf = 50000
+
+        for i in range(1, level):
+            vf += 750
+
+        return vf
 
     def emoji(team_name:str):
         emojis = {
@@ -566,7 +761,16 @@ class Team:
             "celia": "<a:Celia_Team:868398861624946708>",
             "micky": "<a:Micky_Team:868398859796234290>",
             "vanessa": "<a:Vanessa_Team:868398860911931423>",
-            "ornella": "<a:Ornella_Team:868398859989160006>"
+            "ornella": "<a:Ornella_Team:868398859989160006>",
+            "kury (prestiged)": "<a:Kury_Team:868398859766857749>",
+            "anny (prestiged)": "<a:Anny_Team:868398861759172608>",
+            "fatima (prestiged)": "<a:Fatima_Team:868398860601552927>",
+            "lilly (prestiged)": "<a:Lilly_Team:868398860815446036>",
+            "luna (prestiged)": "<a:Luna_Team:868398860660244490>",
+            "celia (prestiged)": "<a:Celia_Team:868398861624946708>",
+            "micky (prestiged)": "<a:Micky_Team:868398859796234290>",
+            "vanessa (prestiged)": "<a:Vanessa_Team:868398860911931423>",
+            "ornella (prestiged)": "<a:Ornella_Team:868398859989160006>"
         }
 
         return emojis[team_name]
@@ -581,7 +785,16 @@ class Team:
             "celia": "Celia",
             "micky": "Micky",
             "vanessa": "Vanessa",
-            "ornella": "Ornella"
+            "ornella": "Ornella",
+            "kury (prestiged)": "<:prestiged:870289549190897664> Kury",
+            "anny (prestiged)": "<:prestiged:870289549190897664> Anny",
+            "fatima (prestiged)": "<:prestiged:870289549190897664> Fatima",
+            "lilly (prestiged)": "<:prestiged:870289549190897664> Lilly",
+            "luna (prestiged)": "<:prestiged:870289549190897664> Luna",
+            "celia (prestiged)": "<:prestiged:870289549190897664> Celia",
+            "micky (prestiged)": "<:prestiged:870289549190897664> Micky",
+            "vanessa (prestiged)": "<:prestiged:870289549190897664> Vanessa",
+            "ornella (prestiged)": "<:prestiged:870289549190897664> Ornella"
         }
 
         return names[team_name]
@@ -596,7 +809,16 @@ class Team:
             "celia": {"atk": 19, "def": 18, "spd": 13, "hp": 15, "mag": 18, "luck": 15},
             "micky": {"atk": 20, "def": 15, "spd": 10, "hp": 17, "mag": 19, "luck": 15},
             "vanessa": {"atk": 18, "def": 13, "spd": 14, "hp": 16, "mag": 15, "luck": 16},
-            "ornella": {"atk": 19, "def": 15, "spd": 15, "hp": 10, "mag": 15, "luck": 13}
+            "ornella": {"atk": 19, "def": 15, "spd": 15, "hp": 10, "mag": 15, "luck": 13},
+            "kury (prestiged)": {"atk": 200, "def": 100, "spd": 100, "hp": 25, "mag": 20, "luck": 15},
+            "anny (prestiged)": {"atk": 180, "def": 140, "spd": 150, "hp": 16, "mag": 18, "luck": 12},
+            "fatima (prestiged)": {"atk": 190, "def": 100, "spd": 140, "hp": 150, "mag": 100, "luck": 130},
+            "lilly (prestiged)": {"atk": 150, "def": 100, "spd": 100, "hp": 160, "mag": 150, "luck": 120},
+            "luna (prestiged)": {"atk": 160, "def": 130, "spd": 150, "hp": 180, "mag": 110, "luck": 170},
+            "celia (prestiged)": {"atk": 190, "def": 180, "spd": 130, "hp": 150, "mag": 180, "luck": 150},
+            "micky (prestiged)": {"atk": 200, "def": 150, "spd": 100, "hp": 170, "mag": 190, "luck": 150},
+            "vanessa (prestiged)": {"atk": 180, "def": 130, "spd": 140, "hp": 160, "mag": 150, "luck": 160},
+            "ornella (prestiged)": {"atk": 190, "def": 150, "spd": 150, "hp": 100, "mag": 150, "luck": 130}
         }
 
         return team_ivs[team_name]
@@ -900,9 +1122,9 @@ class Cuppy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    """async def cog_check(self, ctx):
-        team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302, 343019667511574528]
-        return ctx.author.id in team"""
+    async def cog_check(self, ctx):
+        team = [336642139381301249, 800176902765674496]
+        return ctx.guild.id in team
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -1379,8 +1601,7 @@ class Cuppy(commands.Cog):
                 return
 
             if msg.content.lower() == "confirm":
-                fcg = Team.calc_needed_xp(0)
-                await self.bot.db.execute("UPDATE cuppy SET team_name = $1, team_needed_xp = $2, team_wins = $3, team_loses = $4, team_ties = $5, team_level = $6, team_xp = $7, balance = $8 WHERE user_id = $9", teammate_name.lower(), fcg, 0, 0, 0, 1, 0, data[0]["balance"] - 500, ctx.author.id)
+                await self.bot.db.execute("UPDATE cuppy SET team_name = $1, team_wins = $2, team_loses = $3, team_ties = $4, team_level = $5, team_xp = $6, balance = $7 WHERE user_id = $8", teammate_name.lower(), 0, 0, 0, 1, 0, data[0]["balance"] - 500, ctx.author.id)
 
                 await ctx.send(f"{ctx.author.mention} you've succesfully replaced your {t_emoji} **{t_name}** with {emoji} **{name}** for <:cupcake:845632403405012992> **500**!\n⚔ `{atk}` 🛡 `{defe}`\n👟 `{speed}` ❤ `{hp}`\n✨ `{magic}` 🍀 `{luck}`")
 
@@ -1397,10 +1618,69 @@ class Cuppy(commands.Cog):
             else:
                 pass
 
-        fcg = Team.calc_needed_xp(0)
-        await self.bot.db.execute("UPDATE cuppy SET team_name = $1, team_needed_xp = $2, balance = $3 WHERE user_id = $4", teammate_name.lower(), fcg, data[0]["balance"] - 500, ctx.author.id)
+        await self.bot.db.execute("UPDATE cuppy SET team_name = $1, balance = $2 WHERE user_id = $3", teammate_name.lower(), data[0]["balance"] - 500, ctx.author.id)
 
         await ctx.send(f"{ctx.author.mention} you've succesfully recruited {emoji} **{name}** for <:cupcake:845632403405012992> **500**!\n⚔ `{atk}` 🛡 `{defe}`\n👟 `{speed}` ❤ `{hp}`\n✨ `{magic}` 🍀 `{luck}`")
+
+    @team.command()
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def prestige(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.test_balance)
+
+        team = data[0]["team_name"]
+        if not team:
+            return await ctx.send(f"{ctx.author.mention} you don't have a teammate, check out `ami team shop`!")
+
+        level = data[0]["team_level"]
+        name = Team.name(team)
+        emoji = Team.emoji(team)
+
+        if team.endswith("(prestiged)"):
+            return await ctx.send(f"{ctx.author.mention} your {emoji} **{name}** is already prestiged.")
+
+        if level < 100:
+            return await ctx.send(f"{ctx.author.mention} your {emoji} **{name}** is <:level:868426330293821450> **{level}**: you can prestige only at <:level:868426330293821450> **100**.")
+
+        bal = data[0]["balance"]
+        if bal < 10000:
+            return await ctx.send(f"{ctx.author.mention} you need <:cupcake:845632403405012992> **10,000** to prestige {emoji} **{name}**")
+
+        msg_b = await ctx.send(f"{ctx.author.mention} are you sure you want to prestige your {emoji} **{name}** for <:cupcake:845632403405012992> **10,000**?\n"
+        f"XP & Level will return to 0, and IVs will highly raise up.\n<:alert_pink:867758260707000380> Reply in 30 seconds with \"CONFIRM\" to continue or with \"DECLINE\" to abort.")
+
+        try:
+            msg = await self.bot.wait_for("message", check=lambda m: m.author.id == ctx.author.id and m.channel.id == ctx.channel.id and m.content.lower() in ["confirm", "decline"], timeout = 30)
+        except asyncio.TimeoutError:
+            await msg_b.delete()
+            return
+
+        if msg.content.lower() == "confirm":
+            await self.bot.db.execute("UPDATE cuppy SET team_name = $1, team_level = $2, team_xp = $3, balance = $4 WHERE user_id = $5", f"{team.lower()}" + " (prestiged)", 1, 0, data[0]["balance"] - 10000, ctx.author.id)
+
+            await asyncio.sleep(2)
+
+            data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+
+            team2 = data2[0]["team_name"]
+
+            name2 = Team.name(team2)
+            emoji2 = Team.emoji(team2)
+
+            await ctx.send(f"{ctx.author.mention} you've spent <:cupcake:845632403405012992> **10,000** and now your teammate is {emoji2} **{name2}** !!")
+
+            return
+
+        elif msg.content.lower() == "decline":
+            await msg_b.delete()
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+
+            return
+
 
     @team.command(name="stats")
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -1448,13 +1728,13 @@ class Cuppy(commands.Cog):
 
         exp = data[0]["team_xp"]
         level = data[0]["team_level"]
-        needed_xp = data[0]["team_needed_xp"]
+        needed_xp = Team.calc_needed_xp(level, teammate.lower())
         wins = data[0]["team_wins"]
         loses = data[0]["team_loses"]
         draws = data[0]["team_ties"]
         friendship = data[0]["team_friendship"]
 
-        ivs = Team.ivs_level_based(teammate, level)
+        ivs = Team.ivs_level_based(teammate.lower(), level)
 
         atk = ivs["atk"]
         defe = ivs["def"]
@@ -1474,16 +1754,15 @@ class Cuppy(commands.Cog):
 
         em = discord.Embed(
                 title=f"{ctx.author.name}'s Teammate",
-                description=f"<:alert_pink:867758260707000380> {emoji} **{name}**\n{story}",
+                description=f"<:alert_pink:867758260707000380> {emoji} **{name}**\n{story}\n\n**IVs**: ⚔ `{atk}` 🛡 `{defe}` 👟 `{speed}` ❤ `{hp}` ✨ `{magic}` 🍀 `{luck}`\n",
                 color = self.bot.color)
-        em.add_field(name="IVs", value=f"⚔ `{atk}` 🛡 `{defe}`\n👟 `{speed}` ❤ `{hp}`\n✨ `{magic}` 🍀 `{luck}`")
+        em.add_field(name="Moveset", value=f"{b_final}\n{s_final}\n{u_final}")
         em.add_field(name="Progress", 
         value=f"<:xp:867817838941437974> **EXP**: {humanize.intcomma(exp)} / {humanize.intcomma(needed_xp)}\n"
         f"<:level:868426330293821450> **Level**: {humanize.intcomma(level)}\n"
         f"🏅 **Wins**: {humanize.intcomma(wins)}\n"
         f"🥈 **Loses**: {humanize.intcomma(loses)}\n"
         f"🥉 **Draws**: {humanize.intcomma(draws)}")
-        em.add_field(name="Moveset", value=f"{b_final}\n{s_final}\n{u_final}")
         em.set_thumbnail(url=img)
         em.set_footer(text=f"× Friendship: {f_calc}%")
 
@@ -1513,9 +1792,13 @@ class Cuppy(commands.Cog):
         await ctx.send(embed=em)
 
     @commands.command(aliases=["fight", "b"])
-    @commands.cooldown(1, 60, commands.BucketType.user)
+    @commands.cooldown(1, 30, commands.BucketType.user)
     @commands.max_concurrency(1, commands.BucketType.channel)
     async def battle(self, ctx, opponent: discord.Member):
+
+        if opponent.id == ctx.author.id:
+            return await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you can't battle against yourself.")
+
         data1 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", opponent.id)
 
@@ -1684,12 +1967,12 @@ class Cuppy(commands.Cog):
                     await self.bot.db.execute("UPDATE cuppy SET team_xp = $1, team_wins = $2, team_friendship = $3 WHERE user_id = $4", data1[0]["team_xp"] + xp_amount, data1[0]["team_wins"] + 1, data1[0]["team_friendship"] + friend, ctx.author.id)
                     await self.bot.db.execute("UPDATE cuppy SET team_loses = $1 WHERE user_id = $2", data2[0]["team_loses"] + 1, opponent.id)
                     data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+                    lvl = data[0]["team_level"]
 
-                    if data[0]["team_xp"] >= data[0]["team_needed_xp"]:
-                        c_nxp = Team.calc_needed_xp(data[0]["team_xp"])
+                    if data[0]["team_xp"] >= Team.calc_needed_xp(lvl, n_team_author.lower()):
                         await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} {e_team_author} **{n_team_author}** won the battle against {e_team_opponent} **{n_team_opponent}** and gained <:xp:867817838941437974> **{xp_amount}**!\n"
                                         f"<:alert_pink:867758260707000380> Oh! {e_team_author} **{n_team_author}** leveled up to <:level:868426330293821450> **{data[0]['team_level'] + 1}**!")
-                        await self.bot.db.execute("UPDATE cuppy SET team_needed_xp = $1, team_level = $2, team_xp = $3 WHERE user_id = $4", c_nxp, data[0]["team_level"] + 1, 0, ctx.author.id)
+                        await self.bot.db.execute("UPDATE cuppy SET team_level = $1, team_xp = $2 WHERE user_id = $3", data[0]["team_level"] + 1, 0, ctx.author.id)
 
                         break
 
@@ -1701,12 +1984,12 @@ class Cuppy(commands.Cog):
                     await self.bot.db.execute("UPDATE cuppy SET team_xp = $1, team_wins = $2, team_friendship = $3 WHERE user_id = $4", data2[0]["team_xp"] + xp_amount, data2[0]["team_wins"] + 1, data2[0]["team_friendship"] + friend, opponent.id)
                     await self.bot.db.execute("UPDATE cuppy SET team_loses = $1 WHERE user_id = $2", data1[0]["team_loses"] + 1, ctx.author.id)
                     data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", opponent.id)
+                    lvl = data[0]["team_level"]
 
-                    if data[0]["team_xp"] >= data[0]["team_needed_xp"]:
-                        c_nxp = Team.calc_needed_xp(data[0]["team_xp"])
+                    if data[0]["team_xp"] >= Team.calc_needed_xp(lvl, n_team_opponent.lower()):
                         await ctx.send(f"<:alert_pink:867758260707000380> {opponent.mention} {e_team_opponent} **{n_team_opponent}** won the battle against {e_team_author} **{n_team_author}** and gained <:xp:867817838941437974> **{xp_amount}**!\n"
                                         f"<:alert_pink:867758260707000380> Oh! {e_team_opponent} **{n_team_opponent}** leveled up to <:level:868426330293821450> **{data[0]['team_level'] + 1}**!")
-                        await self.bot.db.execute("UPDATE cuppy SET team_needed_xp = $1, team_level = $2, team_xp = $3 WHERE user_id = $4", c_nxp, data[0]["team_level"] + 1, 0, opponent.id)
+                        await self.bot.db.execute("UPDATE cuppy SET team_level = $1, team_xp = $2 WHERE user_id = $3", data[0]["team_level"] + 1, 0, opponent.id)
 
                         break
 
@@ -1721,6 +2004,36 @@ class Cuppy(commands.Cog):
     async def test(self, ctx, teammate: str, level: int):
         ivs = Team.ivs_level_based(teammate.lower(), level)
         return await ctx.send(ivs)
+
+    @commands.command(aliases=["mlist", "ml"])
+    @commands.cooldown(1, 12, commands.BucketType.user)
+    async def monsterlist(self, ctx):
+        d = ["common", "rare", "super rare", "mystic"]
+
+        entries = []
+
+        for m in d:
+            mon_list = Monster.rarity_ordered(m)
+            for c in mon_list:
+                mon_rar = Monster.get_rarity(c)
+                mon_name = Monster.name(c)
+                mon_emoji = Monster.emoji(c)
+                rar_emoji = Rarity.emoji(mon_rar)
+                mon_cup = Monster.cup_drop(c)
+                mon_xp = Monster.xp_drop(c)
+                mon_hp = Monster.get_hp(c)
+                entries.append(f"<:xp:867817838941437974> `{mon_xp*10}` ❤ `{mon_hp}` <:cupcake:845632403405012992> `{mon_cup}` | {rar_emoji} {mon_emoji} **{mon_name}** ")
+
+        pages = Paginate(entries)
+        paginator = menus.MenuPages(source=pages, timeout=45.5, delete_message_after=True)
+        await paginator.start(ctx)
+
+        #await ctx.send(embed = discord.Embed(
+            #title = "Monsters List",
+            #description = "Listed you can see all the current "
+                            #"spottable monsters with their rarity.\n\n" + '\n'.join(f),
+            #color = self.bot.color
+        #))
 
     @commands.command(aliases=["mh", "mhunt"])
     @commands.cooldown(1, 15, commands.BucketType.user)
@@ -1745,14 +2058,33 @@ class Cuppy(commands.Cog):
         special_moves = moves["special"]
         ultra_moves = moves["ultra"]
 
-        monster = random.choice(Monster.all_monsters())
+        monste = None
+
+        cvfd = random.randint(1, 100)
+        if cvfd in range(1, 50):
+            monste = "common"
+        elif cvfd in range(50, 76):
+            monste = "rare"
+        elif cvfd in range (75, 96):
+            monste = "super rare"
+        else:
+            monste = "mystic"
+
+        monste_s = Monster.rarity_ordered(monste)
+
+        monster = random.choice(monste_s)
 
         mon_hp = Monster.get_hp(monster)
+
         mon_name = Monster.name(monster)
         mon_emoji = Monster.emoji(monster)
+
         mon_cup = Monster.cup_drop(monster)
         mon_xp = Monster.xp_drop(monster)
         mon_im = Monster.get_image(monster)
+
+        mon_rar = Monster.get_rarity(monster)
+        mon_rar_str = Rarity.find_rarity(mon_rar)
 
         c_c = random.randint(1, 90)
         j_c = random.randint(1, 90)
@@ -1763,7 +2095,7 @@ class Cuppy(commands.Cog):
                         description = f"{team_emoji} **{team_name}** spotted a wild {mon_emoji} **{mon_name}**!",
                         color = self.bot.color)
                         .set_image(url=mon_im)
-                        .set_footer(text=f"|═════ Hunt Info ═════|\n♥ Health: {humanize.intcomma(mon_hp)}\nΩ Crit. Chance: {c_c}%\n⌗ Jail Chance: {j_c}%\n\n|═════ Rates ═════|\n"
+                        .set_footer(text=f"{mon_rar_str}\n\nHealth: {humanize.intcomma(mon_hp)}\nCrit. Chance: {c_c}%\nJail Chance: {j_c}%\n\n═════ Rates ═════\n"
                                     f"• Jailing it is {mon_cup} cupcakes valued!\n"
                                     f"• Attacking and defeating it is {humanize.intcomma(mon_xp*10)} XP valued!\n"
                                     f"• Escaping will make you lose 5 cupcakes!")
@@ -1772,11 +2104,11 @@ class Cuppy(commands.Cog):
         try:
             msg = await self.bot.wait_for("message", check=lambda m: m.author.id == ctx.author.id and m.channel.id == ctx.channel.id and m.content.lower() in ["attack", "atk", "jail", "escape", "run"], timeout = 15)
         except asyncio.TimeoutError:
-            await mex.edit(content=f"{ctx.author.name} took too long to choose..",
+            await mex.edit(content=f"{ctx.author.mention} took too long to choose..",
 
                             embed = discord.Embed(
                         title = "Monster Escaped..",
-                        description = f"{mon_emoji} **{mon_name}** runned away..",
+                        description = f"{mon_emoji} **{mon_name}** ran away..",
                         color = self.bot.color)
                         .set_image(url=mon_im)
                     )
@@ -1824,13 +2156,12 @@ class Cuppy(commands.Cog):
                 return
 
             elif damage > mon_hp:
-                m = f"|═════ Reward ═════|\n[★] {team_name} earned {humanize.intcomma(mon_xp*10)} XP!"
+                m = f"Rarity: {mon_rar_str}\n\n═════ Reward ═════\n[★] {team_name.strip('<:prestiged:870289549190897664>')} earned {humanize.intcomma(mon_xp*10)} XP!"
                 await self.bot.db.execute("UPDATE cuppy SET team_xp = $1 WHERE user_id = $2", data[0]["team_xp"] + mon_xp*10, ctx.author.id)
                 data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
-                if data2[0]["team_xp"] >= data2[0]["team_needed_xp"]:
-                        c_nxp = Team.calc_needed_xp(data2[0]["team_xp"])
-                        await self.bot.db.execute("UPDATE cuppy SET team_needed_xp = $1, team_level = $2, team_xp = $3 WHERE user_id = $4", c_nxp, data2[0]["team_level"] + 1, 0, ctx.author.id)
-                        m = f"|═════ Reward ═════|\n[★] {team_name} earned {humanize.intcomma(mon_xp*10)} XP!\n[★] Oh! {team_name} leveled up to level {data2[0]['team_level'] + 1}!"
+                if data2[0]["team_xp"] >= Team.calc_needed_xp(data2[0]["team_level"], team_name.lower()):
+                        await self.bot.db.execute("UPDATE cuppy SET team_level = $1, team_xp = $2 WHERE user_id = $3", data2[0]["team_level"] + 1, 0, ctx.author.id)
+                        m = f"Rarity: {mon_rar_str}\n\n═════ Reward ═════\n[★] {team_name.strip('<:prestiged:870289549190897664>')} earned {humanize.intcomma(mon_xp*10)} XP!\n[★] Oh! {team_name.strip('<:prestiged:870289549190897664>')} leveled up to level {data2[0]['team_level'] + 1}!"
 
                 await mex.edit(content=f"{team_emoji} **{team_name}** landed a {move_emoji} **{move_name}**: that dealt 💥 {humanize.intcomma(damage)}{c_m}\n"
                                     f"{mon_emoji} **{mon_name}** fell for the damage, the hunt was a success!",
@@ -1871,7 +2202,7 @@ class Cuppy(commands.Cog):
                                     description = f"{team_emoji} **{team_name}** jailed {mon_emoji} **{mon_name}**!",
                                     color = self.bot.color)
                                     .set_image(url=mon_im)
-                                    .set_footer(text=f"|═════ Reward ═════|\n[★] You've earned {mon_cup} cupcakes!\n")
+                                    .set_footer(text=f"※ Rarity: {mon_rar_str}\n\n═════ Reward ═════\n[★] You've earned {mon_cup} cupcakes!\n")
                                 )
 
                 return
@@ -1916,6 +2247,37 @@ class Cuppy(commands.Cog):
 
             return
     
+
+    @commands.group(help="", aliases=[""], invoke_without_command=True)
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def clan(self, ctx):
+        await ctx.invoke(self.bot.get_command("help"), **{"command":"clan"})
+
+    @clan.command()
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def create(self, ctx, name: str):
+        ...
+
+    @clan.command()
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def delete(self, ctx):
+        ...
+
+    @clan.command()
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def leave(self, ctx, name: str):
+        ...
+
+    @clan.command()
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def info(self, ctx):
+        ...
+
+    @clan.command()
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def rank(self, ctx):
+        ...
+
 
     @commands.command()
     @is_team()
