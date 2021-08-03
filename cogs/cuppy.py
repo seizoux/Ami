@@ -5,6 +5,120 @@ import random
 import asyncio
 import humanize
 from util.defs import is_team
+import uuid
+import typing
+from captcha.image import ImageCaptcha
+from io import BytesIO
+import os
+
+from aiohttp import ClientSession
+from PIL import Image, ImageDraw, ImageFont
+
+from discord import Color, File
+
+
+
+class BattleRenderer:
+    BACKGROUND_URL = 'https://cdn.discordapp.com/attachments/851875804945973330/870696897311023204/battle_arena.png'
+    FONT_PATH = "./fonts/coolvetica rg.ttf"
+
+    def __init__(
+        self,
+        char_1='https://cdn.discordapp.com/attachments/851875804945973330/870696969364996156/celia.gif',
+        char_2='https://cdn.discordapp.com/attachments/851875804945973330/870696985714376734/vanessa.gif',
+        *,
+        char_1_stats,
+        char_2_stats,
+        loop=None
+    ):
+        self._char_1 = char_1
+        self._char_2 = char_2
+        self._font = None
+        self._small_font = None
+        self._vs_font = None
+
+        self._c1_stats = char_1_stats
+        self._c2_stats = char_2_stats
+        self._loop = loop or asyncio.get_event_loop()
+
+    async def read(self):
+        # Replace instances of this with your bot's session if you have one
+        async with ClientSession() as session:
+            async with session.get(self.BACKGROUND_URL) as response:
+                background = await response.read()
+
+            async with session.get(self._char_1) as response:
+                char_1 = await response.read()
+
+            async with session.get(self._char_2) as response:
+                char_2 = await response.read()
+
+        with open(self.FONT_PATH, 'rb') as fp:
+            self._font = ImageFont.truetype(BytesIO(fp.read()), size=64)
+            fp.seek(0)
+            self._small_font = ImageFont.truetype(BytesIO(fp.read()), size=38)
+            fp.seek(0)
+            self._vs_font = ImageFont.truetype(BytesIO(fp.read()), size=200)
+
+        return background, char_1, char_2
+
+    def _render(self, background, char_1, char_2, char_1_hp, char_2_hp):
+        with Image.open(BytesIO(background)) as image:
+            image = image.convert('RGBA')
+
+            with Image.open(BytesIO(char_1)) as asset:
+                # (1920, 1080)
+                asset = asset.convert('RGBA').resize((700, 700))
+                image.paste(asset, (50, 350), asset)
+
+            with Image.open(BytesIO(char_2)) as asset:
+                asset = asset.convert('RGBA').resize((700, 700))
+                image.paste(asset, (1920 - 750, 350), asset)
+
+            draw = ImageDraw.Draw(image)
+            points = ((50, 50), (750, 50), (600, 300), (50, 300))
+            draw.polygon(points, (244, 244, 244, 255))
+            draw.line(points + ((50, 43),), (244, 244, 244, 230), width=15, joint='curve')
+
+            points = ((1920 - 50, 50), (1920 - 750, 50), (1920 - 600, 300), (1920 - 50, 300))
+            draw.polygon(points, (244, 244, 244, 255))
+            draw.line(points + ((1920 - 50, 43),), (244, 244, 244, 230), width=15, joint='curve')
+
+            w, h = self._vs_font.getsize('VS')
+            draw.text((int(image.width / 2 - w / 2), 75), 'VS', (255, 255, 255, 255), font=self._vs_font)
+
+            ratio = char_1_hp / self._c1_stats['max_hp']
+            color = Color.from_hsv(.3 * ratio, 1, 1).to_rgb()
+
+            draw.text((75, 65), self._c1_stats['name'], (0, 0, 0, 255), self._font)
+            draw.text((75, 140), f'Level {self._c1_stats["level"]:,}', (0, 0, 0, 255), self._small_font)
+            draw.text((75, 185), f'{char_1_hp:,} / {self._c1_stats["max_hp"]} HP', (0, 0, 0, 255), self._small_font)
+
+            hp_width = 350
+            draw.rectangle((75, 240, 75 + hp_width, 280), (233, 233, 233))
+            draw.rectangle((80, 245, 80 + int(ratio * (hp_width - 10)), 275), color)
+
+            ratio = char_2_hp / self._c2_stats['max_hp']
+            color = Color.from_hsv(.3 * ratio, 1, 1).to_rgb()
+
+            text = self._c2_stats['name']
+            draw.text((1920 - 75 - self._font.getsize(text)[0], 65), text, (0, 0, 0, 255), self._font)
+            text = f'Level {self._c2_stats["level"]:,}'
+            draw.text((1920 - 75 - self._small_font.getsize(text)[0], 140), text, (0, 0, 0, 255), self._small_font)
+            text = f'{char_2_hp:,} / {self._c2_stats["max_hp"]} HP'
+            draw.text((1920 - 75 - self._small_font.getsize(text)[0], 185), text, (0, 0, 0, 255), self._small_font)
+
+            draw.rectangle((1920 - 75, 240, 1920 - 75 - hp_width, 280), (233, 233, 233))
+            draw.rectangle((1920 - 80, 245, 1920 - (80 + int(ratio * (hp_width - 10))), 275), color)
+
+            buffer = BytesIO()
+            image.save(buffer, 'png')
+            buffer.seek(0)
+            return buffer
+
+    async def render(self, char_1_hp, char_2_hp) -> File:
+        buffer = await self._loop.run_in_executor(None, self._render, *await self.read(), char_1_hp, char_2_hp)
+        return File(buffer, 'battle.png')
 
 class Paginate(menus.ListPageSource):
 
@@ -16,12 +130,67 @@ class Paginate(menus.ListPageSource):
         embed = discord.Embed(title="Monsters List",
             description = "That's a list of all the "
                         "currently spottable monster "
-                        "into `monsterhunt`!\n<:common:870289549052477450> `Common` <:rare:870289549543215144> `Rare` <:super_rare:870289549400616980> `Super Rare` <:mystic:870289549153165332> `Mystic`\n\n"
+                        "into `monsterhunt`!\n<:common:870289549052477450> `Common` <:rare:870289549543215144> `Rare` <:super_rare:870289549400616980> `Super Rare` <:mystic:870289549153165332> `Mystic` 🌟 `Special`\n\n"
                         + '\n'.join(page) + "\n\n═════ **Reactions Info**═════ \n⏮ `first` ◀ `back` ▶ `next` ⏩ `end` ⏹ `stop`\n"
                         "*This message expires in 45.5 seconds!*",
             color = 0xffcff1)
 
         return embed
+
+class Clan:
+    def next_league(actual: str):
+        next = {
+            "silver": "gold",
+            "gold": "diamond",
+            "diamond": None
+        }
+
+        return next[actual]
+
+    def max_members(league: str):
+        mem = {
+            "silver": 50,
+            "gold": 75,
+            "diamond": 125
+        }
+
+        return mem[league]
+
+    def league_emoji(league: str):
+        leg = {
+            "silver": "<:silver_league:870741139039322134>",
+            "gold": "<:gold_league:870741138343088129>",
+            "diamond": "<:diamond_league:870741137873334315>"
+        }
+
+        return leg[league]
+
+    def league_image(league: str):
+        im = {
+            "silver": "https://cdn.discordapp.com/attachments/869970935015419967/870741335840268328/silver_league.png",
+            "gold": "https://cdn.discordapp.com/attachments/869970935015419967/870741332010876998/gold_league.png",
+            "diamond": "https://cdn.discordapp.com/attachments/869970935015419967/870741328324091924/diamond_league.png"
+        }
+
+        return im[league]
+
+    def league_name(league: str):
+        nam = {
+            "silver": "Silver",
+            "gold": "Gold",
+            "diamond": "Diamond"
+        }
+
+        return nam[league]
+
+    def needed_xp(league: str):
+        xp = {
+            "silver": 500000,
+            "gold": 1000000,
+            "diamond": 2000000
+        }
+
+        return xp[league]
 
 class Rarity:
     def find_rarity(type: int):
@@ -29,7 +198,8 @@ class Rarity:
             1: "Common (50% encounter rate)",
             2: "Rare (25% encounter rate)",
             3: "Super Rare (20% encounter rate)",
-            4: "Mystic (5% encounter rate)"
+            4: "Mystic (4% encounter rate)",
+            5: "Special (1% encounter rate)"
         }
 
         return rarity[type]
@@ -39,7 +209,8 @@ class Rarity:
             1: "<:common:870289549052477450>",
             2: "<:rare:870289549543215144>",
             3: "<:super_rare:870289549400616980>",
-            4: "<:mystic:870289549153165332>"
+            4: "<:mystic:870289549153165332>",
+            5: "🌟"
         }
 
         return emojis[rare]
@@ -60,7 +231,9 @@ class Monster:
 
                     "mystic": ["molten iron golem", "magala", "imperial dragon", "godzilla", "galaxy dragon",
                                 "decalion", "holidoom", "quetzalcoatl", "magala final form", "laymon", "chaos dragon",
-                                "wyvern", "magala (gore)"]
+                                "wyvern", "magala (gore)"],
+
+                    "special": ["naruto", "luffy", "rin", "nezuko", "saitama", "deku", "goku", "natsu", "monokuma"]
                 }
 
         return rare_ord[rarity]
@@ -122,7 +295,16 @@ class Monster:
             "t-rex": 3,
             "platinum dragon": 3,
             "norroth": 3,
-            "olione": 2
+            "olione": 2,
+            "naruto": 5,
+            "luffy": 5, 
+            "rin": 5, 
+            "nezuko": 5,
+            "saitama": 5,
+            "deku": 5,
+            "goku": 5,
+            "natsu": 5,
+            "monokuma": 5
         }
 
         return rare[monster]
@@ -184,7 +366,16 @@ class Monster:
             "t-rex": "https://cdn.discordapp.com/attachments/870014290374066189/870015227113144330/t-rex.png",
             "platinum dragon": "https://cdn.discordapp.com/attachments/870014290374066189/870015222864281640/platinum_dragon.png",
             "norroth": "https://cdn.discordapp.com/attachments/870014290374066189/870015217332002826/norroth.png",
-            "olione": "https://cdn.discordapp.com/attachments/870014290374066189/870015219856986152/olione.png"
+            "olione": "https://cdn.discordapp.com/attachments/870014290374066189/870015219856986152/olione.png",
+            "naruto": "https://cdn.discordapp.com/attachments/870014290374066189/871154084160339998/naruto.png",
+            "luffy": "https://cdn.discordapp.com/attachments/870014290374066189/871154079861182494/luffy_gear_fourth.png", 
+            "rin": "https://cdn.discordapp.com/attachments/870014290374066189/871154094633541672/rin.png", 
+            "nezuko": "https://cdn.discordapp.com/attachments/870014290374066189/871154090137239562/nezuko.png",
+            "saitama": "https://cdn.discordapp.com/attachments/870014290374066189/871154100593647666/saitama.png",
+            "deku": "https://cdn.discordapp.com/attachments/870014290374066189/871154076635770990/deku.png",
+            "goku": "https://cdn.discordapp.com/attachments/870014290374066189/871154078233821194/goku_ultra_instinct.png",
+            "natsu": "https://cdn.discordapp.com/attachments/870014290374066189/871154087310295060/natsu.png",
+            "monokuma": "https://cdn.discordapp.com/attachments/870014290374066189/871154081635369000/monokuma.png"
         }
 
 
@@ -247,7 +438,16 @@ class Monster:
             "t-rex",
             "platinum dragon",
             "norroth",
-            "olione"
+            "olione",
+            "naruto",
+            "luffy", 
+            "rin", 
+            "nezuko",
+            "saitama",
+            "deku",
+            "goku",
+            "natsu",
+            "monokuma"
         ]
 
         return here
@@ -310,7 +510,16 @@ class Monster:
             "t-rex": "<:trex:870014390395609098>",
             "platinum dragon": "<:platinum_dragon:870014390034911233>",
             "norroth": "<:norroth:870014389820993547>",
-            "olione": "<:olione:870014390206877756>"
+            "olione": "<:olione:870014390206877756>",
+            "naruto": "<:naruto:871152621866602537>",
+            "luffy": "<:luffy_gear_fourth:871152622747390053>", 
+            "rin": "<:rin:871152621979861052>", 
+            "nezuko": "<:nezuko:871152621761753118>",
+            "saitama": "<:saitama:871152621883375666>",
+            "deku": "<:deku:871152621296185384>",
+            "goku": "<:goku_ultra_instinct:871152621325541436>",
+            "natsu": "<:natsu:871152621673664562>",
+            "monokuma": "<:monokuma:871152621556207636>"
         }
 
         return emojis[monster]
@@ -372,7 +581,16 @@ class Monster:
             "t-rex": "T-Rex",
             "platinum dragon": "Platinum Dragon",
             "norroth": "Norroth",
-            "olione": "Olione"
+            "olione": "Olione",
+            "naruto": "Naruto (Six Path)",
+            "luffy": "Luffy (4th Gear)", 
+            "rin": "Rin", 
+            "nezuko": "Nezuko",
+            "saitama": "Saitama",
+            "deku": "Deku",
+            "goku": "Goku (Ultra Instinct)",
+            "natsu": "Natsu",
+            "monokuma": "Monokuma"
         }
 
         return m_name[monster]
@@ -434,7 +652,16 @@ class Monster:
             "t-rex": 50,
             "platinum dragon": 75,
             "norroth": 50,
-            "olione": 25
+            "olione": 25,
+            "naruto": 500,
+            "luffy": 500, 
+            "rin": 500, 
+            "nezuko": 500,
+            "saitama": 500,
+            "deku": 500,
+            "goku": 500,
+            "natsu": 500,
+            "monokuma": 500
         }
 
         return xp[monster]
@@ -496,7 +723,16 @@ class Monster:
             "t-rex": 200,
             "platinum dragon": 250,
             "norroth": 150,
-            "olione": 100
+            "olione": 100,
+            "naruto": 400,
+            "luffy": 400, 
+            "rin": 400, 
+            "nezuko": 400,
+            "saitama": 400,
+            "deku": 400,
+            "goku": 400,
+            "natsu": 400,
+            "monokuma": 400
         }
 
         return hp[monster]
@@ -558,7 +794,16 @@ class Monster:
             "t-rex": 10,
             "platinum dragon": 10,
             "norroth": 10,
-            "olione": 3
+            "olione": 3,
+            "naruto": 50,
+            "luffy": 50, 
+            "rin": 50, 
+            "nezuko": 50,
+            "saitama": 50,
+            "deku": 50,
+            "goku": 50,
+            "natsu": 50,
+            "monokuma": 50
         }
 
         return cup[monster]
@@ -810,15 +1055,15 @@ class Team:
             "micky": {"atk": 20, "def": 15, "spd": 10, "hp": 17, "mag": 19, "luck": 15},
             "vanessa": {"atk": 18, "def": 13, "spd": 14, "hp": 16, "mag": 15, "luck": 16},
             "ornella": {"atk": 19, "def": 15, "spd": 15, "hp": 10, "mag": 15, "luck": 13},
-            "kury (prestiged)": {"atk": 200, "def": 100, "spd": 100, "hp": 25, "mag": 20, "luck": 15},
-            "anny (prestiged)": {"atk": 180, "def": 140, "spd": 150, "hp": 16, "mag": 18, "luck": 12},
-            "fatima (prestiged)": {"atk": 190, "def": 100, "spd": 140, "hp": 150, "mag": 100, "luck": 130},
-            "lilly (prestiged)": {"atk": 150, "def": 100, "spd": 100, "hp": 160, "mag": 150, "luck": 120},
-            "luna (prestiged)": {"atk": 160, "def": 130, "spd": 150, "hp": 180, "mag": 110, "luck": 170},
-            "celia (prestiged)": {"atk": 190, "def": 180, "spd": 130, "hp": 150, "mag": 180, "luck": 150},
-            "micky (prestiged)": {"atk": 200, "def": 150, "spd": 100, "hp": 170, "mag": 190, "luck": 150},
-            "vanessa (prestiged)": {"atk": 180, "def": 130, "spd": 140, "hp": 160, "mag": 150, "luck": 160},
-            "ornella (prestiged)": {"atk": 190, "def": 150, "spd": 150, "hp": 100, "mag": 150, "luck": 130}
+            "kury (prestiged)": {"atk": 300, "def": 200, "spd": 200, "hp": 225, "mag": 220, "luck": 215},
+            "anny (prestiged)": {"atk": 280, "def": 240, "spd": 250, "hp": 216, "mag": 218, "luck": 212},
+            "fatima (prestiged)": {"atk": 290, "def": 200, "spd": 240, "hp": 250, "mag": 200, "luck": 230},
+            "lilly (prestiged)": {"atk": 250, "def": 200, "spd": 200, "hp": 260, "mag": 250, "luck": 220},
+            "luna (prestiged)": {"atk": 260, "def": 230, "spd": 250, "hp": 280, "mag": 210, "luck": 270},
+            "celia (prestiged)": {"atk": 290, "def": 280, "spd": 230, "hp": 250, "mag": 280, "luck": 250},
+            "micky (prestiged)": {"atk": 300, "def": 250, "spd": 200, "hp": 270, "mag": 290, "luck": 250},
+            "vanessa (prestiged)": {"atk": 280, "def": 230, "spd": 240, "hp": 260, "mag": 250, "luck": 260},
+            "ornella (prestiged)": {"atk": 290, "def": 250, "spd": 250, "hp": 200, "mag": 250, "luck": 230}
         }
 
         return team_ivs[team_name]
@@ -1121,26 +1366,230 @@ class Lootbox:
 class Cuppy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.in_captcha = {}
+        self.captcha_failed = {}
+
+    async def captcha(self, ctx, user: discord.Member):
+        """
+        This is actually a thing that i needed forcely to
+        do, people can easly log as a selfbots and start
+        spamming commands to earn, then we handle it with
+        this captcha system, which every 50 cuppy commands
+        is invoked and it will bl the user from the bot
+        permanently if the user fails the captcha.
+        """
+        
+        self.in_captcha[user.id] = True
+        image = ImageCaptcha(fonts=['fonts/standard.ttf'])
+        number = random.randint(1000, 99999)
+        data = image.generate(str(number))
+        buffer = BytesIO()
+        image.write(str(number), buffer)
+        buffer.seek(0)
+        file=discord.File(fp=buffer, filename="captcha.png")
+
+        time = random.randint(60, 180)
+
+        me = await ctx.send(f"{user.mention} please solve the **captcha** above sending the right numbers to can continue "
+                            f"playing cuppy. You have **{humanize.precisedelta(time)}**. No reply from the bot means you are __incorrect__, please join the support server (`ami support`) if you need help with the captcha!\n"
+                            "If you exceed the timeout limit, you will recive an **in-game ban** and a **bot ban** (usually that's not appealable and we don't provide second chances).", file=file)
+            
+
+
+        while True:
+            try:
+                mex = await self.bot.wait_for("message", check=lambda m: m.author.id == user.id and m.channel.id == ctx.channel.id and m.content == str(number), timeout = time)
+            except asyncio.TimeoutError:
+                await ctx.send(f"<:4318crossmark:848857812565229601> {user.mention} you exceed the timeout limit from the captcha, you are now banned from the bot.")
+                self.captcha_failed[user.id] = "Failed solving the cuppy captcha."
+                del self.in_captcha[user.id]
+                await me.delete()
+                break
+
+            if mex.content == str(number):
+                await ctx.send(f"<:4430checkmark:848857812632076314> {user.mention} thanks, you may continue playing cuppy!")
+                del self.in_captcha[user.id]
+                break
 
     async def cog_check(self, ctx):
-        team = [336642139381301249, 800176902765674496]
-        return ctx.guild.id in team
+        if ctx.author.id in self.in_captcha.keys():
+            return
+
+        if ctx.author.id in self.captcha_failed.keys():
+            return await ctx.send(f"{ctx.author.mention} you are banned from Ami (captcha failed).")
+
+        s = random.randint(1, 100)
+        if s == 1:
+            await self.captcha(ctx, ctx.author)
+            return False
+
+        return True
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("Cuppy Loaded")
+
+    @tasks.loop(hours=2)
+    async def fails(self):
+        if len(self.captcha_failed) < 1:
+            return
+
+        for k, v in self.captcha_failed:
+            await self.bot.db.execute("INSERT INTO blacklist (user_id, reason) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET reason = $2", k, v)
+            del self.captcha_failed[k]
+
+    @commands.command(help="Claim your daily cupcakes gift!")
+    @commands.cooldown(1, 86400, commands.BucketType.user)
+    async def daily(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        actual = datetime.datetime.utcnow()
+        future = actual + datetime.timedelta(hours=24)
+
+        c = random.randint(10, 500)
+        await self.bot.db.execute("UPDATE cuppy SET balance = $1, daily_date = $2 WHERE user_id = $3", data[0]["balance"] + c, future, ctx.author.id)
+
+        await asyncio.sleep(2)
+
+        data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+
+        time = data2[0]["daily_date"] - datetime.datetime.utcnow()
+        await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you got <:cupcake:845632403405012992> **{c}** from your daily vote!\n<:alert_pink:867758260707000380> You can claim the next one in **{humanize.precisedelta(time.seconds)}**.")
+
+    @commands.command(help="That's you checklist, you can check here times before you can get the next rewards!", aliases=["cl"])
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def checklist(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        daily = data[0]["daily_date"]
+        vote = data[0]["vote_date"]
+        daily_mex = ""
+        vote_mex = ""
+        if not daily:
+            daily_mex = "is **ready**!"
+            dtick = "✅"
+        else:
+            d_final_date = daily - datetime.datetime.utcnow()
+            if d_final_date.seconds < 1:
+                daily_mex = "is **ready**!"
+                dtick = "✅"
+            else:
+                b = humanize.precisedelta(d_final_date.seconds).replace(" hours," or " hour,", "H")
+                b = b.replace(" minutes and" or " minute and", "M")
+                b = b.replace(" seconds" or " second", "S")
+                daily_mex = f"is in **{b}**!"
+                dtick = ":black_medium_square:"
+
+        if not vote:
+            vote_mex = "is **ready**!"
+            vtick = "✅"
+        else:
+            v_final_date = vote - datetime.datetime.utcnow()
+            if v_final_date.seconds < 1:
+                vote_mex = "is **ready**!"
+                vtick = "✅"
+            else:
+                b = humanize.precisedelta(v_final_date.seconds).replace(" hours," or " hour,", "H")
+                b = b.replace(" minutes and" or " minute and", "M")
+                b = b.replace(" seconds" or " second", "S")
+                vote_mex = f"is in **{b}**!"
+                vtick = ":black_medium_square:"
+
+        await ctx.send(embed = discord.Embed(
+            description = f"{dtick} Your next daily {daily_mex}\n{vtick} Your next vote {vote_mex}\n\n`a;vote`, `a;daily`",
+            color = self.bot.color
+        )
+        .set_author(name=f"{ctx.author.name}'s Checklist", icon_url = self.bot.user.avatar_url)
+        )
+
+    @commands.command(help="Take a look on how many lootboxes you have in your inventory.", aliases=["boxinv", "bi"])
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    async def boxinventory(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        common = data[0]["lootbox_common"]
+        uncommon = data[0]["lootbox_uncommon"]
+        rare = data[0]["lootbox_rare"]
+        epic = data[0]["lootbox_epic"]
+
+        await ctx.send(f"{ctx.author.mention} you currently have {Lootbox.emoji('common')} {common}x "
+        f"{Lootbox.emoji('uncommon')} {uncommon}x {Lootbox.emoji('rare')} {rare}x {Lootbox.emoji('epic')} {epic}x")
+
+    @commands.command(help="Check the global leaderboard about users or clans, you can pass `ami leaderboard clans` to see clans or just `ami leaderboard` to see users!", aliases=["lb"])
+    @commands.cooldown(1, 20, commands.BucketType.user)
+    async def leaderboard(self, ctx, types:str=None):
+        if types is None:
+            types = "users"
+
+        d = ["players", "users", "clans", "clan"]
+        if types:
+            if types not in d:
+                return await ctx.send(f"{ctx.author.mention} you've passed an invalid leaderboard type.")
+
+        if types in ["users", "players"]:
+            user = await self.bot.db.fetch("SELECT *, RANK() OVER (ORDER BY balance DESC) FROM cuppy LIMIT $1", 10)
+            names = []
+            bals = []
+            for i in user:
+                users = self.bot.get_user(i["user_id"]) or (await self.bot.fetch_user(i["user_id"]))
+                bal = i["balance"]
+                if ctx.author.id == i["user_id"]:
+                    names.append(f"`{i['rank']}.` **{users.name}#{users.discriminator}**")
+                else:
+                    names.append(f"`{i['rank']}.` {users.name}#{users.discriminator}")
+                bals.append(f"<:cupcake:845632403405012992> {humanize.intcomma(bal)}")
+
+            return await ctx.send(embed = discord.Embed(
+                description = f"Cuppy leaderboard about __{types}__!",
+                color = self.bot.color
+            ).add_field(name=f"📕 {types.title()}", value='\n'.join(names))
+            .add_field(name="📕 Balance", value='\n'.join(bals))
+            .set_author(name="Ami Cuppy Leaderboard", icon_url=self.bot.user.avatar_url)
+            .set_thumbnail(url=self.bot.user.avatar_url)
+            .set_footer(text="The leaderboard is sent in real-time, no delay on new balances / clans xp."))
+
+        elif types in ["clans", "clan"]:
+            user = await self.bot.db.fetch("SELECT *, RANK() OVER (ORDER BY clan_xp DESC) FROM clans LIMIT $1", 10)
+            clan_names = []
+            clan_exps = []
+            clan_leagues = []
+            for i in user:
+                name = i["clan_name"]
+                league = i["clan_league"]
+                xp = i["clan_xp"]
+                members = i["clan_members"]
+                clan_names.append(f"`{i['rank']}.` {name} (👥 {members} / {Clan.max_members(league)})")
+                clan_exps.append(f"{humanize.intcomma(xp)}")
+                clan_leagues.append(f"{Clan.league_emoji(league)} {Clan.league_name(league)}")
+
+            return await ctx.send(embed = discord.Embed(
+                description = f"Cuppy leaderboard about __{types}__!",
+                color = self.bot.color
+            ).add_field(name=f"📕 {types.title()}", value='\n'.join(clan_names))
+            .add_field(name="📕 EXP", value='\n'.join(clan_exps))
+            .add_field(name="📕 League", value='\n'.join(clan_leagues))
+            .set_author(name="Ami Cuppy Leaderboard", icon_url=self.bot.user.avatar_url)
+            .set_thumbnail(url=self.bot.user.avatar_url)
+            .set_footer(text="The leaderboard is sent in real-time, no delay on new balances / clans xp."))
+
 
     @commands.group(aliases=["min"], help="Check your minerals, see minerals exchange values.", invoke_without_command=True)
     @commands.cooldown(1, 7, commands.BucketType.user)
     async def minerals(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"minerals"})
 
-    @minerals.command(aliases=["inv"])
+    @minerals.command(help="Check you minerals in your inventory", aliases=["inv"])
     @commands.cooldown(1, 7, commands.BucketType.user)
     async def inventory(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         bronze = data[0]["bronze"]
         silver = data[0]["silver"]
@@ -1153,7 +1602,7 @@ class Cuppy(commands.Cog):
         f"{Mineral.emoji('gold')} {gold}x "
         f"{Mineral.emoji('diamond')} {diamond}x ")
 
-    @minerals.command(aliases=["val"])
+    @minerals.command(help="Check what are the minimun amount for each mineral to make an exchange.", aliases=["val"])
     @commands.cooldown(1, 7, commands.BucketType.user)
     async def values(self, ctx):
 
@@ -1176,7 +1625,7 @@ class Cuppy(commands.Cog):
             )
 
 
-    @commands.command(aliases=["pro"])
+    @commands.command(help="Some info about you, your cuppy stats, when did you started playing cuppy and much more.", aliases=["pro"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def profile(self, ctx, member: discord.Member = None):
         if member is None:
@@ -1185,7 +1634,7 @@ class Cuppy(commands.Cog):
         if not member:
             data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
             if not data:
-                return await ctx.invoke(self.test_balance)
+                return await ctx.invoke(self.balance)
         
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", member.id)
         if not data:
@@ -1209,16 +1658,17 @@ class Cuppy(commands.Cog):
         r_open = data[0]["rare_opened"]
         e_open = data[0]["epic_opened"]
 
-        ivs = Team.ivs_level_based(team, level)
-
-        atk = ivs["atk"]
-        defe = ivs["def"]
-        speed = ivs["spd"]
-        hp = ivs["hp"]
-        magic = ivs["mag"]
-        luck = ivs["luck"]
 
         if team:
+            ivs = Team.ivs_level_based(team, level)
+
+            atk = ivs["atk"]
+            defe = ivs["def"]
+            speed = ivs["spd"]
+            hp = ivs["hp"]
+            magic = ivs["mag"]
+            luck = ivs["luck"]
+
             team_name = Team.name(team)
             team_emoji = Team.emoji(team)
             team_message = f"{team_emoji} {team_name}\n⚔ `{humanize.intcomma(atk)}` 🛡 `{humanize.intcomma(defe)}`\n👟 `{humanize.intcomma(speed)}` ❤ `{humanize.intcomma(hp)}`\n✨ `{humanize.intcomma(magic)}` 🍀 `{humanize.intcomma(luck)}`"
@@ -1242,7 +1692,7 @@ class Cuppy(commands.Cog):
         em.set_thumbnail(url=member.avatar_url)
         await ctx.send(embed=em)
 
-    @commands.command(aliases=["gift"])
+    @commands.command(help="Send some cupcakes to other members.", aliases=["gift", "send"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def give(self, ctx, member : discord.Member, amount: int):
         if member == ctx.author:
@@ -1250,7 +1700,7 @@ class Cuppy(commands.Cog):
 
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", member.id)
         if not data2:
@@ -1271,9 +1721,9 @@ class Cuppy(commands.Cog):
         await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", data2[0]["balance"] + amount, member.id)
         await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} sent <:cupcake:845632403405012992> **{humanize.intcomma(amount)}** to {member.mention}")
 
-    @commands.command()
+    @commands.command(help="Check how many cupcakes you've in this moment.", aliases=["bal"])
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def test_balance(self, ctx):
+    async def balance(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
             date_today = str(int(datetime.datetime.utcnow().timestamp()))
@@ -1287,16 +1737,16 @@ class Cuppy(commands.Cog):
         bal = data[0]["balance"]
         await ctx.send(f"{ctx.author.mention} you currently have <:cupcake:845632403405012992> **{humanize.intcomma(bal)} Cupcakes!**")
 
-    @commands.command(aliases=["exc"])
+    @commands.command(help="Exchange a mineral to earn cupcakes (check `ami min val`) for minerals values.", aliases=["exc"])
     @commands.cooldown(1, 15, commands.BucketType.user)
-    async def exchange(self, ctx, mineral_name, amount=None):
+    async def exchange(self, ctx, mineral_name, amount: int = None):
         valid_mins = ["bronze", "silver", "gold", "diamond"]
         if mineral_name.lower() not in valid_mins:
             return await ctx.send(f"<:4318crossmark:848857812565229601> {ctx.author.mention} **{mineral_name}** is not a valid mineral.")
 
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
         
         min = data[0][mineral_name.lower()]
         if amount is None:
@@ -1321,12 +1771,12 @@ class Cuppy(commands.Cog):
     async def open(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"open"})
 
-    @open.command(help="Choose what box")
+    @open.command(help="Choose what box to open, pass `ami box {lootbox_rarity} all` to open all the boxes you have for that rarity.")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def box(self, ctx, lootbox_rarity, flag=None):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         if flag:
             if flag != "all":
@@ -1350,6 +1800,9 @@ class Cuppy(commands.Cog):
         if flag == "all":
             amount = lb
 
+        if amount > data[0][f"lootbox_{lootbox_rarity.lower()}"]:
+            return await ctx.send(f"{ctx.author.mention} you don't have {emoji} {amount}x **{name}** left to open, `ami vote` to get more lootboxes!")
+
         final_min = {}
 
         for drop in drops:
@@ -1362,22 +1815,24 @@ class Cuppy(commands.Cog):
             m_emoji = Mineral.emoji(k)
             s.append(f"{m_emoji} {v*amount}x ")
 
-        vcd = '\n'.join(s)
-        await ctx.send(f"**{ctx.author.name}** opened a {emoji} **{name}** and found:\n{vcd}\n<:cupcake:845632403405012992> {cups}x")
+        vcd = ','.join(s)
+        await ctx.send(embed = discord.Embed(
+            description = f"**{ctx.author.mention}** opened {emoji} {amount}x **{name}**...\nand found {vcd} & <:cupcake:845632403405012992> {cups}x !",
+            color = self.bot.color).set_author(name=f"{ctx.author.name} opened a {name}!", icon_url = self.bot.user.avatar_url).set_footer(text="Type \"ami vote\" to get more lootboxes!"))
         await self.bot.db.execute("UPDATE cuppy SET balance = $1, lifetime_earns = $2 WHERE user_id = $3", data[0]["balance"] + cups, data[0]["lifetime_earns"] + cups, ctx.author.id)
-        await self.bot.db.execute(f"UPDATE cuppy SET {lootbox_rarity.lower()}_opened = $1 WHERE user_id = $2", data[0][f"{lootbox_rarity.lower()}_opened"] + amount, ctx.author.id)
+        await self.bot.db.execute(f"UPDATE cuppy SET {lootbox_rarity.lower()}_opened = $1, lootbox_{lootbox_rarity.lower()} = $2 WHERE user_id = $3", data[0][f"{lootbox_rarity.lower()}_opened"] + amount, data[0][f"lootbox_{lootbox_rarity.lower()}"] - amount, ctx.author.id)
 
-    @commands.group(help="Check your pickaxe stats, upgrade it, and much more!", aliases=["pcx"], invoke_without_command=True)
+    @commands.group(help="Check your pickaxe stats.", aliases=["pcx"], invoke_without_command=True)
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def pickaxe(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"pickaxe"})
 
-    @pickaxe.command()
+    @pickaxe.command(help="Upgrade you pickaxe when it has reached the needed xp.", aliases=["upg"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def upgrade(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         pick = data[0]["pickaxe_type"]
         pick_exp = data[0]["pickaxe_exp"]
@@ -1402,12 +1857,12 @@ class Cuppy(commands.Cog):
         else:
             return await ctx.reply(f"<:alert_pink:867758260707000380> Your pickaxe has <:xp:867817838941437974> **{humanize.intcomma(pick_exp)} / {humanize.intcomma(pick_needed_xp)}**, you can't upgrade it now.")
 
-    @pickaxe.command()
+    @pickaxe.command(help="Check the stats of your actual pickaxe.")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def stats(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         pick = data[0]["pickaxe_type"]
         pick_exp = data[0]["pickaxe_exp"]
@@ -1434,7 +1889,7 @@ class Cuppy(commands.Cog):
                         color = self.bot.color
         ))
 
-    @pickaxe.command()
+    @pickaxe.command(help="The list with all the pickaxe's you can get upgrading your one.")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def list(self, ctx):
         types = ["wood", "golden", "ephemeral", "candy", "sky", "nebula", "divine", "orc", "earth"]
@@ -1448,12 +1903,12 @@ class Cuppy(commands.Cog):
 
         await ctx.send(embed=em)
 
-    @pickaxe.command(aliases=["rc", "r"])
+    @pickaxe.command(help="Recharge your pickaxe for 1 cupcake when it has 0 durability.", aliases=["rc", "r"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def recharge(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         pick = data[0]["pickaxe_type"]
         pick_dur = data[0]["pickaxe_durability"]
@@ -1473,12 +1928,12 @@ class Cuppy(commands.Cog):
         await self.bot.db.execute("UPDATE cuppy SET pickaxe_durability = $1, balance = $2 WHERE user_id = $3", 100, data[0]["balance"] - recharge_amount, ctx.author.id)
         await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.name}, you've spent <:cupcake:845632403405012992> **{recharge_amount}** to refill your {emoji} **{name}** durability!")
 
-    @commands.command()
+    @commands.command(help="The name talks itself, go mining with your pickaxe, earn minerals and exchange em for cupcakes (if you're lucky, you can obtain also cupcakes from mining!)")
     @commands.cooldown(1, 7, commands.BucketType.user)
-    async def test_mine(self, ctx):
+    async def mine(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         pick = data[0]["pickaxe_type"]
         pick_exp = data[0]["pickaxe_exp"]
@@ -1509,7 +1964,7 @@ class Cuppy(commands.Cog):
             mineral = "gold"
             query = "gold"
             query2 = "golds"
-        elif cc in range(95, 100):
+        else:
             mineral = "diamond"
             query = "diamond"
             query2 = "diamonds"
@@ -1551,17 +2006,26 @@ class Cuppy(commands.Cog):
 
         await self.bot.db.execute(f"UPDATE cuppy SET pickaxe_{query2} = $1, pickaxe_durability = $2 WHERE user_id = $3", data2[0][f'pickaxe_{query2}'] + fc, data2[0]["pickaxe_durability"] - cvf, ctx.author.id)
 
-    @commands.group(help="Build a squad with a teammate, check your team stats, upgrade the stats, and much more!", invoke_without_command=True)
+        if data2[0]["uuid_clan"]:
+            data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data2[0]["uuid_clan"])
+            await self.bot.db.execute("UPDATE clans SET clan_mines = $1 WHERE clan_uuid = $2", data3[0]["clan_mines"] + 1, data2[0]["uuid_clan"])
+            await self.bot.db.execute("UPDATE clans SET clan_xp = $1 WHERE clan_uuid = $2", data3[0]["clan_xp"] + random.randint(1, 45), data2[0]["uuid_clan"])
+            data4 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data2[0]["uuid_clan"])
+            if data4[0]["clan_xp"] >= Clan.needed_xp(data4[0]["clan_league"]):
+                if Clan.needed_xp(data4[0]["clan_league"]) is not None:
+                    await self.bot.db.execute("UPDATE clans SET clan_league = $1 WHERE clan_uuid = $2", Clan.next_league(data4[0]["clan_league"]), data2[0]["clan_uuid"])
+
+    @commands.group(help="Build a squad with a teammate, check your team stats, level up it and much more!", invoke_without_command=True)
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def team(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"team"})
 
-    @team.command()
+    @team.command(help="Recruit one of the teammate listed in `ami team shop`.", aliases=["rec"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def recruit(self, ctx, teammate_name:str):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         teammates = ["kury", "anny", "fatima", "lilly", "luna", "celia", "micky", "vanessa", "ornella"]
 
@@ -1622,12 +2086,12 @@ class Cuppy(commands.Cog):
 
         await ctx.send(f"{ctx.author.mention} you've succesfully recruited {emoji} **{name}** for <:cupcake:845632403405012992> **500**!\n⚔ `{atk}` 🛡 `{defe}`\n👟 `{speed}` ❤ `{hp}`\n✨ `{magic}` 🍀 `{luck}`")
 
-    @team.command()
+    @team.command(help="Once your teammate reached level 100, you can prestige it to make it stronger!", aliases=["prg"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def prestige(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         team = data[0]["team_name"]
         if not team:
@@ -1682,7 +2146,7 @@ class Cuppy(commands.Cog):
             return
 
 
-    @team.command(name="stats")
+    @team.command(help="Check your teammate stats", name="stats")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def team_stats(self, ctx, member : discord.Member = None):
         if member is None:
@@ -1753,7 +2217,7 @@ class Cuppy(commands.Cog):
         story = Team.get_story(teammate)
 
         em = discord.Embed(
-                title=f"{ctx.author.name}'s Teammate",
+                title=f"{member.name}'s Teammate",
                 description=f"<:alert_pink:867758260707000380> {emoji} **{name}**\n{story}\n\n**IVs**: ⚔ `{atk}` 🛡 `{defe}` 👟 `{speed}` ❤ `{hp}` ✨ `{magic}` 🍀 `{luck}`\n",
                 color = self.bot.color)
         em.add_field(name="Moveset", value=f"{b_final}\n{s_final}\n{u_final}")
@@ -1769,7 +2233,7 @@ class Cuppy(commands.Cog):
         await ctx.send(embed=em)
 
 
-    @team.command()
+    @team.command(help="A list with all the availables to buy teammates.", aliases=["sh", "s"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def shop(self, ctx):
         em = discord.Embed(title="Teammates Shop", description="Recruiting one of them will cost you <:cupcake:845632403405012992> **500**\n`ami team recruit <teammate_name>` to recruit one of these teammates.\n`ami team stats` to check your actual teammate stats.\nIVs will became higher leveling up your teammate.\n⚔ Attack, 🛡 Defense, 👟 Speed, ❤ HP, ✨ Magic, 🍀 Luck", color = self.bot.color)
@@ -1791,7 +2255,7 @@ class Cuppy(commands.Cog):
 
         await ctx.send(embed=em)
 
-    @commands.command(aliases=["fight", "b"])
+    @commands.command(help="Fight other members with your teammate to earn xp and have a bit of fun maybe >:)", aliases=["fight", "b"])
     @commands.cooldown(1, 30, commands.BucketType.user)
     @commands.max_concurrency(1, commands.BucketType.channel)
     async def battle(self, ctx, opponent: discord.Member):
@@ -1864,6 +2328,25 @@ class Cuppy(commands.Cog):
             return
 
         if msg.content.lower() == "confirm":
+
+            if data1[0]["uuid_clan"]:
+                data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data1[0]["uuid_clan"])
+                await self.bot.db.execute("UPDATE clans SET clan_battles = $1 WHERE clan_uuid = $2", data3[0]["clan_battles"] + 1, data1[0]["uuid_clan"])
+                await self.bot.db.execute("UPDATE clans SET clan_xp = $1 WHERE clan_uuid = $2", data3[0]["clan_xp"] + random.randint(1, 45), data1[0]["uuid_clan"])
+                data4 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data1[0]["uuid_clan"])
+                if data4[0]["clan_xp"] >= Clan.needed_xp(data4[0]["clan_league"]):
+                    if Clan.needed_xp(data4[0]["clan_league"]) is not None:
+                        await self.bot.db.execute("UPDATE clans SET clan_league = $1 WHERE clan_uuid = $2", Clan.next_league(data4[0]["clan_league"]), data1[0]["clan_uuid"])
+
+            if data2[0]["uuid_clan"]:
+                data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data2[0]["uuid_clan"])
+                await self.bot.db.execute("UPDATE clans SET clan_battles = $1 WHERE clan_uuid = $2", data3[0]["clan_battles"] + 1, data2[0]["uuid_clan"])
+                await self.bot.db.execute("UPDATE clans SET clan_xp = $1 WHERE clan_uuid = $2", data3[0]["clan_xp"] + random.randint(1, 45), data2[0]["uuid_clan"])
+                data4 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data2[0]["uuid_clan"])
+                if data4[0]["clan_xp"] >= Clan.needed_xp(data4[0]["clan_league"]):
+                    if Clan.needed_xp(data4[0]["clan_league"]) is not None:
+                        await self.bot.db.execute("UPDATE clans SET clan_league = $1 WHERE clan_uuid = $2", Clan.next_league(data4[0]["clan_league"]), data2[0]["clan_uuid"])
+
             current_hp_author = hp_team_author
             current_hp_opponent = hp_team_opponent
 
@@ -1939,22 +2422,22 @@ class Cuppy(commands.Cog):
                 if current_hp_opponent < 1:
                     current_hp_opponent = 0
 
-                em2 = discord.Embed(color = self.bot.color)
-                em2.add_field(name=f"{e_team_author} {n_team_author} ({ctx.author.name})", value=f"❤ {humanize.intcomma(current_hp_author)} / {humanize.intcomma(hp_team_author)} ❤")
-                em2.add_field(name=f"{e_team_opponent} {n_team_opponent} ({opponent.name})", value=f"❤ {humanize.intcomma(current_hp_opponent)} / {humanize.intcomma(hp_team_opponent)} ❤")
-                em2.set_footer(text="Moves were landed automatically each 5 seconds.")
+                author_team_image = Team.images(team_author)
+                opponent_team_image = Team.images(team_opponent)
+
+                r = BattleRenderer(author_team_image, opponent_team_image, char_1_stats={'name': n_team_author.replace("<:prestiged:870289549190897664>", "Prestiged"), 'level': level_team_author, 'max_hp': hp_team_author}, char_2_stats={'name': n_team_opponent.replace("<:prestiged:870289549190897664>", "Prestiged"), 'level': level_team_opponent, 'max_hp': hp_team_opponent})
+                file = await r.render(current_hp_author, current_hp_opponent)
+
+                em2 = discord.Embed(description = f"{e_team_author} **{n_team_author}** landed a {author_move_emoji} **{author_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_author)}{mex_crit_author}\n"
+                                    f"{e_team_opponent} **{n_team_opponent}** landed a {opponent_move_emoji} **{opponent_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_opponent)}{mex_crit_opponent}", color = self.bot.color)
+                em2.set_image(url="attachment://battle.png")
+                em2.set_footer(text="Moves were landed automatically each 10 seconds.")
                 m = await ctx.channel.history(limit=5).get(id=msg_one.id)
                 if m:
-                    await msg_one.edit(content=f"{e_team_author} **{n_team_author}** landed a {author_move_emoji} **{author_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_author)}{mex_crit_author}\n"
-                                    f"{e_team_opponent} **{n_team_opponent}** landed a {opponent_move_emoji} **{opponent_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_opponent)}{mex_crit_opponent}")
-                    await msg_one.edit(embed=em2)
+                    await msg_one.delete()
+                    msg_one = await ctx.send(embed=em2, file=file)
                 else:
-                    try:
-                        await msg_one.delete()
-                    except Exception:
-                        pass
-                    msg_one = await ctx.send(content = f"{e_team_author} **{n_team_author}** landed a {author_move_emoji} **{author_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_author)}{mex_crit_author}\n"
-                                    f"{e_team_opponent} **{n_team_opponent}** landed a {opponent_move_emoji} **{opponent_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_opponent)}{mex_crit_opponent}", embed=em2)
+                    msg_one = await ctx.send(embed=em2, file=file)
 
                 if current_hp_opponent <= 0 and current_hp_author <= 0 or current_hp_author <= 0 and current_hp_opponent <= 0:
                     await self.bot.db.execute("UPDATE cuppy SET team_ties = $1, team_friendship = $2 WHERE user_id = $3", data1[0]["team_ties"] + 1, data1[0]["team_friendship"] + friend, ctx.author.id)
@@ -1996,7 +2479,7 @@ class Cuppy(commands.Cog):
                     await ctx.send(f"<:alert_pink:867758260707000380> {opponent.mention} {e_team_opponent} **{n_team_opponent}** won the battle against {e_team_author} **{n_team_author}** and gained <:xp:867817838941437974> **{xp_amount}**!")
                     break
 
-                await asyncio.sleep(5)
+                await asyncio.sleep(10)
                 continue
 
     @commands.command()
@@ -2005,12 +2488,14 @@ class Cuppy(commands.Cog):
         ivs = Team.ivs_level_based(teammate.lower(), level)
         return await ctx.send(ivs)
 
-    @commands.command(aliases=["mlist", "ml"])
+    @commands.command(help = "A kinda of box where you can see all the availabes monsters to hunt, the sword means you've defeated it, the folder you've jailed it.", aliases=["mlist", "ml"])
     @commands.cooldown(1, 12, commands.BucketType.user)
     async def monsterlist(self, ctx):
-        d = ["common", "rare", "super rare", "mystic"]
+        d = ["common", "rare", "super rare", "mystic", "special"]
 
         entries = []
+
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
 
         for m in d:
             mon_list = Monster.rarity_ordered(m)
@@ -2022,7 +2507,17 @@ class Cuppy(commands.Cog):
                 mon_cup = Monster.cup_drop(c)
                 mon_xp = Monster.xp_drop(c)
                 mon_hp = Monster.get_hp(c)
-                entries.append(f"<:xp:867817838941437974> `{mon_xp*10}` ❤ `{mon_hp}` <:cupcake:845632403405012992> `{mon_cup}` | {rar_emoji} {mon_emoji} **{mon_name}** ")
+                if data[0]["monsters_jailed"] is None:
+                    caught = "<:not_caught:871473758186139698>"
+                else:
+                    caught = '<:caught:871473351309287434>' if c in data[0]["monsters_jailed"] else '<:not_caught:871473758186139698>'
+                
+                if data[0]["monsters_defeated"] is None:
+                    deaf = "<:not_defeated:871498051032875048>"
+                else:
+                    deaf = '<:defeated:871498051209003059>' if c in data[0]["monsters_defeated"] else '<:not_defeated:871498051032875048>'
+
+                entries.append(f"{deaf} {caught} <:xp:867817838941437974> `{mon_xp*10}` ❤ `{mon_hp}` <:cupcake:845632403405012992> `{mon_cup}` | {rar_emoji} {mon_emoji} **{mon_name}** ")
 
         pages = Paginate(entries)
         paginator = menus.MenuPages(source=pages, timeout=45.5, delete_message_after=True)
@@ -2035,12 +2530,12 @@ class Cuppy(commands.Cog):
             #color = self.bot.color
         #))
 
-    @commands.command(aliases=["mh", "mhunt"])
+    @commands.command(help="Go hunting monsters and try defeat or jail em with your teammate.", aliases=["mh", "mhunt"])
     @commands.cooldown(1, 15, commands.BucketType.user)
     async def monsterhunt(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
-            return await ctx.invoke(self.test_balance)
+            return await ctx.invoke(self.balance)
 
         team = data[0]["team_name"]
         if not team:
@@ -2059,16 +2554,25 @@ class Cuppy(commands.Cog):
         ultra_moves = moves["ultra"]
 
         monste = None
+        col = None
 
         cvfd = random.randint(1, 100)
         if cvfd in range(1, 50):
             monste = "common"
+            col = int("000080", 16)
         elif cvfd in range(50, 76):
             monste = "rare"
-        elif cvfd in range (75, 96):
+            col = int("FF8C00", 16)
+        elif cvfd in range(75, 95):
             monste = "super rare"
-        else:
+            col = int("FFFF00", 16)
+        elif cvfd in range(95, 99):
             monste = "mystic"
+            col = int("FF0000", 16)
+        else:
+            monste = "special"
+            col = int("FFFFF0", 16)
+
 
         monste_s = Monster.rarity_ordered(monste)
 
@@ -2089,11 +2593,20 @@ class Cuppy(commands.Cog):
         c_c = random.randint(1, 90)
         j_c = random.randint(1, 90)
 
+        if data[0]["uuid_clan"]:
+            data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+            await self.bot.db.execute("UPDATE clans SET clan_hunts = $1 WHERE clan_uuid = $2", data3[0]["clan_hunts"] + 1, data[0]["uuid_clan"])
+            await self.bot.db.execute("UPDATE clans SET clan_xp = $1 WHERE clan_uuid = $2", data3[0]["clan_xp"] + random.randint(1, 45), data[0]["uuid_clan"])
+            data4 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+            if data4[0]["clan_xp"] >= Clan.needed_xp(data4[0]["clan_league"]):
+                if Clan.needed_xp(data4[0]["clan_league"]) is not None:
+                    await self.bot.db.execute("UPDATE clans SET clan_league = $1 WHERE clan_uuid = $2", Clan.next_league(data4[0]["clan_league"]), data[0]["clan_uuid"])
+
         mex = await ctx.send(f"{ctx.author.mention} type any of ⚔ `attack`, ⛓ `jail` or 🏃‍♂️ `escape`!",
                     embed = discord.Embed(
                         title = "Monster Spotted!",
                         description = f"{team_emoji} **{team_name}** spotted a wild {mon_emoji} **{mon_name}**!",
-                        color = self.bot.color)
+                        color = col)
                         .set_image(url=mon_im)
                         .set_footer(text=f"{mon_rar_str}\n\nHealth: {humanize.intcomma(mon_hp)}\nCrit. Chance: {c_c}%\nJail Chance: {j_c}%\n\n═════ Rates ═════\n"
                                     f"• Jailing it is {mon_cup} cupcakes valued!\n"
@@ -2109,7 +2622,7 @@ class Cuppy(commands.Cog):
                             embed = discord.Embed(
                         title = "Monster Escaped..",
                         description = f"{mon_emoji} **{mon_name}** ran away..",
-                        color = self.bot.color)
+                        color = col)
                         .set_image(url=mon_im)
                     )
             return
@@ -2149,7 +2662,7 @@ class Cuppy(commands.Cog):
                         embed = discord.Embed(
                         title = "Monster Escaped..",
                         description = f"{team_emoji} **{team_name}** failed defeating {mon_emoji} **{mon_name}**..",
-                        color = self.bot.color)
+                        color = col)
                         .set_image(url=mon_im)
                     )
 
@@ -2159,9 +2672,25 @@ class Cuppy(commands.Cog):
                 m = f"Rarity: {mon_rar_str}\n\n═════ Reward ═════\n[★] {team_name.strip('<:prestiged:870289549190897664>')} earned {humanize.intcomma(mon_xp*10)} XP!"
                 await self.bot.db.execute("UPDATE cuppy SET team_xp = $1 WHERE user_id = $2", data[0]["team_xp"] + mon_xp*10, ctx.author.id)
                 data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
-                if data2[0]["team_xp"] >= Team.calc_needed_xp(data2[0]["team_level"], team_name.lower()):
+                if data2[0]["team_xp"] >= Team.calc_needed_xp(data2[0]["team_level"], team):
                         await self.bot.db.execute("UPDATE cuppy SET team_level = $1, team_xp = $2 WHERE user_id = $3", data2[0]["team_level"] + 1, 0, ctx.author.id)
                         m = f"Rarity: {mon_rar_str}\n\n═════ Reward ═════\n[★] {team_name.strip('<:prestiged:870289549190897664>')} earned {humanize.intcomma(mon_xp*10)} XP!\n[★] Oh! {team_name.strip('<:prestiged:870289549190897664>')} leveled up to level {data2[0]['team_level'] + 1}!"
+
+                if data2[0]["uuid_clan"]:
+                    data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data2[0]["uuid_clan"])
+                    await self.bot.db.execute("UPDATE clans SET clan_defeats = $1 WHERE clan_uuid = $2", data3[0]["clan_defeats"] + 1, data2[0]["uuid_clan"])
+                    await self.bot.db.execute("UPDATE clans SET clan_xp = $1 WHERE clan_uuid = $2", data3[0]["clan_xp"] + random.randint(1, 45), data2[0]["uuid_clan"])
+                    data4 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+                    if data4[0]["clan_xp"] >= Clan.needed_xp(data4[0]["clan_league"]):
+                        if Clan.needed_xp(data4[0]["clan_league"]) is not None:
+                            await self.bot.db.execute("UPDATE clans SET clan_league = $1 WHERE clan_uuid = $2", Clan.next_league(data4[0]["clan_league"]), data[0]["clan_uuid"])
+
+                monsdc = data[0]["monsters_defeated"]
+                if monsdc is None:
+                     await self.bot.db.execute("UPDATE cuppy SET monsters_defeated = array_append(monsters_defeated, $1) WHERE user_id = $2", monster, ctx.author.id)
+                else:
+                    if monster not in monsdc:
+                        await self.bot.db.execute("UPDATE cuppy SET monsters_defeated = array_append(monsters_defeated, $1) WHERE user_id = $2", monster, ctx.author.id)
 
                 await mex.edit(content=f"{team_emoji} **{team_name}** landed a {move_emoji} **{move_name}**: that dealt 💥 {humanize.intcomma(damage)}{c_m}\n"
                                     f"{mon_emoji} **{mon_name}** fell for the damage, the hunt was a success!",
@@ -2169,7 +2698,7 @@ class Cuppy(commands.Cog):
                                 embed = discord.Embed(
                         title = f"Congratulations, {ctx.author.name}!",
                         description = f"{team_emoji} **{team_name}** defeated {mon_emoji} **{mon_name}**!",
-                        color = self.bot.color)
+                        color = col)
                         .set_image(url=mon_im)
                         .set_footer(text=f"{m}")
                     )
@@ -2195,12 +2724,28 @@ class Cuppy(commands.Cog):
                 jmove_emoji = Team.move_emoji(jmove)
 
                 await self.bot.db.execute("UPDATE cuppy SET balance = $1, lifetime_earns = $2 WHERE user_id = $3", data[0]["balance"] + mon_cup, data[0]["lifetime_earns"] + mon_cup, ctx.author.id)
+                if data[0]["uuid_clan"]:
+                    data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+                    await self.bot.db.execute("UPDATE clans SET clan_jails = $1 WHERE clan_uuid = $2", data3[0]["clan_jails"] + 1, data[0]["uuid_clan"])
+                    await self.bot.db.execute("UPDATE clans SET clan_xp = $1 WHERE clan_uuid = $2", data3[0]["clan_xp"] + random.randint(1, 45), data[0]["uuid_clan"])
+                    data4 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+                    if data4[0]["clan_xp"] >= Clan.needed_xp(data4[0]["clan_league"]):
+                        if Clan.needed_xp(data4[0]["clan_league"]) is not None:
+                            await self.bot.db.execute("UPDATE clans SET clan_league = $1 WHERE clan_uuid = $2", Clan.next_league(data4[0]["clan_league"]), data[0]["clan_uuid"])
+
+                monsdc = data[0]["monsters_jailed"]
+                if monsdc is None:
+                     await self.bot.db.execute("UPDATE cuppy SET monsters_jailed = array_append(monsters_jailed, $1) WHERE user_id = $2", monster, ctx.author.id)
+                else:
+                    if monster not in monsdc:
+                        await self.bot.db.execute("UPDATE cuppy SET monsters_jailed = array_append(monsters_jailed, $1) WHERE user_id = $2", monster, ctx.author.id)
+
                 await mex.edit(content=f"{team_emoji} **{team_name}** landed a {jmove_emoji} **{jmove_name}** and succesfully jailed {mon_emoji} **{mon_name}**!",
 
                                 embed = discord.Embed(
                                     title = f"Congratulations, {ctx.author.name}!",
                                     description = f"{team_emoji} **{team_name}** jailed {mon_emoji} **{mon_name}**!",
-                                    color = self.bot.color)
+                                    color = col)
                                     .set_image(url=mon_im)
                                     .set_footer(text=f"※ Rarity: {mon_rar_str}\n\n═════ Reward ═════\n[★] You've earned {mon_cup} cupcakes!\n")
                                 )
@@ -2226,7 +2771,7 @@ class Cuppy(commands.Cog):
                                 embed = discord.Embed(
                                     title = "Monster Escaped..",
                                     description = f"{team_emoji} **{team_name}** failed jailing {mon_emoji} **{mon_name}**..",
-                                    color = self.bot.color)
+                                    color = col)
                                     .set_image(url=mon_im)
                                 )
 
@@ -2236,54 +2781,387 @@ class Cuppy(commands.Cog):
             if data[0]["balance"] >= 5:
                 await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", data[0]["balance"] - 5, ctx.author.id)
 
+            if data[0]["uuid_clan"]:
+                data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+                await self.bot.db.execute("UPDATE clans SET clan_escapes = $1 WHERE clan_uuid = $2", data3[0]["clan_escapes"] + 1, data[0]["uuid_clan"])
+                await self.bot.db.execute("UPDATE clans SET clan_xp = $1 WHERE clan_uuid = $2", data3[0]["clan_xp"] + random.randint(1, 45), data[0]["uuid_clan"])
+                data4 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+                if data4[0]["clan_xp"] >= Clan.needed_xp(data4[0]["clan_league"]):
+                    if Clan.needed_xp(data4[0]["clan_league"]) is not None:
+                        await self.bot.db.execute("UPDATE clans SET clan_league = $1 WHERE clan_uuid = $2", Clan.next_league(data4[0]["clan_league"]), data[0]["clan_uuid"])
+
+
             await mex.edit(content=f"{ctx.author.mention} ran away with {team_emoji} **{team_name}**..",
 
                             embed = discord.Embed(
                         title = "You escaped..",
                         description = f"{mon_emoji} **{mon_name}** ran in the opposite direction..",
-                        color = self.bot.color)
+                        color = col)
                         .set_image(url=mon_im)
                     )
 
             return
     
 
-    @commands.group(help="", aliases=[""], invoke_without_command=True)
-    @commands.cooldown(1, 15, commands.BucketType.user)
+    @commands.group(help="Clan main command, check subcommands for actions.", aliases=["c"], invoke_without_command=True)
+    @commands.cooldown(1, 7, commands.BucketType.user)
     async def clan(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"clan"})
 
-    @clan.command()
+    @clan.command(help="Rename your clan if you don't like anymore the name (must be the clan owner).")
     @commands.cooldown(1, 15, commands.BucketType.user)
-    async def create(self, ctx, name: str):
-        ...
+    async def rename(self, ctx, *, new_name):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
 
-    @clan.command()
+        if not data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} you are not in any clan.")
+
+        data2 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+
+        if data2[0]["clan_owner_id"] != ctx.author.id:
+            return await ctx.send(f"{ctx.author.mention} only the clan owner can set / edit the clan name.")
+
+        await self.bot.db.execute("UPDATE clans SET clan_name = $1 WHERE clan_uuid = $2", new_name, data[0]["uuid_clan"])
+        await ctx.send(f"{ctx.author.mention} the clan name was succesfully edited to **{new_name}**!")
+
+    @clan.command(help="Set / Edit the clan description (must be the clan owner).", aliases=["desc"])
     @commands.cooldown(1, 15, commands.BucketType.user)
+    async def description(self, ctx, *, clan_description):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if not data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} you are not in any clan.")
+
+        data2 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+
+        if data2[0]["clan_owner_id"] != ctx.author.id:
+            return await ctx.send(f"{ctx.author.mention} only the clan owner can set / edit the clan description.")
+
+        await self.bot.db.execute("UPDATE clans SET clan_description = $1 WHERE clan_uuid = $2", clan_description, data[0]["uuid_clan"])
+        await ctx.send(f"{ctx.author.mention} the clan description was succesfully edited!")
+
+
+    @clan.command(help="Create a clan and invite members into it to raise it in the top of the leaderboard, grind leagues and much more!")
+    @commands.cooldown(1, 7, commands.BucketType.user)
+    async def create(self, ctx, *, name: str):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        c = data[0]["uuid_clan"]
+        if c:
+            return await ctx.send(f"{ctx.author.mention} you are already in a clan (UUID: `{c}`), leave this clan before creating a new one.")
+
+        bal = data[0]["balance"]
+        if bal < 50000:
+            return await ctx.send(f"{ctx.author.mention} you need <:cupcake:845632403405012992> **50,000** to create a clan.")
+
+        if len(name) > 20:
+            return await ctx.send(f"{ctx.author.mention} the name can't be longer than 20 characters.")
+
+        data2 = await self.bot.db.fetch("SELECT * FROM clans")
+
+        for cln in data2:
+            n = cln["clan_name"]
+            if name.lower() == n.lower():
+                return await ctx.send(f"{ctx.author.mention} there's already a clan with this name, try again.")
+
+        gen_id = uuid.uuid1()
+        date = str(int(datetime.datetime.utcnow().timestamp()))
+        await self.bot.db.execute("INSERT INTO clans (clan_uuid, clan_name, clan_owner_id, clan_league, clan_timestamp) VALUES ($1, $2, $3, $4, $5)", str(gen_id), name, ctx.author.id, "silver", date)
+        await asyncio.sleep(2)
+        await self.bot.db.execute("UPDATE cuppy SET uuid_clan = $1, clan_join = $2, balance = $3 WHERE user_id = $4", str(gen_id), int(date), data[0]["balance"] - 50000, ctx.author.id)
+        await ctx.send(f"🎊 {ctx.author.mention} your clan **{name}** was succesfully created!\n"
+        f"<:alert_pink:867758260707000380> Check the clan info with `ami clan info`!\n"
+        f"<:alert_pink:867758260707000380> Invite new members with `ami clan invite @member`!\n"
+        f"<:alert_pink:867758260707000380> Raise you clan league and be the first in the leaderboard!")
+
+
+    @clan.command(help="Delete the clan and remove all the members from it (must be the clan owner).", aliases=["del"])
+    @commands.cooldown(1, 7, commands.BucketType.user)
     async def delete(self, ctx):
-        ...
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
 
-    @clan.command()
-    @commands.cooldown(1, 15, commands.BucketType.user)
-    async def leave(self, ctx, name: str):
-        ...
+        data2 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+        if data2[0]["clan_owner_id"] != ctx.author.id:
+            return await ctx.send(f"{ctx.author.mention} you are not the owner of this clan, you can't delete it.")
 
-    @clan.command()
-    @commands.cooldown(1, 15, commands.BucketType.user)
+        name = data2[0]["clan_name"]
+        league = data2[0]["clan_league"]
+        uuid = data2[0]["clan_uuid"]
+
+        mc = await ctx.send(f"❗ {ctx.author.mention} you are going to delete {Clan.league_emoji(league)} **{name}**, are you sure?\n"
+        f"**`Deleting the clan will not refund any clan donation to the clan members`**\n<:alert_pink:867758260707000380> Type the clan UUID (`{uuid}`) to confirm or \"DECLINE\" to abort in 30 seconds.")
+
+        try:
+            mex = await self.bot.wait_for("message", check=lambda m: m.author.id == ctx.author.id and m.channel.id == ctx.channel.id and m.content.lower() in [uuid, "decline"], timeout = 30)
+        except asyncio.TimeoutError:
+            await mc.delete()
+            return
+
+        if mex.content.lower() == uuid.lower():
+            await self.bot.db.execute("DELETE FROM clans WHERE clan_uuid = $1", uuid)
+            await asyncio.sleep(2)
+            dc = await self.bot.db.fetch("SELECT * FROM cuppy")
+            for i in dc:
+                if i["uuid_clan"] == uuid:
+                    await self.bot.db.execute("UPDATE cuppy SET uuid_clan = $1, clan_join = $2 WHERE user_id = $3", None, None, i["user_id"])
+
+            await ctx.send(f"📍 {ctx.author.mention} you have succesfully deleted {Clan.league_emoji(league)} **{name}**, all the members has been kicked and the clan does not exist anymore.")
+            return
+
+        elif mex.content.lower() == "decline":
+            await mc.delete()
+            return
+
+    @clan.command(help="Kick a member from the clan, must be mentioned or use the member ID.")
+    @commands.cooldown(1, 7, commands.BucketType.user)
+    async def kick(self, ctx, member: discord.Member):
+        if member.id == ctx.author.id:
+            return await ctx.send(f"{ctx.author.mention} you can't kick yourself.")
+
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if not data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} you are not in any clan.")
+
+        data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", member.id)
+
+        data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+
+        if data3[0]["clan_owner_id"] != ctx.author.id:
+            return await ctx.send(f"{ctx.author.mention} only the clan owner can kick other members.")
+
+        if not data2:
+            return await ctx.send(f"{ctx.author.mention} the member that you've mentioned is not registered into cuppy.")
+
+        if not data2[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} this member is not in any clan.")
+
+        if data2[0]["uuid_clan"] != data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} this member is not in your clan.")
+
+        await self.bot.db.execute("UPDATE cuppy SET uuid_clan = $1, clan_join = $2 WHERE user_id = $3", None, None, member.id)
+        await self.bot.db.execute("UPDATE clans SET clan_members = $1 WHERE clan_uuid = $2", data3[0]["clan_members"] - 1, data[0]["uuid_clan"])
+        await ctx.send(f"📝 {ctx.author.mention} you have succesfully kicked **{member.name}#{member.discriminator}** from the clan.")
+
+
+    @clan.command(help="Leave the clan where you're are in.")
+    @commands.cooldown(1, 7, commands.BucketType.user)
+    async def leave(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if not data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} you are not in any clan.")
+
+        data2 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+
+        if ctx.author.id == data2[0]["clan_owner_id"]:
+            return await ctx.send(f"{ctx.author.mention} you are the owner of the clan, use `ami clan delete` if you want to delete it.")
+
+        name = data2[0]["clan_name"]
+        league = data2[0]["clan_league"]
+        uuid = data2[0]["clan_uuid"]
+        emo = Clan.league_emoji(league)
+
+        mc = await ctx.send(f"{ctx.author.mention} you're going to leave {emo} **{name}**, are you sure?\nType the clan UUID (`{uuid}`) in the chat to confirm or \"DECLINE\" to abort in 30 seconds.")
+
+        try:
+            mex = await self.bot.wait_for("message", check=lambda m: m.author.id == ctx.author.id and m.channel.id == ctx.channel.id and m.content.lower() in [uuid, "decline"], timeout = 30)
+        except asyncio.TimeoutError:
+            await mc.delete()
+            return
+
+        if mex.content.lower() == uuid.lower():
+            await self.bot.db.execute("UPDATE clans SET clan_members = $1 WHERE clan_uuid = $2", data2[0]["clan_members"] - 1, uuid)
+            await self.bot.db.execute("UPDATE cuppy SET clan_join = $1, uuid_clan = $2 WHERE user_id = $3", None, None, ctx.author.id)
+            await ctx.send(f"💼 {ctx.author.mention} succesfully left {emo} **{name}** (`{uuid}`)")
+            await mc.delete()
+            return
+        
+        elif mex.content.lower() == "decline":
+            await mc.delete()
+            return
+
+    @clan.command(help="Invite some members into your clan to can farm toghether and league up faster!")
+    @commands.cooldown(1, 7, commands.BucketType.user)
+    async def invite(self, ctx, user: discord.Member):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if not data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} you need to be in a clan to invite members.")
+
+        data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", user.id)
+        if not data2:
+            return await ctx.send(f"{ctx.author.mention} looks like {user.name} is not registered into cuppy.")
+
+        if data2[0]["uuid_clan"] == data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} this member is already into your clan.")
+
+        if data2[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention}, {user.name} is already in a clan (UUID: `{data2[0]['uuid_clan']}`)")
+
+        if data2[0]["lifetime_earns"] < 750:
+            return await ctx.send(f"{ctx.author.mention}, you can't invite {user.name} in the clan because he/she has less than <:cupcake:845632403405012992> **750** lifetime earned.")
+
+        data3 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+
+        if data3[0]["clan_members"] >= Clan.max_members(data3[0]["clan_league"]):
+            return await ctx.send(f"{ctx.author.mention} you can't invite other members into the clan, the capacity is full: go to the next league to increase the capacity or kick someone from the guild.")
+
+        mc = await ctx.send(f"{ctx.author.mention} has invited {user.mention} into:\n<:alert_pink:867758260707000380> **{Clan.league_emoji(data3[0]['clan_league'])} {data3[0]['clan_name']}** (UUID: `{data3[0]['clan_uuid']}`)\n"
+        f"{user.mention} please type \"CONFIRM\" to accept or \"DECLINE\" to abort in 30 seconds.")
+
+        try:
+            mex = await self.bot.wait_for("message", check=lambda m: m.author.id == user.id and m.channel.id == ctx.channel.id and m.content.lower() in ["confirm", "decline"], timeout = 30)
+        except asyncio.TimeoutError:
+            await mc.delete()
+            return
+
+        if mex.content.lower() == "confirm":
+            date = str(int(datetime.datetime.utcnow().timestamp()))
+            await self.bot.db.execute("UPDATE clans SET clan_members = $1 WHERE clan_uuid = $2",data3[0]["clan_members"] + 1, data[0]["uuid_clan"])
+            await self.bot.db.execute("UPDATE cuppy SET uuid_clan = $1, clan_join = $2 WHERE user_id = $3", data[0]["uuid_clan"], int(date), user.id)
+            await mc.delete()
+            await ctx.send(f"🎉 {ctx.author.mention}, i'm happy to announce that {user.mention}... has accepted the invite!")
+            return
+
+        elif mex.content.lower() == "decline":
+            await ctx.send(f"🎉 {ctx.author.mention}, something went wrong, **{user.name}** has declined your invite.")
+            await mc.delete()
+            return
+
+    @clan.command(help="Check the clan stats.")
+    @commands.cooldown(1, 7, commands.BucketType.user)
     async def info(self, ctx):
-        ...
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
 
-    @clan.command()
-    @commands.cooldown(1, 15, commands.BucketType.user)
-    async def rank(self, ctx):
-        ...
+        if not data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} you are not in any clan!")
 
+        data2 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+
+        name = data2[0]["clan_name"]
+        description = data2[0]["clan_description"]
+        members = data2[0]["clan_members"]
+        xp = data2[0]["clan_xp"]
+        league = data2[0]["clan_league"]
+        donations = data2[0]["clan_donations"]
+        owner = data2[0]["clan_owner_id"]
+
+        created_at = data2[0]["clan_timestamp"]
+        f_created_at = f"<t:{int(created_at)}>"
+        joined_at = f"{f_created_at}" if ctx.author.id == owner else f"<t:{int(data[0]['clan_join'])}>"
+
+        hunts = data2[0]["clan_hunts"]
+        jails = data2[0]["clan_jails"]
+        mines = data2[0]["clan_mines"]
+        defeats = data2[0]["clan_defeats"]
+        escapes = data2[0]["clan_escapes"]
+        battles = data2[0]["clan_battles"]
+
+
+        await ctx.send(embed = discord.Embed(
+            description = f"📅 **Created**: {f_created_at}\n📝 **Name**: {name}\n<:owner:871001714529009694> **Owner**: {self.bot.get_user(owner).name or (await self.bot.fetch_user(owner).name)}\n\n═════ `Description` ═════\n{description or 'This clan has no description set yet.'}\n\n═════ `Clan Information` ═════\n"
+                        f"{Clan.league_emoji(league)} **League**: {Clan.league_name(league)}\n📊 **Next League**: `{humanize.intcomma(xp)} / {humanize.intcomma(Clan.needed_xp(league))}` experience\n"
+                        f"👥 **Members**: {members} / {Clan.max_members(league)}\n<:cupcake:845632403405012992> **Treasurery**: `{humanize.intcomma(donations)}`\n\n"
+                        f"═════ `Clan Stats` ═════\n🔎 **Hunts**: {humanize.intcomma(hunts)} | ⛏ **Mines**: {humanize.intcomma(mines)}\n"
+                        f"🦴 **Defeats**: {humanize.intcomma(defeats)} | ⛓ **Jails**: {humanize.intcomma(jails)}\n"
+                        f"🏃‍♂️ **Escapes**: {humanize.intcomma(escapes)} | ⚔ **Battles**: {humanize.intcomma(battles)}\n\n"
+                        f"═════ `Your Information` ═════\n📅 **Joined**: {joined_at}",
+            color = self.bot.color
+        )
+        .set_footer(text=f"Clan UUID: {data[0]['uuid_clan']}")
+        .set_thumbnail(url=Clan.league_image(league))
+        .set_author(name="Ami Clan System", icon_url=self.bot.user.avatar_url)
+        )
+
+    @clan.command(help="Donate some cupcakes to the clan, they will be sent into the treasurery.", aliases=["don"])
+    @commands.cooldown(1, 7, commands.BucketType.user)
+    async def donate(self, ctx, amount: int):
+        if amount < 10000:
+            return await ctx.send(f"{ctx.author.mention} the minimum donation is <:cupcake:845632403405012992> **10,000**.")
+
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+        
+        if not data[0]["uuid_clan"]:
+            return await ctx.send(f"{ctx.author.mention} you are not in any clan!")
+
+        data2 = await self.bot.db.fetch("SELECT * FROM clans WHERE clan_uuid = $1", data[0]["uuid_clan"])
+
+        don = data2[0]["clan_donations"]
+
+        if amount > data[0]["balance"]:
+            return await ctx.send(f"{ctx.author.mention} you have only <:cupcake:845632403405012992> **{humanize.intcomma(data[0]['balance'])}**, you can't donate <:cupcake:845632403405012992> **{humanize.intcomma(amount)}**.")
+
+        await self.bot.db.execute("UPDATE clans SET clan_donations = $1 WHERE clan_uuid = $2", don + amount, data[0]["uuid_clan"])
+        await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", data[0]["balance"] - amount, ctx.author.id)
+        await ctx.send(f"{ctx.author.mention} you've succesfully donated <:cupcake:845632403405012992> **{humanize.intcomma(amount)}** to {Clan.league_emoji(data2[0]['clan_league'])} **{data2[0]['clan_name']}**!")
 
     @commands.command()
     @is_team()
     async def devgift(self, ctx, member: discord.Member, amount: int):
         await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", amount, member.id)
         await ctx.message.add_reaction("✅")
+
+    @commands.command()
+    @is_team()
+    async def devbox(self, ctx, type: str, amount: int, member: discord.Member = None):
+        if member is None:
+            member = ctx.author
+
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", member.id)
+        if not data:
+            return await ctx.message.add_reaction("❌")
+
+        valid_lbs = ["common", "uncommon", "rare", "epic"]
+        if type.lower() not in valid_lbs:
+            return await ctx.message.add_reaction("❌")
+
+        emoji = Lootbox.emoji(type.lower())
+        name = Lootbox.name(type.lower())
+
+        await self.bot.db.execute(f"UPDATE cuppy SET lootbox_{type.lower()} = $1 WHERE user_id = $2", data[0][f"lootbox_{type.lower()}"] + amount, member.id)
+        return await ctx.send(f"🎉 {member.mention} received {emoji} {amount}x **{name}** from {ctx.author.mention}!")
+
+    @commands.command()
+    @is_team()
+    async def image_captcha(self, ctx, font: str = None):
+        if font is None:
+            font = "standard"
+
+        c = []
+
+        for f in os.listdir("./fonts"):
+            if f.endswith(".ttf"):
+                c.append(f.strip(".ttf"))
+        
+        if font not in c:
+            return await ctx.send("font not found.")
+
+        image = ImageCaptcha(fonts=[f'fonts/{font}.ttf'])
+        number = random.randint(1000, 99999)
+        data = image.generate(str(number))
+        buffer = BytesIO()
+        image.write(str(number), buffer)
+        buffer.seek(0)
+        await ctx.send(file=discord.File(fp=buffer, filename="captcha.png"))
 
 def setup(bot):
     bot.add_cog(Cuppy(bot))
