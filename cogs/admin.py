@@ -23,7 +23,7 @@ class Admin(commands.Cog):
 
     @commands.command()
     @is_team()
-    async def upload(self, ctx, *, data: typing.Optional[typing.Union[discord.PartialEmoji, str]]):
+    async def upload(self, ctx, *, data: typing.Optional[typing.Union[discord.PartialEmoji, str]] = None):
 
         if isinstance(data, discord.PartialEmoji):
             data = data.url
@@ -31,21 +31,20 @@ class Admin(commands.Cog):
         elif attachments := ctx.message.attachments:
             data = attachments[0].url
 
-        async with self.bot.session.get(str(data)) as resp:
-            b = await resp.read()
+        try:
+            async with self.bot.session.get(str(data)) as resp:
+                b = await resp.read()
 
-        auth = {'Authorization': 'imagine'}
-        async with self.bot.session.post("https://amidiscord.xyz/api/upload", data={"file": b}, headers=auth) as resp:
-            final = await resp.json()
-            c = final["url"]
-            d = final["delete_url"]
-            await ctx.send(embed = discord.Embed(
-                description = f"You can find the uploaded file [here!]({c})",
-                color = self.bot.color
-            .set_footer(f"{ctx.author} check your DMs to delete the file!")
-            ).set_author(name="File uploaded!", icon_url = self.bot.user.avatar_url))
-
-            await ctx.author.send(embed=discord.Embed(description=f"To delete your recently uploaded file, go [here]({d})\n\nYour uploaded [file]({c})"))
+            auth = {'Authorization': 'imagine'}
+            async with self.bot.session.post("https://amidiscord.xyz/api/upload", data={"file": b}, headers=auth) as resp:
+                final = await resp.json()
+                c = final["url"]
+                await ctx.send(embed = discord.Embed(
+                    description = f"You can find the uploaded file [here!]({c})",
+                    color = self.bot.color
+                ).set_author(name="File uploaded!", icon_url = self.bot.user.avatar_url))
+        except Exception:
+            return
 
 
     @commands.group(help="Update commands group, runnable only by team.", invoke_without_command=True)
