@@ -2,14 +2,13 @@ import os
 import discord
 from discord import client
 from discord.ext import commands, tasks
-import asyncpg
 import logging
 from collections import Counter
 import time
 import datetime
 import random
-import ratelimiter
 import asyncio
+import humanize
 
 import util.config as config
 from util.defs import is_team
@@ -18,12 +17,17 @@ from util.subclasses import Ami
 client = Ami()
 
 class LoggerHandler(logging.Handler):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-        super().__init__(logging.INFO)
+    def setBot(self, bot: commands.Bot):
+        self._bot = bot 
 
     def send_via_hook(self, log: str):
-        self.bot.loop.create_task(self._bot.send_via_hook("https://discord.com/api/webhooks/861361395004997643/Ysjbz8gyj_NNxdmbnnfXBhLzREuox7k17YabbYHb_oi6TeqqutWzZhL1tVGf8ja-5Zx9", log)) # create task to send data through webhook
+        try:
+            _ = self._bot
+        except AttributeError:
+            print("No bot logging set")
+            return
+
+        self._bot.loop.create_task(self._bot.send_via_hook("https://discord.com/api/webhooks/868112473511833670/J3RoOiJbwqQUBZvzsL0ePhwyTBGIcgueiyydLJGyKPKPIFnUYAkS_NRlULiFpqmwhlLf", log)) # create task to send data through webhook
 
     def handle(self, record: logging.LogRecord):
         fmted_string = self.formatter.format(record)
@@ -33,21 +37,16 @@ class LoggerHandler(logging.Handler):
 logger = logging.getLogger("discord")
 logger.setLevel(logging.INFO)
 
-handler = LoggerHandler(client)
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+handler = LoggerHandler(logging.INFO)
+handler.setFormatter(logging.Formatter('%(asctime)s\n%(name)s :: %(levelname)s\n%(message)s'))
 logger.addHandler(handler)
+handler.setBot(client)
 
 start_time = datetime.datetime.utcnow()
 
-async def create_bl():
-    await client.wait_until_ready()
-    db = await client.db.fetch("SELECT * FROM blacklist")
-    for i in db:
-        client.bl[i["user_id"]] = i["reason"]
-client.loop.create_task(create_bl())
-
 os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
 os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
+os.environ["JISHAKU_FORCE_PAGINATOR"] = "True"
 client.load_extension('jishaku')
 
 client.socket_receive = 0
@@ -69,13 +68,20 @@ client.codes = {
       12: "GUILD_SYNC"
   }
 
-logging.getLogger('asyncio').setLevel(logging.CRITICAL)
+#logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 
 
 @tasks.loop(minutes=30)
 async def status():
-    watcher = random.choice(['The Sky.', 'The Earth.', 'The Moon.', 'The Sun.', f'{len(client.users)} users', f'{len(client.guilds)} guilds'])
+    watcher = f'{humanize.intcomma(len(client.guilds))} guilds! | a;help'
     await client.change_presence(status=discord.Status.online,activity=discord.Activity(type=discord.ActivityType.watching, name=watcher))
+
+@tasks.loop(hours=2)
+async def create_bl():
+    await client.wait_until_ready()
+    db = await client.db.fetch("SELECT * FROM blacklist")
+    for i in db:
+        client.bl[i["user_id"]] = i["reason"]
 
 @client.check
 def check_commands(ctx):
@@ -147,5 +153,4 @@ async def uptime(ctx: commands.Context):
     await ctx.send(uptime_stamp)
 
 # RUN CLIENT -- IF U DELETE THIS, THE BOT DON'T WORK!!
-handler.setBot(client)
 client.run(config.BOT_TOKEN)
