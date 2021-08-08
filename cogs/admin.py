@@ -45,7 +45,7 @@ class Admin(commands.Cog):
             .set_footer(f"{ctx.author} check your DMs to delete the file!")
             ).set_author(name="File uploaded!", icon_url = self.bot.user.avatar_url))
 
-            await ctx.author.send(embed= discord.Embed(description=f"To delete your recently uploaded file, go [here]({d})\n\nYour uploaded [file]({c})"))
+            await ctx.author.send(embed=discord.Embed(description=f"To delete your recently uploaded file, go [here]({d})\n\nYour uploaded [file]({c})"))
 
 
     @commands.group(help="Update commands group, runnable only by team.", invoke_without_command=True)
