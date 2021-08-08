@@ -7,6 +7,9 @@ from jishaku.paginators import WrappedPaginator, PaginatorInterface
 import random
 from jishaku.codeblocks import codeblock_converter
 from util.defs import is_team
+import re
+from io import BytesIO
+import typing
 
 class Admin(commands.Cog):
     def __init__(self, bot):
@@ -17,10 +20,91 @@ class Admin(commands.Cog):
     async def on_ready(self):
         print(f"Admin Loaded")
 
+
+    @commands.command()
+    @is_team()
+    async def upload(self, ctx, *, data: typing.Optional[typing.Union[discord.PartialEmoji, str]]):
+
+        if isinstance(data, discord.PartialEmoji):
+            data = data.url
+
+        elif attachments := ctx.message.attachments:
+            data = attachments[0].url
+
+        async with self.bot.session.get(str(data)) as resp:
+            b = await resp.read()
+
+        auth = {'Authorization': 'imagine'}
+        async with self.bot.session.post("https://amidiscord.xyz/api/upload", data={"file": b}, headers=auth) as resp:
+            final = await resp.json()
+            c = final["url"]
+            d = final["delete_url"]
+            await ctx.send(embed = discord.Embed(
+                description = f"You can find the uploaded file [here!]({c})",
+                color = self.bot.color
+            .set_footer(f"{ctx.author} check your DMs to delete the file!")
+            ).set_author(name="File uploaded!", icon_url = self.bot.user.avatar_url))
+
+            await ctx.author.send(embed= discord.Embed(description=f"To delete your recently uploaded file, go [here]({d})\n\nYour uploaded [file]({c})"))
+
+
+    @commands.group(help="Update commands group, runnable only by team.", invoke_without_command=True)
+    @is_team()
+    async def update(self, ctx):
+        await ctx.invoke(self.bot.get_command("help"), **{"command":"update"})
+
+    @update.command()
+    @is_team()
+    async def set(self, ctx, *, content):
+        if len(content) >= 2000:
+            return
+
+        db = await self.bot.db.fetch("SELECT * FROM updates WHERE sussybaka = $1", 144126010642792449)
+        if not db:
+            await self.bot.db.execute("INSERT INTO updates (sussybaka, update_content) VALUES ($1, $2)", 144126010642792449, content)
+            return await ctx.message.add_reaction("<:4430checkmark:848857812632076314>")
+
+        await self.bot.db.execute("UPDATE updates SET update_content = $1 WHERE sussybaka = $2", content, 144126010642792449)
+        
+        await ctx.message.add_reaction("<:4430checkmark:848857812632076314>")
+
+    @commands.command(help="Check the last updates done and changes.", aliases=["news"])
+    async def updates(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM updates WHERE sussybaka = $1", 144126010642792449)
+        await ctx.send(data[0]['update_content'])
+
     @commands.group(help="Developer commands group, runnable only by team.", aliases=["dev", "d"], invoke_without_command=True)
     @is_team()
     async def developer(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"developer"})
+
+    @developer.command()
+    async def sendto(self, ctx, channel: discord.TextChannel, type:str, image:str, *, content):
+        valid_types = ["embed", "message"]
+        image_url_check = re.match("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+", image)
+        
+        if not image_url_check:
+            return await ctx.send("The image url provided is not a valid url.")
+
+        if type not in valid_types:
+            return await ctx.send(f"The type is not valid, choose from `{', '.join(valid_types)}`")
+
+        if len(content) >= 2000:
+            return await ctx.send("The content is too long.")
+
+        ch = self.bot.get_channel(channel.id)
+        if not ch:
+            return
+
+        if type.lower() == "embed":
+            em = discord.Embed(description=content, color = self.bot.color)
+            em.set_image(url=image)
+            await ch.send(embed=em)
+            return await ctx.send(f"Sent to {ch.mention}.")
+        
+        elif type.lower() == "message":
+            await ch.send(f"{content}")
+            return await ctx.send(f"Sent to {ch.mention}.")
 
     @developer.command()
     async def load(self, ctx, file):
@@ -69,7 +153,7 @@ class Admin(commands.Cog):
     async def reload(self, ctx, file):
         try:
             self.bot.reload_extension(f"cogs.{file}" or f"util.{file}")
-            return await ctx.send(f"<:4430checkmark:848857812632076314> Reloaded **{file}**")
+            return await ctx.send(f"<:4430checkmark:848857812632076314> Reloaded **cogs.{file}**")
         except Exception as e:
             return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while reloading **{file}**:\n```py\n{e}\n```")
 
