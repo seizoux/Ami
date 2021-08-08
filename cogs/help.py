@@ -16,11 +16,11 @@ class Help(commands.Cog):
     async def help(self, ctx, *, command=None):
         if command:
             if command.lower() == "moderation":
-                embed=discord.Embed(title="<:moderation:846314041991102474> Moderation commands", description=f"Moderation, i think you know what type of commands they are. Manage your server with easy commands, ban people when they break the rules, mute fast people who are spamming, and other stuff you can just read after!\n\n• `ban`, `kick`, `mute`, `muterole`, `unban`, `unmute`, `cleanup`, `roleinfo`, `slowmode`, `automod`, `addbadwords`, `rembadwords`, `deletechannel`, `createchannel`, `removerole`, `giverole`", color=0xffcff1)
+                embed=discord.Embed(title="<:moderation:846314041991102474> Moderation commands", description=f"Moderation, i think you know what type of commands they are. Manage your server with easy commands, ban people when they break the rules, mute fast people who are spamming, and other stuff you can just read after!\n\n• `ban`, `kick`, `mute`, `muterole`, `unban`, `unmute`, `clear`, `roleinfo`, `slowmode`, `automod`, `addbadwords`, `rembadwords`, `deletechannel`, `createchannel`, `removerole`, `giverole`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "cuppy":
-                embed=discord.Embed(title="<:cupcake:845632403405012992> Cuppy commands", description=f"Cuppy is a type of economy, well that's an economy, but with some major features, such like mining, games, investments, pet's and a currency based on **cupcakes**! Start farming cupcakes and be the richest one.\n\n• `bal`, `dep`, `wd`, `shop`, `buyitem`, `garage`, `drink`, `hunt`, `smoke`, `fish`, `bankrob`, `openchest`, `openchat`, `rob`, `send`, `daily`, `mine`, `tictactoe`, `rockpaperscissors`, `invest`, `petshop`, `buypet`, `petname`, `leaderboard`, `glbc`", color=0xffcff1)
+                embed=discord.Embed(title="<:cupcake:845632403405012992> Cuppy commands", description=f"Cuppy is a RPG-Idea economy in a discord bot, with monsters to hunt, defeat and jail, battles between members with teammates, teammates prestigable, mining with many pickaxe's to obtain and upgrade, clans to raise up and reach highers leagues and much more!\n\n**Minerals**\n> `minerals`, `minerals inventory`, `minerals values`\n**Info & Utils**\n> `profile`, `give`, `balance`, `exchange`, `open`, `boxinventory`, `leaderboard`, `daily`, `weekly`, `monthly`, `checklist`\n**Pickaxe**\n> `pickaxe`, `pickaxe upgrade`, `pickaxe stats`, `pickaxe list`, `pickaxe recharge`, `mine`\n**Battles & Teammates**\n> `team`, `team recruit`, `team prestige`, `team stats`, `team shop`, `battle`, `xproom`, `xproom run`, `xproom claim`, `xproom upgrade`\n**Hunting**\n> `monsterlist`, `monsterhunt`\n**Clans**\n> `clan`, `clan create`, `clan rename`, `clan description`, `clan leave`, `clan delete`, `clan kick`, `clan invite`, `clan info`, `clan donate`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "music":
@@ -32,11 +32,11 @@ class Help(commands.Cog):
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "fun":
-                embed=discord.Embed(title="<:misc:846314042071056384> Fun commands", description=f"Fun commands. Have fun with some cool commands such like a gaymeter, a pp size generator, ship, fake nitro gift and ton of others.\n\n• `nitro`, `ship`, `gaymeter`, `reactspeed`, `penis-size`, `textttospeech`, `roast`, `count`, `lick`, `kiss`, `kill`, `slap`, `hug`, `punch`, `pat`", color=0xffcff1)
+                embed=discord.Embed(title="<:misc:846314042071056384> Fun commands", description=f"Fun commands. Have fun with some cool commands such like a gaymeter, a pp size generator, ship, fake nitro gift and ton of others.\n\n• `nitro`, `ship`, `gaymeter`, `reactspeed`, `penis-size`, `textttospeech`, `roast`, `count`, `lick`, `kiss`, `kill`, `slap`, `hug`, `punch`, `pat`, `poke`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "utility":
-                embed=discord.Embed(title="<:AGC_k3llyLUL:771033767434518539> Utility commands", description=f"Utility commands. Retrive info about users, search something on google directly here, and yes, ton of other commands.\n\n• `choose`, `fact`, `password`, `binary`, `reverse`, `twitch`, `time`, `translate`, `membercount`, `urban`, `info`, `invite`, `calculate`, `vote`, `userinfo`, `serverinfo`, `memberlist`, `google`, `html`, `avatar`, `searchanime`, `check`, `afk`, `remind`, `rtfm`", color=0xffcff1)
+                embed=discord.Embed(title="<:AGC_k3llyLUL:771033767434518539> Utility commands", description=f"Utility commands. Retrive info about users, search something on google directly here, and yes, ton of other commands.\n\n• `choose`, `fact`, `password`, `binary`, `reverse`, `mock`, `twitch`, `time`, `translate`, `membercount`, `urban`, `info`, `invite`, `calculate`, `vote`, `userinfo`, `serverinfo`, `memberlist`, `google`, `html`, `avatar`, `searchanime`, `check`, `afk`, `remind`, `rtfm`", color=0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "leveling":
@@ -48,7 +48,7 @@ class Help(commands.Cog):
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
             elif command.lower() == "welcome":
-                embed=discord.Embed(title="<:welcome:846316342226845746> Welcome commands (click here for youtube tutorial)", url="https://youtu.be/dKFYxT3Yn3g", description="Setup a total customizable welcome for your discord server, customize the message, enable the embed for the message, choose what role give at new members (up to 20), choose in what channel send the message, and give a cute welcome to new people! Oh right, there's also a cute image when embed is enabled ;)\n\n• `welcome set`, `welcome settings`, `welcome message`, `welcome setroles`, `welcome delroles`, `welcome assignrole`, `welcome channel`, `welcome embed`, `welcome wel`\n\n**You can also use some variables in the welcome message!**\n```py\n{name} > will return the member name\n{member} > will return like Name#1234\n{mention} > will return the member mention\n{count} > will return the position where it joined\n{age} > will return the account date creation\n{guild} > will return the guild name\n```", color = 0xffcff1)
+                embed=discord.Embed(title="<:welcome:846316342226845746> Welcome commands (click here for youtube tutorial)", url="https://youtu.be/dKFYxT3Yn3g", description="Setup a total customizable welcome for your discord server, customize the message, enable the embed for the message, choose what role give at new members (up to 20), choose in what channel send the message, and give a cute welcome to new people! Oh right, there's also a cute image when embed is enabled ;)\n\n• `welcome set`, `welcome settings`, `welcome message`, `welcome setroles`, `welcome delroles`, `welcome assignrole`, `welcome channel`, `welcome embed`, `welcome mex-out`, `welcome image`, `welcome wel`\n\n**You can also use some variables in the welcome message!**\n```py\n{name} > will return the member name\n{member} > will return like Name#1234\n{mention} > will return the member mention\n{count} > will return the position where it joined\n{age} > will return the account date creation\n{guild} > will return the guild name\n```", color = 0xffcff1)
                 embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
                 return await ctx.send(embed=embed)
 
@@ -56,7 +56,7 @@ class Help(commands.Cog):
             ss = "[Support Server](https://discord.gg/ZcErEwmVYu)"
             ss2 = "[Donate](https://donatebot.io/checkout/800176902765674496)"
             ss3 ="[Vote Here](https://top.gg/bot/801742991185936384)"
-            em = discord.Embed(description=f"{ss} | {ss2} | {ss3}\nType `ami help <command>` for more info on a specific command", color = 0xffcff1)
+            em = discord.Embed(description=f"{ss} | {ss2} | {ss3}\nType `ami help <command>` for more info on a specific command!\nCheck out `ami news` for last updates!", color = 0xffcff1)
             em.add_field(name="<:moderation:846314041991102474> Moderation", value = f"`ami help moderation`")
             em.add_field(name="<:cupcake:845632403405012992> Cuppy", value = f"`ami help cuppy`")
             em.add_field(name="<:music:846314041743114272> Music", value = f"`ami help music`")
@@ -100,13 +100,15 @@ class Help(commands.Cog):
                 for subcommmand in command.walk_commands():  # iterate through all of the command's parents/subcommands
 
                     if subcommmand.parents[0] == command:  # check if the latest parent of the subcommand is the command itself
-                        SCmd += "`{0.name}`, ".format(subcommmand)  # then add it in the string if it is.
+                        SCmd += "`{0.name}` ".format(subcommmand)  # then add it in the string if it is.
                     else:  # the else statement is optional.
                         continue
 
-            em = discord.Embed(title=f"`ami {command.name} {command.signature}`", description = f"{hel}\n\nAliases : `{m}`\nSubcommands : {SCmd or '`N/A`'}", color = 0xffcff1)
-            em.set_footer(text="[] = Optional | <> = Required | []... = Required (can be multiple)", icon_url=ctx.author.avatar_url)
-            await ctx.send(embed=em)
+            check = True if await command.can_run(ctx) else False
+            if check:
+                em = discord.Embed(title=f"**ami {command.qualified_name} {command.signature}**", description = f"{hel}\n\nAliases: `{m}`\nSubcommands: {SCmd or '`N/A`'}", color = 0xffcff1)
+                em.set_footer(text="[] = Optional | <> = Required | []... = Required (can be multiple)", icon_url=ctx.author.avatar_url)
+                await ctx.send(embed=em)
 
 
 def setup(bot):
