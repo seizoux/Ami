@@ -16,8 +16,53 @@ from PIL import Image, ImageDraw, ImageFont
 
 from discord import Color, File
 
+class XpRoom:
+    def parse_upgrade(upgrade_type: str, upgrade_level: int):
+        vfc = {
+            "cost": {2: 300, 3: 600, 4: 1000, 5: 1500, 6: 3000, 7: 6000, 8: 12000, 9: 24000, 10: 48000},
+            "farm": {2: 150, 3: 300, 4: 700, 5: 1300, 6: 2600, 7: 4800, 8: 9600, 9: 19200, 10: 38400},
+            "duration": {2: 500, 3: 1000, 4: 2000, 5: 4000, 6: 8000, 7: 16000, 8: 32000, 9: 64000, 10: 128000},
+        }
 
+        return vfc[upgrade_type][upgrade_level]
 
+    def time_parser(duration_level: int):
+        calcs = {
+            1: 2,
+            2: 3,
+            3: 4,
+            4: 5,
+            5: 6,
+            6: 7,
+            7: 8,
+            8: 9,
+            9: 10,
+            10: 11,
+            11: 12
+        }
+
+        return calcs[duration_level]
+
+    def farm_parser(farm_level: int):
+        facts = {
+            1: random.randint(1000, 4500),
+            2: random.randint(1500, 6500),
+            3: random.randint(2000, 8500),
+            4: random.randint(2500, 10500),
+            5: random.randint(3000, 12500),
+            6: random.randint(3500, 14500),
+            7: random.randint(4000, 16500),
+            8: random.randint(4500, 18500),
+            9: random.randint(5000, 20500),
+            10: random.randint(5500, 22500),
+        }
+
+        return facts[farm_level]
+
+    def cost_parser(cost_level: int, duration: int):
+        base_cost = 1550
+        return int((base_cost/cost_level)*(XpRoom.time_parser(duration)*10)/10)
+        
 class BattleRenderer:
     BACKGROUND_URL = 'https://cdn.discordapp.com/attachments/851875804945973330/870696897311023204/battle_arena.png'
     FONT_PATH = "./fonts/coolvetica rg.ttf"
@@ -987,9 +1032,10 @@ class Team:
         return imag[team_name]
 
     def calc_needed_xp(level: int, teammate: str):
-        vf = 3500
         if teammate.endswith("(prestiged)"):
             vf = 50000
+        else:
+            vf = 3500
 
         for i in range(1, level):
             vf += 750
@@ -1229,8 +1275,8 @@ class Pickaxe:
             "earth": None
         }
 
-        if pick_type not in pickaxes_upgrade:
-            return "Your pickaxe is already upgraded to its maximum!"
+        if pickaxes_upgrade[pick_type] is None:
+            return False
 
         return pickaxes_upgrade[pick_type]
 
@@ -1356,9 +1402,9 @@ class Lootbox:
         """
         lootboxes_drop_minerals = {
             "common": {"bronze" : random.randint(1, 45)},
-            "uncommon": {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20)},
-            "rare": {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20), "gold" : random.randint(1, 10)},
-            "epic": {"bronze" : random.randint(1, 45), "silver" : random.randint(1, 20), "gold" : random.randint(1, 10), "diamond" : random.randint(1, 5)}
+            "uncommon": {"bronze" : random.randint(1, 105), "silver" : random.randint(1, 20)},
+            "rare": {"bronze" : random.randint(1, 230), "silver" : random.randint(1, 70), "gold" : random.randint(1, 10)},
+            "epic": {"bronze" : random.randint(1, 500), "silver" : random.randint(1, 150), "gold" : random.randint(1, 50), "diamond" : random.randint(1, 30)}
         }
 
         return lootboxes_drop_minerals[l_type]
@@ -1434,21 +1480,184 @@ class Cuppy(commands.Cog):
         if len(self.captcha_failed) < 1:
             return
 
-        for k, v in self.captcha_failed:
+        for k, v in self.captcha_failed.items():
             await self.bot.db.execute("INSERT INTO blacklist (user_id, reason) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET reason = $2", k, v)
             del self.captcha_failed[k]
 
+    @commands.group(aliases=["xpr"], help="The XP-Room is a place where your teammate can grind xp automatically! Start the xp room to make your teammate earns xp by itself!\nUpgrading the stats of your XP-Room will make the duration longer, lower cost and in consequence more xp earned for your teammate!", invoke_without_command=True)
+    @commands.cooldown(1, 7, commands.BucketType.user)
+    async def xproom(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        xp_room_cost_level = data[0]["xp_room_cost_level"]
+        xp_room_duration_level = data[0]["xp_room_duration_level"]
+        xp_room_farm_level = data[0]["xp_room_farm_level"]
+
+        if data[0]["xp_room_date"]:
+            tit = "✅ Your XP-Room is currently running!"
+        else:
+            tit = "❌ Your XP-Room is not running!"
+
+        if data[0]["xp_room_date"] and datetime.datetime.utcnow() > data[0]["xp_room_date"]:
+            tit = "🎉 Your XP-Room has finished: `ami xpr claim`!"
+
+        cost_upgrade = "⚡**`MAX LEVEL`**⚡"
+        farm_upgrade = "⚡**`MAX LEVEL`**⚡"
+        duration_upgrade = "⚡**`MAX LEVEL`**⚡"
+
+        if xp_room_cost_level < 10:
+            cost_upgrade = f"`Next Level:` <:cupcake:845632403405012992> `{humanize.intcomma(XpRoom.parse_upgrade('cost', xp_room_cost_level+1))}`"
+        
+        if xp_room_farm_level < 10:
+            farm_upgrade = f"`Next Level:` <:cupcake:845632403405012992> `{humanize.intcomma(XpRoom.parse_upgrade('farm', xp_room_farm_level+1))}`"
+        
+        if xp_room_duration_level < 10:
+            duration_upgrade = f"`Next Level:` <:cupcake:845632403405012992> `{humanize.intcomma(XpRoom.parse_upgrade('duration', xp_room_duration_level+1))}`"
+
+        await ctx.send(embed = discord.Embed(
+            title = tit,
+            description = f"`a;xpr run` to run your 🏹 **XP-Room** at his maximum.\n"
+                        f"`a;xpr upgrade <stats>` to upgrade one of your 🏹 **XP-Room** stats.\n"
+                        f"__When your 🏹 **XP-Room** is running, you can't battle or hunt monsters__",
+            color = self.bot.color
+            )
+            .add_field(name=f"💰 Cost | `{humanize.intcomma(XpRoom.cost_parser(data[0]['xp_room_cost_level'], XpRoom.time_parser(xp_room_duration_level)))}`", value = f"<:alert_pink:867758260707000380>`Level {data[0]['xp_room_cost_level']} / 10`\n{cost_upgrade}")
+            .add_field(name=f"⚙ Farm | `*{humanize.intcomma(XpRoom.farm_parser(data[0]['xp_room_farm_level']))} EXP`", value = f"<:alert_pink:867758260707000380>`Level {data[0]['xp_room_farm_level']} / 10`\n{farm_upgrade}")
+            .add_field(name=f"⏱ Duration | `{XpRoom.time_parser(data[0]['xp_room_duration_level'])}H`", value = f"<:alert_pink:867758260707000380>`Level {data[0]['xp_room_duration_level']} / 10`\n{duration_upgrade}")
+            .add_field(name=f"<:cupcake:845632403405012992> You currently have {humanize.intcomma(data[0]['balance'])} Cupcakes!", value = f"`Your 🏹 XP-Farm can run for {XpRoom.time_parser(data[0]['xp_room_duration_level'])}H earning approximated {humanize.intcomma(XpRoom.farm_parser(data[0]['xp_room_farm_level']))} EXP at the cost of {humanize.intcomma(XpRoom.cost_parser(data[0]['xp_room_cost_level'], XpRoom.time_parser(xp_room_duration_level)))} Cupcakes!`")
+            .set_author(name=f"{ctx.author.name}'s XP-Room Info", icon_url = self.bot.user.avatar_url)
+            .set_footer(text="Check \"ami checklist\" to see when your XP-Room has ended.")
+            ) or await ctx.invoke(**{"command":"xproom"})
+
+    @xproom.command(help="Run your XP-Room")
+    async def run(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if data[0]["team_name"] is None:
+            return await ctx.send(f"{ctx.author.mention} you don't have a teammate, check `ami team shop`!")
+
+        if data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is already running.")
+
+        if data[0]["xp_room_date"] and datetime.datetime.utcnow() < data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is not ended yet, try again later.")
+
+        time = data[0]["xp_room_duration_level"]
+        cost = data[0]["xp_room_cost_level"]
+        final_time = XpRoom.time_parser(time)
+
+        actual = datetime.datetime.utcnow()
+        future = actual + datetime.timedelta(hours=final_time)
+
+        payout = XpRoom.cost_parser(cost, final_time)
+
+        if payout > data[0]["balance"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** can run for <:cupcake:845632403405012992> **{humanize.intcomma(payout)}**, you have only <:cupcake:845632403405012992> **{humanize.intcomma(data[0]['balance'])}**")
+
+        image = ImageCaptcha(fonts=['fonts/standard.ttf'])
+        number = random.randint(1000, 99999)
+        file_data = image.generate(str(number))
+        buffer = BytesIO()
+        image.write(str(number), buffer)
+        buffer.seek(0)
+        file=discord.File(fp=buffer, filename="captcha.png")
+
+        timer = 60
+
+        me = await ctx.send(f"{ctx.author.mention} please solve the captcha to run your 🏹 **XP-Room**: you have 1 minute.", file=file)
+            
+        try:
+            mex = await self.bot.wait_for("message", check=lambda m: m.author.id == ctx.author.id and m.channel.id == ctx.channel.id and m.content == str(number), timeout = timer)
+        except asyncio.TimeoutError:
+            await me.delete()
+            return
+
+        if mex.content == str(number):
+            await self.bot.db.execute("UPDATE cuppy SET balance = $1, xp_room_date = $2 WHERE user_id = $3", data[0]["balance"] - payout, future, ctx.author.id)
+            return await ctx.send(f"{ctx.author.mention} you've spent <:cupcake:845632403405012992> **{humanize.intcomma(payout)}** to run your 🏹 **XP-Room**, it will be back in ⏱ **{final_time}H**!")
+
+    @xproom.command(help="Claim the rewards from the XP-Room when it ends.")
+    async def claim(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if data[0]["team_name"] is None:
+            return await ctx.send(f"{ctx.author.mention} you don't have a teammate, check `ami team shop`!")
+
+        if not data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is not running, run it with `ami xpr run`.")
+
+        if data[0]["xp_room_date"] and datetime.datetime.utcnow() < data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is not ended yet, try again later.")
+
+        earns = XpRoom.farm_parser(data[0]["xp_room_farm_level"])
+
+        name = Team.name(data[0]["team_name"])
+        emoji = Team.emoji(data[0]["team_name"])
+
+        await self.bot.db.execute("UPDATE cuppy SET xp_room_date = $1, team_xp = $2 WHERE user_id = $3", None, data[0]["team_xp"] + earns, ctx.author.id)
+        mexx = f"🎉 Your {emoji} **{name}** returned with <:xp:867817838941437974> **+ {humanize.intcomma(earns)}**!"
+        if (data[0]["team_xp"] + earns) >= Team.calc_needed_xp(data[0]["team_level"], data[0]["team_name"]):
+            await self.bot.db.execute("UPDATE cuppy SET team_level = $1, team_xp = $2 WHERE user_id = $3", data[0]["team_level"] + 1, 0, ctx.author.id)
+            mexx += f"\n‼ Oh! Your {emoji} **{name}** leveled up to level **{humanize.intcomma(data[0]['team_level'] + 1)}**!"
+        
+        await ctx.send(embed = discord.Embed(
+            title = "🏹 XP-Room Claimed!",
+            description = f"{mexx}",
+            color = self.bot.color
+        ).set_footer(text="Run your XP-Room again with \"a;xpr run\"!")
+        .set_author(name=f"{ctx.author.name}'s XP-Room", icon_url = self.bot.user.avatar_url))
+
+    @xproom.command(help="Upgrade the stats of your XP-Room to gain more xp.", name="upgrade")
+    async def upgrade_xpr(self, ctx, stat: str):
+        valids = ["farm", "cost", "duration"]
+        if stat.lower() not in valids:
+            return await ctx.send(f"{ctx.author.mention} **{stat}** is not a valid stat to upgrade for the 🏹 **XP-Room**.")
+        
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if data[0]["team_name"] is None:
+            return await ctx.send(f"{ctx.author.mention} you don't have a teammate, check `ami team shop`!")
+
+        if data[0]["xp_room_date"] and datetime.datetime.utcnow() < data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is not ended yet, you can't upgrade while it's running.")
+
+        if data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is ended, please claim it before upgrade.")
+
+        upf = data[0][f"xp_room_{stat.lower()}_level"]
+        if upf == 10:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** `{stat.lower()}` is already at the maximum level, you can't upgrade it anymore.")
+
+        up = XpRoom.parse_upgrade(stat.lower(), upf+1)
+
+        if up > data[0]["balance"]:
+            return await ctx.send(f"{ctx.author.mention}, **{stat.lower()}** upgrade price is <:cupcake:845632403405012992> **{humanize.intcomma(up)}** and you have only <:cupcake:845632403405012992> **{humanize.intcomma(data[0]['balance'])}**")
+
+        await self.bot.db.execute(f"UPDATE cuppy SET xp_room_{stat.lower()}_level = $1, balance = $2 WHERE user_id = $3", upf + 1, data[0]["balance"] - up, ctx.author.id)
+        await ctx.send(f"{ctx.author.mention} you've spent <:cupcake:845632403405012992> **{humanize.intcomma(up)}** to upgrade your 🏹 **XP-Room** `{stat.lower()}`, which now is Lvl. **{upf + 1}**!")
+
     @commands.command(help="Claim your daily cupcakes gift!")
-    @commands.cooldown(1, 86400, commands.BucketType.user)
     async def daily(self, ctx):
         data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         if not data:
             return await ctx.invoke(self.balance)
 
+        if data[0]["daily_date"]:
+            if datetime.datetime.utcnow() < data[0]["daily_date"]:
+                return await ctx.send(f"{ctx.author.mention} your daily reward is not ready yet, take a look on the checklist to know when it's ready.")
+
         actual = datetime.datetime.utcnow()
         future = actual + datetime.timedelta(hours=24)
 
-        c = random.randint(10, 500)
+        c = 50
         await self.bot.db.execute("UPDATE cuppy SET balance = $1, daily_date = $2 WHERE user_id = $3", data[0]["balance"] + c, future, ctx.author.id)
 
         await asyncio.sleep(2)
@@ -1456,7 +1665,54 @@ class Cuppy(commands.Cog):
         data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
 
         time = data2[0]["daily_date"] - datetime.datetime.utcnow()
-        await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you got <:cupcake:845632403405012992> **{c}** from your daily vote!\n<:alert_pink:867758260707000380> You can claim the next one in **{humanize.precisedelta(time.seconds)}**.")
+        await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you got <:cupcake:845632403405012992> **{c}** from your daily reward!\n<:alert_pink:867758260707000380> You can claim the next one in **{humanize.precisedelta(time.seconds)}**.")
+
+    @commands.command(help="Claim your weekly cupcakes gift!")
+    async def weekly(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if data[0]["weekly_date"]:
+            if datetime.datetime.utcnow() < data[0]["weekly_date"]:
+                return await ctx.send(f"{ctx.author.mention} your weekly reward is not ready yet, take a look on the checklist to know when it's ready.")
+
+        actual = datetime.datetime.utcnow()
+        future = actual + datetime.timedelta(days=7)
+
+        c = 350
+        await self.bot.db.execute("UPDATE cuppy SET balance = $1, weekly_date = $2 WHERE user_id = $3", data[0]["balance"] + c, future, ctx.author.id)
+
+        await asyncio.sleep(2)
+
+        data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+
+        time2 = data2[0]["weekly_date"] - datetime.datetime.utcnow()
+        await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you got <:cupcake:845632403405012992> **{c}** from your weekly reward!\n<:alert_pink:867758260707000380> You can claim the next one in **{time2.days} day(s), {humanize.precisedelta(time2.seconds)}**.")
+
+
+    @commands.command(help="Claim your monthly cupcakes gift!")
+    async def monthly(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+        if not data:
+            return await ctx.invoke(self.balance)
+
+        if data[0]["monthly_date"]:
+            if datetime.datetime.utcnow() < data[0]["monthly_date"]:
+                return await ctx.send(f"{ctx.author.mention} your monthly reward is not ready yet, take a look on the checklist to know when it's ready.")
+
+        actual = datetime.datetime.utcnow()
+        future = actual + datetime.timedelta(days=31)
+
+        c = 1500
+        await self.bot.db.execute("UPDATE cuppy SET balance = $1, monthly_date = $2 WHERE user_id = $3", data[0]["balance"] + c, future, ctx.author.id)
+
+        await asyncio.sleep(2)
+
+        data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
+
+        time2 = data2[0]["monthly_date"] - datetime.datetime.utcnow()
+        await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you got <:cupcake:845632403405012992> **{c}** from your monthly reward!\n<:alert_pink:867758260707000380> You can claim the next one in **{time2.days} day(s), {humanize.precisedelta(time2.seconds)}**.")
 
     @commands.command(help="That's you checklist, you can check here times before you can get the next rewards!", aliases=["cl"])
     @commands.cooldown(1, 15, commands.BucketType.user)
@@ -1466,44 +1722,139 @@ class Cuppy(commands.Cog):
             return await ctx.invoke(self.balance)
 
         daily = data[0]["daily_date"]
+        weekly = data[0]["weekly_date"]
+        monthly = data[0]["monthly_date"]
         vote = data[0]["vote_date"]
+        xprs = data[0]["xp_room_date"]
+        
         daily_mex = ""
+        weekly_mex = ""
+        monthly_mex = ""
         vote_mex = ""
+        xprs_mex = ""
+
+        if not xprs:
+            xprs_mex = "is **ready**!"
+            xtick = "✅"
+        else:
+            if datetime.datetime.utcnow() > xprs:
+                xprs_mex = "is **ready**!"
+                xtick = "✅"
+            else:
+                x_final_date = xprs - datetime.datetime.utcnow()
+                b = humanize.precisedelta(x_final_date.seconds).replace(" hours,", "H")
+                b = b.replace(" hour,", "H")
+                b = b.replace(" hour and", "H")
+                b = b.replace(" minutes and", "M")
+                b = b.replace(" seconds", "S")
+                b = b.replace(" months,", "MO")
+                b = b.replace(" minute and", "M")
+                b = b.replace(" second", "S")
+                b = b.replace(" month,", "MO")
+                xprs_mex = f"will be back in **{b}**!"
+                xtick = ":black_medium_square:"
+
         if not daily:
             daily_mex = "is **ready**!"
             dtick = "✅"
         else:
-            d_final_date = daily - datetime.datetime.utcnow()
-            if d_final_date.seconds < 1:
+            if datetime.datetime.utcnow() > daily:
                 daily_mex = "is **ready**!"
                 dtick = "✅"
             else:
-                b = humanize.precisedelta(d_final_date.seconds).replace(" hours," or " hour,", "H")
-                b = b.replace(" minutes and" or " minute and", "M")
-                b = b.replace(" seconds" or " second", "S")
+                d_final_date = daily - datetime.datetime.utcnow()
+                b = humanize.precisedelta(d_final_date.seconds).replace(" hours,", "H")
+                b = b.replace(" hour,", "H")
+                b = b.replace(" hour and", "H")
+                b = b.replace(" hours and", "H")
+                b = b.replace(" minutes and", "M")
+                b = b.replace(" seconds", "S")
+                b = b.replace(" months,", "MO")
+                b = b.replace(" minute and", "M")
+                b = b.replace(" second", "S")
+                b = b.replace(" month,", "MO")
                 daily_mex = f"is in **{b}**!"
                 dtick = ":black_medium_square:"
+
+        if not weekly:
+            weekly_mex = "is **ready**!"
+            wtick = "✅"
+        else:
+            if datetime.datetime.utcnow() > weekly:
+                weekly_mex = "is **ready**!"
+                wtick = "✅"
+            else:
+                w_final_date = weekly - datetime.datetime.utcnow()
+                b = humanize.precisedelta(w_final_date.seconds).replace(" hours,", "H")
+                b = b.replace(" hour,", "H")
+                b = b.replace(" hour and", "H")
+                b = b.replace(" minutes and", "M")
+                b = b.replace(" seconds", "S")
+                b = b.replace(" months,", "MO")
+                b = b.replace(" minute and", "M")
+                b = b.replace(" second", "S")
+                b = b.replace(" month,", "MO")
+                if w_final_date.days:
+                    weekly_mex = f"is in **{w_final_date.days}D {b}**!"
+                else:
+                    weekly_mex = f"is in **{b}**!"
+                wtick = ":black_medium_square:"
+
+        if not monthly:
+            monthly_mex = "is **ready**!"
+            mtick = "✅"
+        else:
+            if datetime.datetime.utcnow() > monthly:
+                monthly_mex = "is **ready**!"
+                mtick = "✅"
+            else:
+                m_final_date = monthly - datetime.datetime.utcnow()
+                b = humanize.precisedelta(m_final_date.seconds).replace(" hours,", "H")
+                b = b.replace(" hour,", "H")
+                b = b.replace(" hour and", "H")
+                b = b.replace(" minutes and", "M")
+                b = b.replace(" seconds", "S")
+                b = b.replace(" months,", "MO")
+                b = b.replace(" minute and", "M")
+                b = b.replace(" second", "S")
+                b = b.replace(" month,", "MO")
+                if m_final_date.days:
+                    monthly_mex = f"is in **{m_final_date.days}D {b}**!"
+                else:
+                    monthly_mex = f"is in **{b}**!"
+                mtick = ":black_medium_square:"
 
         if not vote:
             vote_mex = "is **ready**!"
             vtick = "✅"
         else:
-            v_final_date = vote - datetime.datetime.utcnow()
-            if v_final_date.seconds < 1:
+            if datetime.datetime.utcnow() > vote:
                 vote_mex = "is **ready**!"
                 vtick = "✅"
             else:
-                b = humanize.precisedelta(v_final_date.seconds).replace(" hours," or " hour,", "H")
-                b = b.replace(" minutes and" or " minute and", "M")
-                b = b.replace(" seconds" or " second", "S")
+                v_final_date = vote - datetime.datetime.utcnow()
+                b = humanize.precisedelta(v_final_date.seconds).replace(" hours,", "H")
+                b = b.replace(" hour,", "H")
+                b = b.replace(" hour and", "H")
+                b = b.replace(" minutes and", "M")
+                b = b.replace(" seconds", "S")
+                b = b.replace(" months,", "MO")
+                b = b.replace(" minute and", "M")
+                b = b.replace(" second", "S")
+                b = b.replace(" month,", "MO")
                 vote_mex = f"is in **{b}**!"
                 vtick = ":black_medium_square:"
 
         await ctx.send(embed = discord.Embed(
-            description = f"{dtick} Your next daily {daily_mex}\n{vtick} Your next vote {vote_mex}\n\n`a;vote`, `a;daily`",
-            color = self.bot.color
+            title = "Your Checklist",
+            description = f"{xtick} 🏹 Your XP-Room {xprs_mex}\n{dtick} 🎁 Your next daily {daily_mex}\n"
+            f"{wtick} ⏱ Your next weekly {weekly_mex}\n{mtick} 📆 Your next monthly {monthly_mex}\n"
+            f"{vtick} 🎟 Your next vote {vote_mex}\n\n`a;vote`, `a;daily`, `a;weekly`, `a;monthly`, `a;xpr`",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
         )
         .set_author(name=f"{ctx.author.name}'s Checklist", icon_url = self.bot.user.avatar_url)
+        .set_footer(text="Ami 2021"),
         )
 
     @commands.command(help="Take a look on how many lootboxes you have in your inventory.", aliases=["boxinv", "bi"])
@@ -1817,9 +2168,9 @@ class Cuppy(commands.Cog):
 
         vcd = ','.join(s)
         await ctx.send(embed = discord.Embed(
-            description = f"**{ctx.author.mention}** opened {emoji} {amount}x **{name}**...\nand found {vcd} & <:cupcake:845632403405012992> {cups}x !",
+            description = f"**{ctx.author.mention}** opened {emoji} {amount}x **{name}**...\nand found {vcd} & <:cupcake:845632403405012992> {humanize.intcomma(cups*amount)}x !",
             color = self.bot.color).set_author(name=f"{ctx.author.name} opened a {name}!", icon_url = self.bot.user.avatar_url).set_footer(text="Type \"ami vote\" to get more lootboxes!"))
-        await self.bot.db.execute("UPDATE cuppy SET balance = $1, lifetime_earns = $2 WHERE user_id = $3", data[0]["balance"] + cups, data[0]["lifetime_earns"] + cups, ctx.author.id)
+        await self.bot.db.execute("UPDATE cuppy SET balance = $1, lifetime_earns = $2 WHERE user_id = $3", data[0]["balance"] + cups*amount, data[0]["lifetime_earns"] + cups, ctx.author.id)
         await self.bot.db.execute(f"UPDATE cuppy SET {lootbox_rarity.lower()}_opened = $1, lootbox_{lootbox_rarity.lower()} = $2 WHERE user_id = $3", data[0][f"{lootbox_rarity.lower()}_opened"] + amount, data[0][f"lootbox_{lootbox_rarity.lower()}"] - amount, ctx.author.id)
 
     @commands.group(help="Check your pickaxe stats.", aliases=["pcx"], invoke_without_command=True)
@@ -1842,7 +2193,7 @@ class Cuppy(commands.Cog):
 
         if can_upgrade:
             upgrade_it = Pickaxe.upgrade_pick(pick)
-            if upgrade_it == "Your pickaxe is already upgraded to its maximum!":
+            if upgrade_it is False:
                 return await ctx.send("<:alert_pink:867758260707000380> Your pickaxe is already upgraded to its maximum!")
 
             dur_calc = Pickaxe.durability_set(upgrade_it)
@@ -2266,6 +2617,18 @@ class Cuppy(commands.Cog):
         data1 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", ctx.author.id)
         data2 = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", opponent.id)
 
+        if data1[0]["xp_room_date"] and datetime.datetime.utcnow() < data1[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is not ended yet, you can't battle while it's running.")
+
+        if data1[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is ended, please claim it before battling.")
+
+        if data2[0]["xp_room_date"] and datetime.datetime.utcnow() < data2[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} the opponent has the 🏹 **XP-Room** running, he can't battle now.")
+
+        if data2[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} the opponent has not claimed the 🏹 **XP-Room** ended, he can't battle until he/she claim that.")
+
         if not data1:
             return await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you are not registered into cuppy, type `ami balance` to register yourself.")
 
@@ -2431,13 +2794,8 @@ class Cuppy(commands.Cog):
                 em2 = discord.Embed(description = f"{e_team_author} **{n_team_author}** landed a {author_move_emoji} **{author_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_author)}{mex_crit_author}\n"
                                     f"{e_team_opponent} **{n_team_opponent}** landed a {opponent_move_emoji} **{opponent_move_name}**: that dealt 💥 {humanize.intcomma(final_damage_opponent)}{mex_crit_opponent}", color = self.bot.color)
                 em2.set_image(url="attachment://battle.png")
-                em2.set_footer(text="Moves were landed automatically each 10 seconds.")
-                m = await ctx.channel.history(limit=5).get(id=msg_one.id)
-                if m:
-                    await msg_one.delete()
-                    msg_one = await ctx.send(embed=em2, file=file)
-                else:
-                    msg_one = await ctx.send(embed=em2, file=file)
+                em2.set_footer(text="Moves were landed automatically each 5 seconds.")
+                await ctx.send(embed=em2, file=file)
 
                 if current_hp_opponent <= 0 and current_hp_author <= 0 or current_hp_author <= 0 and current_hp_opponent <= 0:
                     await self.bot.db.execute("UPDATE cuppy SET team_ties = $1, team_friendship = $2 WHERE user_id = $3", data1[0]["team_ties"] + 1, data1[0]["team_friendship"] + friend, ctx.author.id)
@@ -2479,7 +2837,7 @@ class Cuppy(commands.Cog):
                     await ctx.send(f"<:alert_pink:867758260707000380> {opponent.mention} {e_team_opponent} **{n_team_opponent}** won the battle against {e_team_author} **{n_team_author}** and gained <:xp:867817838941437974> **{xp_amount}**!")
                     break
 
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
                 continue
 
     @commands.command()
@@ -2541,6 +2899,12 @@ class Cuppy(commands.Cog):
         if not team:
             return await ctx.send(f"<:alert_pink:867758260707000380> {ctx.author.mention} you need a teammate to go hunting monsters, check out `ami team shop`!")
         
+        if data[0]["xp_room_date"] and datetime.datetime.utcnow() < data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is not ended yet, you can't hunt monsters while it's running.")
+
+        if data[0]["xp_room_date"]:
+            return await ctx.send(f"{ctx.author.mention} your 🏹 **XP-Room** is ended, please claim it before going to hunt monsters.")
+
         team_level = data[0]["team_level"]
         team_name = Team.name(team)
         team_emoji = Team.emoji(team)
@@ -3117,7 +3481,8 @@ class Cuppy(commands.Cog):
     @commands.command()
     @is_team()
     async def devgift(self, ctx, member: discord.Member, amount: int):
-        await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", amount, member.id)
+        data = await self.bot.db.fetch("SELECT * FROM cuppy WHERE user_id = $1", member.id)
+        await self.bot.db.execute("UPDATE cuppy SET balance = $1 WHERE user_id = $2", data[0]["balance"] + amount, member.id)
         await ctx.message.add_reaction("✅")
 
     @commands.command()
