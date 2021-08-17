@@ -4,7 +4,7 @@
   <a href="https://github.com/Daishiky/Ami">Github</a> |
   <a href="https://discord.com/oauth2/authorize?client_id=801742991185936384&permissions=8&scope=bot">Invite</a>
   <br><br>
-  <img src="https://www.gogetmyguru.com/wp-content/uploads/2020/12/python.gif">
+  <img src="https://cdn.discordapp.com/avatars/801742991185936384/ae208c5298c51d8e37874d4d5193bc23.webp?size=1024">
 </p>
 
 # FAQ's
@@ -12,11 +12,7 @@
 
 No, if that instance was not private no. You can run private instances to improve the code with your stuff and then commit changes here to improve ami.
 
-**2 - Can i invite new collaborators?**
-
-If you asked and talked with all the team, and all are fine with that, yes.
-
-**3 - Can i push directly instead make pull requests?**
+**3 - I can make pull requests?**
 
 If you are totally sure your code works and you have tested it for a while, yes.
 
