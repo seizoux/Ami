@@ -10,41 +10,181 @@ from util.defs import is_team
 import re
 from io import BytesIO
 import typing
+import humanize
+from twemoji_parser import emoji_to_url
+from nudenet import NudeClassifier
+import aiofiles
+
+MAX_FILE_SIZE = 15000000
+
+Image_Union = typing.Union[
+    discord.Member,
+    discord.User,
+    discord.PartialEmoji,
+    discord.Emoji,
+    str,
+]
+
+class InvalidImage(Exception):
+    pass
 
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Admin"
 
+    async def get_url(self, ctx: commands.Context, thing: typing.Optional[str], **kwargs: typing.Dict[str, typing.Any]) -> str:
+        url = None
+        avatar = kwargs.get("avatar", True)
+        check = kwargs.get("check", True)
+        checktype = kwargs.get("checktype", True)
+        gif = kwargs.get("gif", False)
+
+        if ctx.message.reference:
+            message = ctx.message.reference.resolved
+
+            if message.embeds and message.embeds[0].type == "image":
+                url = message.embeds[0].thumbnail.url
+
+            elif message.embeds and message.embeds[0].type == "rich":
+                if message.embeds[0].image.url:
+                    url = message.embeds[0].image.url
+
+                elif message.embeds[0].thumbnail.url:
+                    url = message.embeds[0].thumbnail.url
+
+            elif message.attachments and message.attachments[0].width and message.attachments[0].height:
+                url = message.attachments[0].url
+
+            if message.stickers:
+                sticker = message.stickers[0]
+
+                if sticker.format != discord.StickerType.lottie:
+                    url = str(sticker.image.url)
+                else:
+                    return False
+
+        if ctx.message.attachments and ctx.message.attachments[0].width and ctx.message.attachments[0].height:
+            url = ctx.message.attachments[0].url
+
+        if ctx.message.stickers:
+            sticker = ctx.message.stickers[0]
+
+            if sticker.format != discord.StickerType.lottie:
+                url = str(sticker.image.url)
+            else:
+                return False
+
+        if thing is None and avatar and url is None:
+            if gif:
+                url = str(ctx.author.avatar_url_as(static_format="png", size=512))
+            else:
+                url = str(ctx.author.avatar_url_as(format="png", size=512))
+
+        elif isinstance(thing, (discord.PartialEmoji, discord.Emoji)):
+            if gif:
+                url = f"https://cdn.discordapp.com/emojis/{thing.id}.{'gif' if thing.animated else 'png'}"
+            else:
+                url = f"https://cdn.discordapp.com/emojis/{thing.id}.png"
+                
+        elif isinstance(thing, (discord.Member, discord.User)):
+            if gif:
+                url = str(thing.avatar_url_as(static_format="png", size=512))
+            else:
+                url = str(thing.avatar_url_as(format="png", size=512))
+
+        elif url is None:
+            thing = str(thing).strip("<>")
+
+            if self.bot.url_regex.match(thing):
+                url = thing
+            else:
+                url = await emoji_to_url(thing)
+                if url == thing:
+                    return False
+
+        if not avatar:
+            return None
+
+        if not url:
+            return False
+
+        if check:
+            async with self.bot.session.get(url) as resp:
+                if resp.status != 200:
+                    return False
+
+                if "image" not in resp.content_type:
+                    return False
+
+                if checktype:
+                    b = await resp.content.read(50)
+                    if b.startswith(b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A") or b.startswith(b"\x89PNG"): # PNG Signature
+                        pass
+
+                    elif b[0:3] == b"\xff\xd8\xff" or b[6:10] in (b"JFIF", b"Exif"):
+                        pass
+
+                    elif b.startswith((b"\x47\x49\x46\x38\x37\x61", b"\x47\x49\x46\x38\x39\x61")): # GIF Signature
+                        pass
+
+                    elif b[:2] in (b"MM", b"II"):
+                        pass
+
+                    elif len(b) >= 3 and b[0] == ord(b"P") and b[1] in b"25" and b[2] in b" \t\n\r":
+                        pass
+
+                    elif b.startswith(b"BM"):
+                        pass
+
+                    elif not b.startswith(b"RIFF") or b[8:12] != b"WEBP":
+                        return False
+
+                    if resp.headers.get("Content-Length") and int(resp.headers.get("Content-Length")) > MAX_FILE_SIZE:
+                        return False
+        return url
+
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Admin Loaded")
 
 
-    @commands.command()
-    @is_team()
-    async def upload(self, ctx, *, data: typing.Optional[typing.Union[discord.PartialEmoji, str]] = None):
+    @commands.command(help="Upload png/gif/jpg/tiff/mp4/mp3/html or whatever you want on amidiscord.xyz cdn, open for all (files are been deleted each month)")
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def upload(self, ctx, *, data: typing.Union[Image_Union]=None):
+        data = await self.get_url(ctx, data)
 
-        if isinstance(data, discord.PartialEmoji):
-            data = data.url
+        if data is False:
+            return await ctx.reply(f":x: Unable to acquire a valid file type for the `data` argument value passed in.")
 
-        elif attachments := ctx.message.attachments:
-            data = attachments[0].url
+        async with self.bot.session.get(str(data)) as resp:
+            b = await resp.read()
 
-        try:
-            async with self.bot.session.get(str(data)) as resp:
-                b = await resp.read()
+            if resp.status == 200:
+                f = await aiofiles.open('upload_check.png', mode='wb')
+                await f.write(b)
+                await f.close()
 
-            auth = {'Authorization': 'imagine'}
-            async with self.bot.session.post("https://amidiscord.xyz/api/upload", data={"file": b}, headers=auth) as resp:
-                final = await resp.json()
-                c = final["url"]
-                await ctx.send(embed = discord.Embed(
-                    description = f"You can find the uploaded file [here!]({c})",
-                    color = self.bot.color
-                ).set_author(name="File uploaded!", icon_url = self.bot.user.avatar_url))
-        except Exception:
-            return
+            classifier = NudeClassifier()
+            classs = classifier.classify("upload_check.png")
+            dict1 = classs["upload_check.png"]
+            unsafe = dict1['unsafe']
+            unsafec = ((unsafe)*100)/200
+            unsafep = round(unsafec*200, 2)
+
+
+            if int(unsafep) >= 50:
+                os.remove("upload_check.png")
+                return await ctx.send(f"{ctx.author.mention} this file was rated as **{unsafep}%** NSFW, upload refused.")
+
+        auth = {'Authorization': 'imagine'}
+        async with self.bot.session.post("https://cdn.amidiscord.xyz/api/upload", data={"file": b}, headers=auth) as resp:
+            final = await resp.json()
+            c = final["url"]
+            await ctx.send(embed = discord.Embed(
+                description = f"You can find the uploaded file [here!]({c})\nAlso check out the complete [gallery!](https://cdn.amidiscord.xyz/gallery)",
+                color = self.bot.color
+            ).set_author(name=f"{ctx.author.name}, file uploaded!", icon_url = self.bot.user.avatar_url))
 
 
     @commands.group(help="Update commands group, runnable only by team.", invoke_without_command=True)
@@ -106,26 +246,30 @@ class Admin(commands.Cog):
             return await ctx.send(f"Sent to {ch.mention}.")
 
     @developer.command()
-    async def load(self, ctx, file):
+    async def load(self, ctx, *file):
         try:
-            self.bot.load_extension(f"cogs.{file}")
-            return await ctx.send(f"<:4430checkmark:848857812632076314> Loaded **{f'cogs.{file}'}**")
+            for files in file:
+                self.bot.load_extension(f"cogs.{files}")
+            return await ctx.send(f"<:4430checkmark:848857812632076314> Loaded cogs: **{', '.join(file)}**")
         except Exception as e:
             try:
-                self.bot.load_extension(f"util.{file}")
-                return await ctx.send(f"<:4430checkmark:848857812632076314> Loaded **{f'util.{file}'}**")
+                for files in file:
+                    self.bot.load_extension(f"util.{files}")
+                return await ctx.send(f"<:4430checkmark:848857812632076314> Loaded cogs: **{', '.join(file)}**")
             except Exception as e:
                 return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while loading **{file}**:\n```py\n{e}\n```")
     
     @developer.command()
-    async def unload(self, ctx, file):
+    async def unload(self, ctx, *file):
         try:
-            self.bot.unload_extension(f"cogs.{file}")
-            return await ctx.send(f"<:4430checkmark:848857812632076314> Unloaded **{f'cogs.{file}'}**")
+            for files in file:
+                self.bot.unload_extension(f"cogs.{files}" or f"util.{files}")
+            return await ctx.send(f"<:4430checkmark:848857812632076314> Unloaded cogs: **{', '.join(file)}**")
         except Exception as e:
             try:
-                self.bot.unload_extension(f"util.{file}")
-                return await ctx.send(f"<:4430checkmark:848857812632076314> Unloaded **{f'util.{file}'}**")
+                for files in file:
+                    self.bot.unload_extension(f"util.{files}")
+                return await ctx.send(f"<:4430checkmark:848857812632076314> Unloaded util: **{', '.join(file)}**")
             except Exception as e:
                 return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while unloading **{file}**:\n```py\n{e}\n```")
 
@@ -149,10 +293,11 @@ class Admin(commands.Cog):
         await ctx.send(embed=discord.Embed(title=title, description=text, color = 0xffcff1))
 
     @developer.command()
-    async def reload(self, ctx, file):
+    async def reload(self, ctx, *file):
         try:
-            self.bot.reload_extension(f"cogs.{file}" or f"util.{file}")
-            return await ctx.send(f"<:4430checkmark:848857812632076314> Reloaded **cogs.{file}**")
+            for files in file:
+                self.bot.reload_extension(f"cogs.{files}" or f"util.{files}")
+            return await ctx.send(f"<:4430checkmark:848857812632076314> Reloaded cogs: **{', '.join(file)}**")
         except Exception as e:
             return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while reloading **{file}**:\n```py\n{e}\n```")
 
