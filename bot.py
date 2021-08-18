@@ -1,7 +1,7 @@
 import os
 import discord
 from discord import client
-from discord.ext import commands, tasks
+from discord.ext import commands, tasks, ipc
 import logging
 from collections import Counter
 import time
@@ -43,11 +43,12 @@ logger.addHandler(handler)
 handler.setBot(client)
 
 start_time = datetime.datetime.utcnow()
-
 os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
 os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
 os.environ["JISHAKU_FORCE_PAGINATOR"] = "True"
 client.load_extension('jishaku')
+
+client.ipc = ipc.Server(client, secret_key="thisisverysuspisousandinvitebobobotthebestbot")
 
 client.socket_receive = 0
 client.socket_stats = Counter()
@@ -142,4 +143,5 @@ async def uptime(ctx: commands.Context):
     await ctx.send(uptime_stamp)
 
 # RUN CLIENT -- IF U DELETE THIS, THE BOT DON'T WORK!!
+client.ipc.start()
 client.run(config.BOT_TOKEN)
