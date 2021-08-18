@@ -68,20 +68,21 @@ client.codes = {
       12: "GUILD_SYNC"
   }
 
-#logging.getLogger('asyncio').setLevel(logging.CRITICAL)
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 
+async def log_blacklist():
+    await client.wait_until_ready()
+    db = await client.db.fetch("SELECT * FROM blacklist")
+    for i in db:
+        client.bl[i["user_id"]] = i["reason"]
+        print(f"Blacklisted: {i['user_id']}")
+client.loop.create_task(log_blacklist())
 
 @tasks.loop(minutes=30)
 async def status():
     watcher = f'{humanize.intcomma(len(client.guilds))} guilds! | a;help'
     await client.change_presence(status=discord.Status.online,activity=discord.Activity(type=discord.ActivityType.watching, name=watcher))
 
-@tasks.loop(hours=2)
-async def create_bl():
-    await client.wait_until_ready()
-    db = await client.db.fetch("SELECT * FROM blacklist")
-    for i in db:
-        client.bl[i["user_id"]] = i["reason"]
 
 @client.check
 def check_commands(ctx):
@@ -122,20 +123,8 @@ async def remove(ctx, user: discord.User):
 @client.check
 async def is_blacklisted(ctx):
     if ctx.author.id in client.bl:
-        try:
-            em = discord.Embed(description=f"Hi buddy, looks like you were blacklisted from the bot, "
-                                "usually this happens when you got caught doing something with the bot which you are not allowed to do. "
-                                f"In this case, the reason why you get blacklisted is : `{client.bl[ctx.author.id]}`\n\nSupport : https://discord.gg/ZcErEwmVYu", color = 0xffcff1)
-            em.set_author(name=f"{ctx.author.name}#{ctx.author.discriminator}, you are blacklisted.", icon_url=ctx.author.avatar_url)
-            await ctx.author.send(embed=em)
-            return False
-        except Exception:
-            em = discord.Embed(description=f"Hi buddy, looks like you were blacklisted from the bot, "
-                                "usually this happens when you got caught doing something with the bot which you are not allowed to do. "
-                                f"In this case, the reason why you get blacklisted is : `{client.bl[ctx.author.id]}`\n\nSupport : https://discord.gg/ZcErEwmVYu", color = 0xffcff1)
-            em.set_author(name=f"{ctx.author.name}#{ctx.author.discriminator}, you are blacklisted.", icon_url=ctx.author.avatar_url)
-            await ctx.reply(embed=em)  
-            return False
+        await ctx.send(f"{ctx.author.mention} you are permanently banned from using the bot.")
+        return False
     return True
 
 @client.command(help="See the ami uptime from the last reboot", pass_context=True)
@@ -146,9 +135,9 @@ async def uptime(ctx: commands.Context):
     minutes, seconds = divmod(remainder, 60)
     days, hours = divmod(hours, 24)
     if days:
-        time_format = "**{d}** days, **{h}** hours, **{m}** minutes, and **{s}** seconds."
+        time_format = "for {d}d {h}h {m}m {s}s so far"
     else:
-        time_format = "**{h}** hours, **{m}** minutes, and **{s}** seconds."
+        time_format = "for {h}h {m}m {s}s so far"
     uptime_stamp = time_format.format(d=days, h=hours, m=minutes, s=seconds)
     await ctx.send(uptime_stamp)
 
