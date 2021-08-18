@@ -15,6 +15,7 @@ class IpcRoutes(commands.Cog):
     async def on_ipc_error(self, endpoint, error):
         """Called upon an error being raised within an IPC route"""
         print(endpoint, "raised", error, file=sys.stderr)
+        raise error
     
     @ipc.server.route()
     async def get_guilds_count(self, data) -> int:
