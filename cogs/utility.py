@@ -4,7 +4,6 @@ from nudenet import NudeClassifier
 import typing
 from urllib.request import urlretrieve
 import datetime
-import aiofiles
 import aiohttp
 import asyncio
 import humanize
@@ -17,6 +16,21 @@ import psutil
 import platform
 import secrets
 import googletrans
+from twemoji_parser import emoji_to_url
+import aiofiles
+
+MAX_FILE_SIZE = 15000000
+
+Image_Union = typing.Union[
+    discord.Member,
+    discord.User,
+    discord.PartialEmoji,
+    discord.Emoji,
+    str,
+]
+
+class InvalidImage(Exception):
+    pass
 
 class Utility(commands.Cog):
     def __init__(self, bot):
@@ -27,9 +41,169 @@ class Utility(commands.Cog):
         self.bot.commandsusages = Counter()
         self.trans = googletrans.Translator()
 
+    async def get_url(self, ctx: commands.Context, thing: typing.Optional[str], **kwargs: typing.Dict[str, typing.Any]) -> str:
+        url = None
+        avatar = kwargs.get("avatar", True)
+        check = kwargs.get("check", True)
+        checktype = kwargs.get("checktype", True)
+        gif = kwargs.get("gif", False)
+
+        if ctx.message.reference:
+            message = ctx.message.reference.resolved
+
+            if message.embeds and message.embeds[0].type == "image":
+                url = message.embeds[0].thumbnail.url
+
+            elif message.embeds and message.embeds[0].type == "rich":
+                if message.embeds[0].image.url:
+                    url = message.embeds[0].image.url
+
+                elif message.embeds[0].thumbnail.url:
+                    url = message.embeds[0].thumbnail.url
+
+            elif message.attachments and message.attachments[0].width and message.attachments[0].height:
+                url = message.attachments[0].url
+
+            if message.stickers:
+                sticker = message.stickers[0]
+
+                if sticker.format != discord.StickerType.lottie:
+                    url = str(sticker.image.url)
+                else:
+                    return False
+
+        if ctx.message.attachments and ctx.message.attachments[0].width and ctx.message.attachments[0].height:
+            url = ctx.message.attachments[0].url
+
+        if ctx.message.stickers:
+            sticker = ctx.message.stickers[0]
+
+            if sticker.format != discord.StickerType.lottie:
+                url = str(sticker.image.url)
+            else:
+                return False
+
+        if thing is None and avatar and url is None:
+            if gif:
+                url = str(ctx.author.avatar_url_as(static_format="png", size=512))
+            else:
+                url = str(ctx.author.avatar_url_as(format="png", size=512))
+
+        elif isinstance(thing, (discord.PartialEmoji, discord.Emoji)):
+            if gif:
+                url = f"https://cdn.discordapp.com/emojis/{thing.id}.{'gif' if thing.animated else 'png'}"
+            else:
+                url = f"https://cdn.discordapp.com/emojis/{thing.id}.png"
+                
+        elif isinstance(thing, (discord.Member, discord.User)):
+            if gif:
+                url = str(thing.avatar_url_as(static_format="png", size=512))
+            else:
+                url = str(thing.avatar_url_as(format="png", size=512))
+
+        elif url is None:
+            thing = str(thing).strip("<>")
+
+            if self.bot.url_regex.match(thing):
+                url = thing
+            else:
+                url = await emoji_to_url(thing)
+                if url == thing:
+                    return False
+
+        if not avatar:
+            return None
+
+        if not url:
+            return False
+
+        if check:
+            async with self.bot.session.get(url) as resp:
+                if resp.status != 200:
+                    return False
+
+                if "image" not in resp.content_type:
+                    return False
+
+                if checktype:
+                    b = await resp.content.read(50)
+                    if b.startswith(b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A") or b.startswith(b"\x89PNG"): # PNG Signature
+                        pass
+
+                    elif b[0:3] == b"\xff\xd8\xff" or b[6:10] in (b"JFIF", b"Exif"):
+                        pass
+
+                    elif b.startswith((b"\x47\x49\x46\x38\x37\x61", b"\x47\x49\x46\x38\x39\x61")): # GIF Signature
+                        pass
+
+                    elif b[:2] in (b"MM", b"II"):
+                        pass
+
+                    elif len(b) >= 3 and b[0] == ord(b"P") and b[1] in b"25" and b[2] in b" \t\n\r":
+                        pass
+
+                    elif b.startswith(b"BM"):
+                        pass
+
+                    elif not b.startswith(b"RIFF") or b[8:12] != b"WEBP":
+                        return False
+
+                    if resp.headers.get("Content-Length") and int(resp.headers.get("Content-Length")) > MAX_FILE_SIZE:
+                        return False
+        return url
+
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Utility Loaded")
+
+    @commands.command(help="Retrive Covid-19 stats about the specified country!\nLeave the `country` parameter blank to get worldwide stats.")
+    async def covid(self, ctx, *, country: str = "world"):
+        url = f"https://disease.sh/v3/covid-19/countries/{country}?strict=true"
+        if country == "world":
+            url = "https://disease.sh/v3/covid-19/all"
+
+        resp = await self.bot.session.get(url)
+        data = await resp.json()
+
+        try:
+            flag = data["countryInfo"]["flag"] if country != "world" else "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Earth_Western_Hemisphere_transparent_background.png/1200px-Earth_Western_Hemisphere_transparent_background.png"
+            total = data["cases"]
+            today_cases = data["todayCases"]
+            deaths = data["deaths"]
+            today_deaths = data["todayDeaths"]
+            recovered = data["recovered"]
+            today_recovered = data["todayRecovered"]
+            active = data["active"]
+            critical = data["critical"]
+            tests = data["tests"]
+
+            em = discord.Embed(
+                description = f"🔎 **Total**: {humanize.intcomma(total)}\n"
+                                f"🚑 **Recovered**: {humanize.intcomma(recovered)}\n"
+                                f"☠ **Deaths**: {humanize.intcomma(deaths)}\n-----------------------------\n"
+                                f"🚩 **Today (Deaths)**: {humanize.intcomma(today_deaths)}\n"
+                                f"🏳 **Today (Cases)**: {humanize.intcomma(today_cases)}\n"
+                                f"🏴 **Today (Recovered)**: {humanize.intcomma(today_recovered)}\n-----------------------------\n"
+                                f"🤒 **Active**: {humanize.intcomma(active)}\n"
+                                f"😱 **Critical**: {humanize.intcomma(critical)}\n"
+                                f"💉 **Tests**: {humanize.intcomma(tests)}",
+                color = self.bot.color)
+            em.set_thumbnail(url=flag)
+            em.set_author(name=f"Covid in {country.title()}!", icon_url=self.bot.user.avatar_url)
+
+            await ctx.send(embed=em)
+        except Exception:
+            return await ctx.send(f"{ctx.author.mention} i'm sure that **{country}** is not an existing country so far.")
+
+    @commands.command()
+    async def shards(self, ctx):
+
+        f_shards = [f"Shard {shard_id} - `{round(shard.latency*1000, 2)}`ms" for shard_id, shard in self.bot.shards.items()]
+            
+        ff_shards = '\n'.join(f_shards)
+
+        await ctx.send(f"Total Shards: {len(self.bot.shards)}\n-------------------------\n{ff_shards}")
+
 
     @commands.command(help=f"Translate the given message to english.\nYou can also reply with the command to a message to translate it.", aliases=["tr"])
     async def translate(self, ctx, *, message: commands.clean_content = None):
@@ -55,22 +229,22 @@ class Utility(commands.Cog):
 
     @commands.command(help="Retrive the urban definition for the given term.")
     async def urban(self, ctx, term):
-        async with self.session.get(f"https://api.urbandictionary.com/v0/define?term={term}") as resp:
-            d = await resp.json()
-            definition = d['list'][0]['definition']
-            example = d['list'][0]['example']
-            t_up = d['list'][0]['thumbs_up']
-            t_down = d['list'][0]['thumbs_down']
-            author = d['list'][0]['author']
-            written = d['list'][0]['written_on']
-            url_ref = d['list'][0]['permalink']
-            word = d['list'][0]['word']
+        try:
+            async with self.session.get(f"https://api.urbandictionary.com/v0/define?term={term}") as resp:
+                d = await resp.json()
+                definition = d['list'][0]['definition']
+                example = d['list'][0]['example']
+                t_up = d['list'][0]['thumbs_up']
+                t_down = d['list'][0]['thumbs_down']
+                author = d['list'][0]['author']
+                url_ref = d['list'][0]['permalink']
+                word = d['list'][0]['word']
 
-        format = "%a, %d %b %Y %I:%M %p"
-
-        em = discord.Embed(description=f"**Urban definition for [{word}]({url_ref})**\n\n Written By **`{author}`**\n\n__**Definition**__\n{definition}\n\n__**Example**__\n{example}", color = 0xffcff1)
-        em.set_footer(text=f"👍 {t_up} | 👎 {t_down}")
-        return await ctx.send(embed=em)
+            em = discord.Embed(description=f"**Urban definition for [{word}]({url_ref})**\n\n Written By **`{author}`**\n\n__**Definition**__\n{definition}\n\n__**Example**__\n{example}", color = 0xffcff1)
+            em.set_footer(text=f"👍 {t_up} | 👎 {t_down}")
+            return await ctx.send(embed=em)
+        except Exception:
+            return await ctx.send(f"{ctx.author.mention} no urban results found for **{term}**.")
 
     @commands.command(help="Convert the given phrase to binary format.")
     async def binary(self, ctx, *, to_convert:str):
@@ -192,11 +366,11 @@ class Utility(commands.Cog):
         line_counter = line_count()
 
         em = discord.Embed(color = 0xffcff1)
-        em.add_field(name="System", value=f"```prolog\nName : {system_name}\nNode : {node_name}\nMachine : {machine}\nProcessor : {processor}\n```")
-        em.add_field(name="CPU", value=f"```prolog\nPhysical Cores : {physical_cores}\nTotal Cores : {total_cores}\nFreq : {current_cpu_freq}\nUsage : {cpu_usage}\n```")
-        em.add_field(name="Memory", value=f"```prolog\nTotal : {total_mem}\nAvailable : {available_mem}\nUsed : {used_mem}\nPercentage : {mem_perc}\n```")
-        em.add_field(name="Swap", value=f"```prolog\nTotal : {total_swap}\nFree : {free_swap}\nUsed : {used_swap}\nPercentage : {perc_swap}\n```")
-        em.add_field(name="Network (DISK & NET)", value=f"```prolog\nRead : {disk_io_bytes_read}\nSent : {disk_io_bytes_send}\nSent : {net_io_bytes_sent}\nReceived : {net_io_bytes_recv}\n```")
+        em.add_field(name="System", value=f"```prolog\nName: {system_name}\nNode: {node_name}\nMachine: {machine}\nProcessor: {processor}\n```")
+        em.add_field(name="CPU", value=f"```prolog\nPhysical Cores: {physical_cores}\nTotal Cores: {total_cores}\nFreq: {current_cpu_freq}\nUsage: {cpu_usage}\n```")
+        em.add_field(name="Memory", value=f"```prolog\nTotal: {total_mem}\nAvailable: {available_mem}\nUsed: {used_mem}\nPercentage: {mem_perc}\n```")
+        em.add_field(name="Swap", value=f"```prolog\nTotal: {total_swap}\nFree: {free_swap}\nUsed: {used_swap}\nPercentage: {perc_swap}\n```")
+        em.add_field(name="Network (DISK & NET)", value=f"```prolog\nRead: {disk_io_bytes_read}\nSent: {disk_io_bytes_send}\nSent: {net_io_bytes_sent}\nReceived: {net_io_bytes_recv}\n```")
         em.add_field(name="Code", value=f"```prolog\n{line_counter}\n```")
 
 
@@ -217,14 +391,7 @@ class Utility(commands.Cog):
         time_2 = time.perf_counter()
         ping = round((time_2-time_1)*1000)
 
-        alvin = "[`Cryptex#0117`](https://discordapp.com/users/590323594744168494)"
-        jadon = "[`Jadon#2494`](https://discordapp.com/users/711057339360477184)"
-        moanie = "[`ムーニー#6598`](https://discordapp.com/users/691406006277898302)"
-        ali = "[`Ali™#9171`](https://discordapp.com/users/410452466631442443)"
-        crunchy = "[`CrunchyAnime#3992`](https://discordapp.com/users/343019667511574528)"
-
-        em = discord.Embed(description="[**Support Server**](https://discord.gg/ZcErEwmVYu)\nThis bot has been designed and developed by [`Daishiky#0828`](http://discordapp.com/users/144126010642792449)\n"
-                           f"Team : {alvin}, {jadon}, {moanie}, {ali}, {crunchy}",color = 0xffcff1)
+        em = discord.Embed(description="[**Support Server**](https://discord.gg/ZcErEwmVYu)", color = 0xffcff1)
         em.add_field(name="<:settings:585767366743293952> Channels", value=f"<:voice:585783907673440266> Voice: `{vc}`\n<:text:843198832464625714> Text: `{txt}`")
         em.add_field(name="<:settings:585767366743293952> Stats", value=f"<:upward_stonks:739614245997641740> Guilds: `{len(self.bot.guilds)}`\n<:upward_stonks:739614245997641740> Users: `{len(self.bot.users)}`",inline=False)
         em.add_field(name="<:settings:585767366743293952> Latency", value=f"<:greenTick:596576670815879169> Websocket: `{round(self.bot.latency*1000, 2)}ms`\n<:greenTick:596576670815879169> Typing: `{ping}ms`", inline=False)
@@ -370,7 +537,7 @@ class Utility(commands.Cog):
     async def google(self, ctx, *, query):
         try:
             lat = (round(self.bot.latency*1000, 2))
-            client = async_cse.Search("AIzaSyChzFV6odUmQh7nPp34laGuniYwdlJjSV4") # create the Search client (uses Google by default!)
+            client = async_cse.Search("token") # create the Search client (uses Google by default!)
             results = await client.search(f"{query}", safesearch=True) # returns a list of async_cse.Result objects
             first_result = results[0] # Grab the first result
             second_result = results[1] # Grab the second result
@@ -381,8 +548,8 @@ class Utility(commands.Cog):
             em.add_field(name=f"{tirth_result.title}\n{tirth_result.url}", value = tirth_result.description, inline = False)
             em.set_footer(text=f"Safe search = Enabled | Latency = {lat}ms.", icon_url=f"{self.bot.user.avatar_url}") # Title, snippet, URL, and Image URL (if specified)
             await ctx.send(embed=em)
-        except async_cse.NoMoreRequests:
-            return await ctx.send("Limit of 100 search reached for today.")
+        except Exception:
+            return await ctx.send(f"The search for **{query}** returned 0 results.")
 
     @commands.command(help="Donate something to support me")
     async def donate(self, ctx):
@@ -401,104 +568,33 @@ class Utility(commands.Cog):
         await ctx.send("Need help? Join now in the support server.\nhttps://discord.gg/ZcErEwmVYu")
 
     @commands.command(help="Check a pic to retrive SFW & NSFW score, works with urls, @members and attachments")
-    async def check(self, ctx, member: typing.Optional[typing.Union[discord.Member, str]]):
-        if attachment := ctx.message.attachments:
-            try:
-                url = attachment[0]
-                filename = "check.png"
-                await url.save(filename)
-                classifier = NudeClassifier()
-                classs = classifier.classify("check.png")
-                dict1 = classs["check.png"]
-            except Exception:
-                return await ctx.reply("No", mention_author=False)
-            unsafe = dict1['unsafe']
-            safe = dict1['safe']
-            safec = ((safe)*100)/200
-            unsafec = ((unsafe)*100)/200
-            unsafep = round(unsafec*200,2)
-            safep = round(safec*200,2)
-            f = discord.File("check.png")
-            em = discord.Embed(color=0xffcff1)
-            em.add_field(name="<:status_online:596576749790429200> Safe score", value = f"{safe} `({safep}%)`")
-            em.add_field(name="<:status_dnd:596576774364856321> Unsafe score", value = f"{unsafe} `({unsafep}%)`")
-            em.set_image(url="attachment://check.png")
-            em.set_footer(text="Image NSFW Detection | Safe = SFW  | Unsafe = NSFW")
-            await ctx.send(file=f, embed=em)
-            return
+    async def check(self, ctx, member: typing.Union[Image_Union]=None):
+        url = await self.get_url(ctx, member)
 
-        if member == None:
-            url = ctx.author.avatar_url
-            filename = "check.png"
-            await url.save(filename)
-            classifier = NudeClassifier()
-            classs = classifier.classify("check.png")
-            dict1 = classs["check.png"]
-            unsafe = dict1['unsafe']
-            safe = dict1['safe']
-            safec = ((safe)*100)/200
-            unsafec = ((unsafe)*100)/200
-            unsafep = round(unsafec*200,2)
-            safep = round(safec*200,2)
-            em = discord.Embed(color=0xffcff1)
-            em.add_field(name="<:status_online:596576749790429200> Safe score", value = f"{safe} `({safep}%)`")
-            em.add_field(name="<:status_dnd:596576774364856321> Unsafe score", value = f"{unsafe} `({unsafep}%)`")
-            em.set_image(url=url)
-            em.set_footer(text="Image NSFW Detection | Safe = SFW  | Unsafe = NSFW")
-            await ctx.send(embed=em)
-        elif isinstance(member, discord.Member) or isinstance(member, discord.User):
-            url = member.avatar_url
-            filename = "check.png"
-            await url.save(filename)
-            classifier = NudeClassifier()
-            classs = classifier.classify("check.png")
-            dict1 = classs["check.png"]
-            unsafe = dict1['unsafe']
-            safe = dict1['safe']
-            safec = ((safe)*100)/200
-            unsafec = ((unsafe)*100)/200
-            unsafep = round(unsafec*200,2)
-            safep = round(safec*200,2)
-            em = discord.Embed(color=0xffcff1)
-            em.add_field(name="<:status_online:596576749790429200> Safe score", value = f"{safe} `({safep}%)`")
-            em.add_field(name="<:status_dnd:596576774364856321> Unsafe score", value = f"{unsafe} `({unsafep}%)`")
-            em.set_image(url=url)
-            em.set_footer(text="Image NSFW Detection | Safe = SFW  | Unsafe = NSFW")
-            await ctx.send(embed=em)
-        else:
-            if member.startswith("https"):
-                url = member
-                url.replace("cdn.discordapp.com", "media.discordapp.net")
-                async with aiohttp.ClientSession().get(url) as resp:
+        if url is False:
+            return await ctx.reply(f":x: Something went wrong while parsing the image, could be an invalid file type or a file larger then {humanize.naturalsize(MAX_FILE_SIZE)}.")
 
-                    if resp.status != "200":
-                        return await ctx.send(":x: Invalid Picture")
-                    if not "image" in resp.content_type:
-                        return await ctx.send(":x: Invalid Picture")
-                    if resp.headers.get("Content-Length") and int(resp.headers.get("Content-Length")) > 15000000:
-                        return await ctx.send(":x: Max size for images are **`15 MB`**")
+        resp = await self.bot.session.get(url)
+        if resp.status == 200:
+            f = await aiofiles.open('check.png', mode='wb')
+            await f.write(await resp.read())
+            await f.close()
 
-                    bobo = await resp.read()
-                    async with aiofiles.open("check.png", "wb") as f:
-                        await f.write(bobo)
-
-                    classifier = NudeClassifier()
-                    classs = classifier.classify("check.png")
-                    dict1 = classs["check.png"]
-                    unsafe = dict1['unsafe']
-                    safe = dict1['safe']
-                    safec = ((safe)*100)/200
-                    unsafec = ((unsafe)*100)/200
-                    unsafep = round(unsafec*200,2)
-                    safep = round(safec*200,2)
-                    em = discord.Embed(color=0xffcff1)
-                    em.add_field(name="<:status_online:596576749790429200> Safe score", value = f"{safe} `({safep}%)`")
-                    em.add_field(name="<:status_dnd:596576774364856321> Unsafe score", value = f"{unsafe} `({unsafep}%)`")
-                    em.set_image(url=url)
-                    em.set_footer(text="Image NSFW Detection | Safe = SFW  | Unsafe = NSFW")
-                    await ctx.send(embed=em)
-            else:
-                return await ctx.send(":x: Image not found / unsupported provided image.")
+        classifier = NudeClassifier()
+        classs = classifier.classify("check.png")
+        dict1 = classs["check.png"]
+        unsafe = dict1['unsafe']
+        safe = dict1['safe']
+        safec = ((safe)*100)/200
+        unsafec = ((unsafe)*100)/200
+        unsafep = round(unsafec*200,2)
+        safep = round(safec*200,2)
+        em = discord.Embed(color=0xffcff1)
+        em.add_field(name="<:status_online:596576749790429200> Safe score", value = f"{safe} `({safep}%)`")
+        em.add_field(name="<:status_dnd:596576774364856321> Unsafe score", value = f"{unsafe} `({unsafep}%)`")
+        em.set_image(url=url)
+        em.set_footer(text="Image NSFW Detection | Safe = SFW  | Unsafe = NSFW")
+        await ctx.send(embed=em)
 
 
 
