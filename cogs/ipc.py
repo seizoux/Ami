@@ -17,11 +17,11 @@ class IpcRoutes(commands.Cog):
         print(endpoint, "raised", error, file=sys.stderr)
     
     @ipc.server.route()
-    async def get_guilds_count(self) -> int:
+    async def get_guilds_count(self, data) -> int:
         return len(self.bot.guilds)
     
     @ipc.server.route()
-    async def get_user_count(self) -> int:
+    async def get_user_count(self, data) -> int:
         return len(self.bot.users)
 
 def setup(bot):
