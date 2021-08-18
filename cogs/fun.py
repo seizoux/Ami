@@ -21,6 +21,7 @@ import humanize
 import aiohttp
 from util.pil_funcs import GayMeter, Ship
 import util.config as config
+from spongebobcase import tospongebob
 
 kitsu_client = kitsu.Client()
 twitch = TwitchClient(client_id=config.TWITCH_CLIENT)
@@ -45,6 +46,10 @@ class Fun(commands.Cog):
     async def on_ready(self):
         print(f"Fun Loaded")
 
+
+    @commands.command(help="ConvErT the GIvEN tEXT intO thIS WeiRD aNd HArD-TO-rEaD foRmAT")
+    async def mock(self, ctx, *, text):
+        return await ctx.send(f"{tospongebob(text)}")
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -304,7 +309,7 @@ class Fun(commands.Cog):
                                 await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count --m-a` to restart with messages allowed.")
                                 db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                 if not db:
-                                    await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                    return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                 
                                 final_score = 0
                                 if db[0]["higher_score"] > num:
@@ -322,7 +327,7 @@ class Fun(commands.Cog):
                             await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count --m-a` to restart the game with messages allowed.")
                             db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                             if not db:
-                                await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                             
                             final_scoree = 0
                             if db[0]["higher_score"] > num:
@@ -374,7 +379,7 @@ class Fun(commands.Cog):
                                 await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count --r @members` to restart.")
                                 db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                 if not db:
-                                    await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                    return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                     
                                 final_score = 0
                                 if db[0]["higher_score"] > num:
@@ -392,7 +397,7 @@ class Fun(commands.Cog):
                             await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count --r @members` to restart the restricted game.")
                             db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                             if not db:
-                                await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                 
                             final_scoree = 0
                             if db[0]["higher_score"] > num:
@@ -447,7 +452,7 @@ class Fun(commands.Cog):
                                     await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count --r-m-a @members` to restart.")
                                     db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                     if not db:
-                                        await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                        return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                         
                                     final_score = 0
                                     if db[0]["higher_score"] > num:
@@ -465,7 +470,7 @@ class Fun(commands.Cog):
                                 await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count --r-m-a @members` to restart the restricted game.")
                                 db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                                 if not db:
-                                    await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                                    return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                     
                                 final_scoree = 0
                                 if db[0]["higher_score"] > num:
@@ -491,7 +496,7 @@ class Fun(commands.Cog):
                         await ctx.send("<:4430checkmark:848857812632076314> Counting game stopped succesfully!")
                         db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                         if not db:
-                            await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                            return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                                         
                         final_score = 0
                         if db[0]["higher_score"] > num:
@@ -525,7 +530,7 @@ class Fun(commands.Cog):
                         await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} has sent __two__ numbers, `ami count` to restart.")
                         db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                         if not db:
-                            await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                            return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                             
                         final_score = 0
                         if db[0]["higher_score"] > num:
@@ -543,7 +548,7 @@ class Fun(commands.Cog):
                     await ctx.send(f"<:redTick:596576672149667840> {mex.author.mention} failed! Stopped at **`{num}`**, send `ami count` to restart the game.")
                     db = await self.bot.db.fetch("SELECT * FROM counting WHERE guild_id = $1", str(ctx.guild.id))
                     if not db:
-                        await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
+                        return await self.bot.db.execute("INSERT INTO counting (guild_id, higher_score, restarts) VALUES ($1, $2, $3)", str(ctx.guild.id), num, 1)
                         
                     final_scoree = 0
                     if db[0]["higher_score"] > num:
@@ -604,10 +609,6 @@ class Fun(commands.Cog):
         choi = random.choice(choices)
         await ctx.send(choi, allowed_mentions = discord.AllowedMentions.none())
 
-    @commands.command()
-    async def source(self, ctx):
-        await ctx.reply("I'm closed source.")
-
     @commands.command(help="Test your reaction timing with this simple, fast and addictive game based on your reaction speed!",aliases=["rspeed"])
     async def reactspeed(self, ctx, number:float):
         if number > 20.0:
@@ -643,26 +644,12 @@ class Fun(commands.Cog):
         await message.edit(embed=embed)
 
 
-    @commands.command(help="Retrive the invite link to invite me in your guild / other guilds with different permissions availables!")
-    async def invite(self, ctx, perms=None):
-        link = ""
-        prms = ["basic", "advanced", "admin"]
-        s = ", ".join(prms)
-        if perms == None:
-            return await ctx.reply(f"`ami invite <perms>`: ehm dude, please specify with which perms, available perms are:\n{s}")
-
-        if perms in prms:
-            if perms == "basic":
-                link = "[click here to invite me with basic perms](https://discord.com/oauth2/authorize?client_id=801742991185936384&scope=bot&permissions=1077267521)"
-            elif perms == "advanced":
-                link = "[click here to invite me with advanced perms](https://discord.com/oauth2/authorize?client_id=801742991185936384&scope=bot&permissions=1345711607)"
-            elif perms == "admin":
-                link = "[click here to invite me with admin perms](https://discord.com/oauth2/authorize?client_id=801742991185936384&scope=bot&permissions=8)"
-
-        em = discord.Embed(description=f"{link}", color = 0xffcff1)
-        await ctx.send(embed=em)
-
-
+    @commands.command(help="Retrive the invite link to invite me anywhere you want!")
+    async def invite(self, ctx):
+        await ctx.send(embed = discord.Embed(
+            title = "https://amidiscord.xyz/invite",
+            timestamp = datetime.datetime.utcnow(),
+            color = self.bot.color))
 
     @commands.command(help="Ship two members between themself, and get the love percentage!\nYou can ship yourself with another member sending the `<member>`, without `[member2]`.")
     async def ship(self, ctx, member: discord.Member, member2: discord.Member = None):
@@ -784,31 +771,16 @@ class Fun(commands.Cog):
         websocket = round(self.bot.latency*1000, 2)
         await ctx.send(f"<:babyyay:839518621352460289> `{websocket}`ms")
 
-
-    @commands.command(help="Link for the top.gg & discordbotlist vote page")
-    async def vote(self, ctx):
-        link = "[`vote on top.gg!`](https://top.gg/bot/801742991185936384)"
-        link2 = "[`vote on discordbotlist!`](https://discordbotlist.com/bots/ami)"
-        em = discord.Embed(description=f"**{link}** (**<:cupcake:845632403405012992> `+20k`**)\n**{link2}**\nThanks if you vote! <3", color = 0xffcff1)
-        await ctx.send(embed=em)
-
-
-    @commands.command(help="See your actual time or the time of a member if set.\nTime are in **`UTC +01:00 24h`** format.\nUse `ami set-tz [zone]` to set your zone. ([All valid zones list](https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568))")
+    @commands.command(help="See your actual time or the time of a member if set.\nTime are in **`UTC 12h`** format.\nUse `ami set-tz [zone]` to set your zone. ([All valid zones list](https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568))")
     async def time(self, ctx, member: discord.Member = None):
         if member is None:
             member = ctx.author
 
-        author_id = str(member.id)
-        db = await self.bot.db.fetchrow("SELECT * FROM users WHERE user_id = $1", author_id)
+        author_id = member.id
+        db = await self.bot.db.fetchrow("SELECT * FROM timezone WHERE user_id = $1", author_id)
 
         if not db:
-            return await ctx.reply(f"I didn't found this member inside the database, tell him to send `ami bal` and retry again after done.")
-
-        if db["tz"] == None:
-            tmz = "[All valid zones list](https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568)"
-            em = discord.Embed(description=f"The member didn't provided a zone.\n{tmz}", color = 0xffcff1)
-            await ctx.send(embed=em)
-            return
+            return await ctx.reply(f"No timezone set, use `ami set-tz` to set it.")
 
         t = db["tz"]
         fmt = "%A | %I:%M %p | %d %B %Y"
@@ -822,8 +794,8 @@ class Fun(commands.Cog):
 
     @commands.command(help="Set your timezone to check your time",aliases=["set-tz"])
     async def timezone(self, ctx, zone):
-        author_id = str(ctx.author.id)
-        db = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", author_id)
+        author_id = ctx.author.id
+        db = await self.bot.db.fetch("SELECT * FROM timezone WHERE user_id = $1", author_id)
 
         if zone == None:
             await ctx.send(f"{ctx.author.name}, be sure to send a zone across the command.")
@@ -831,8 +803,8 @@ class Fun(commands.Cog):
 
         if zone in all_timezones:
             zone1 = zone
-            await self.bot.db.execute("UPDATE users SET tz = $1 WHERE user_id = $2", zone, author_id)
-            await ctx.send(f"{ctx.author.name}, you have set **{zone1}** as your zone!")
+            await self.bot.db.execute("INSERT INTO timezone (user_id, tz) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET tz = $2", author_id, zone)
+            await ctx.send(f"{ctx.author.name}, you have set **{zone1}** as your zone, now you can check your time with `ami time`.")
         else:
             await ctx.send("The zone you provided isn't in the list.")
 
