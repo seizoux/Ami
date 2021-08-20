@@ -1527,7 +1527,7 @@ class Cuppy(commands.Cog):
     @commands.command(help="Link for the top.gg vote page")
     async def vote(self, ctx):
         em = discord.Embed( 
-                    description=f"Vote are connected to cuppy, voting you will get awesome rewards, like:\n<:golden_cupcake:874968585833967676>, <:lucky_block:874968585267712091>, <:antic_book:875302049389088819>, {Lootbox.emoji('common')}, {Lootbox.emoji('uncommon')}, {Lootbox.emoji('rare')}, {Lootbox.emoji('epic')}\nYou can check `ami checklist` to check time before your next vote.\n\nhttps://amidiscord.xyz/vote", color = 0xffcff1)
+                    description=f"Votes are connected to Cuppy, voting you will get awesome rewards, like:\n<:golden_cupcake:874968585833967676>, <:lucky_block:874968585267712091>, <:antic_book:875302049389088819>, {Lootbox.emoji('common')}, {Lootbox.emoji('uncommon')}, {Lootbox.emoji('rare')}, {Lootbox.emoji('epic')}\nYou can check `ami checklist` to check time before your next vote.\n\nhttps://amidiscord.xyz/vote", color = 0xffcff1)
         em.set_footer(text="Remember to leave your DM's open to see what you've got from the vote!")
         em.set_author(name="Vote to get rewards!", icon_url = self.bot.user.avatar_url)
         await ctx.send(embed=em)
