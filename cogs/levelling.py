@@ -5,6 +5,24 @@ from io import BytesIO
 import random
 from util.defs import is_team
 from util.pil_funcs import RankCard
+import datetime
+import humanize
+
+def premium(override=False):
+    async def predicate(ctx):
+        premium_users = await ctx.bot.db.fetch("SELECT * FROM premium")
+        if ctx.author.id not in [dict(record)["user_id"] for record in premium_users]:
+            if override and ctx.author.id in [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302, 343019667511574528]:
+                return True
+            await ctx.send(embed = discord.Embed(
+                description = "If you wish to use some neat features, hurry up and go buy Ami [premium!](https://amidiscord.xyz/premium)",
+                color = ctx.bot.color,
+                timestamp = datetime.datetime.utcnow()
+            ).set_author(name=f"{ctx.author.name}, you are not Premium!", icon_url=ctx.author.avatar_url))
+            return False
+        else:
+            return True
+    return commands.check(predicate)
 
 class Levelling(commands.Cog):
     def __init__(self, bot):
@@ -31,6 +49,7 @@ class Levelling(commands.Cog):
             await self.bot.db.execute("INSERT INTO levelling (guild_id, levels) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET levels = $2", i, json.dumps(v))
 
     async def cache_levels(self):
+        await self.bot.wait_until_ready()
         db = await self.bot.db.fetch("SELECT * FROM levelling")
         db2 = await self.bot.db.fetch("SELECT * FROM levelling_settings")
         for s in db2:
@@ -56,6 +75,58 @@ class Levelling(commands.Cog):
                             "**You can also use some variables in the level-up message:**```py\n{name} : will return the member name\n{mention} : will return the member mention\n{member} : will return the complete member name\n{level} : will return the member level\n```", invoke_without_command=True)
     async def setleveling(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"setleveling"})
+
+    @commands.command(help="Show the top 10 leaderboard about leveling for the guild", aliases=["llb"])
+    async def levels(self, ctx):
+
+        if ctx.guild.id not in self.modality:
+            return await ctx.send("<:4318crossmark:848857812565229601> Leveling is disabled in this guild.")
+
+        if ctx.guild.id not in self.xp_users:
+            return await ctx.send(f"{ctx.author.mention} looks like no one has gained xp yet, retry again later.")
+
+        if ctx.guild.id not in self.levels_users:
+            return await ctx.send(f"{ctx.author.mention} looks like no one reached level 1 yet, retry again later.")
+
+        users = sorted(self.xp_users[ctx.guild.id].items(), key=lambda k_v: k_v[1]["xp_earned"], reverse=True)[:10]
+        levels =  sorted(self.levels_users[ctx.guild.id].items(), key=lambda k_v: k_v[1]["level"], reverse=True)[:10]
+
+        em = discord.Embed(title=f"{ctx.guild.name}'s Leveling Leaderboard!", 
+                            description="Showing only the __top 10__ users!",
+                            color = self.bot.color,
+                            timestamp=datetime.datetime.utcnow())
+
+        all_names = []
+        xps = []
+        all_levels = []
+
+        for user_id, data in users:
+            user_data = self.bot.get_user(int(user_id)) or (await self.bot.fetch_user(int(user_id)))
+            mention = user_data.mention
+            xp = data["xp_earned"]
+            if int(user_id) == ctx.author.id:
+                all_names.append(f"{mention} (🌟)")
+            else:
+                all_names.append(f"{mention}")
+            xps.append(f"**{humanize.intcomma(xp)}**")
+
+        for user_id, data in levels:
+            level = 0
+            if str(user_data.id) in self.levels_users[ctx.guild.id]:
+                level = data["level"]
+
+            all_levels.append(f"**{level}**")
+
+        final_levels = 0 or "\n\n".join(str(x) for x in all_levels)
+        final_xp = "\n\n".join(str(x) for x in xps)
+        final_names = "\n\n".join(str(x) for x in all_names)
+
+        em.add_field(name="📍 Member", value=final_names or "None")
+        em.add_field(name="📍 EXP", value=final_xp or "None")
+        em.add_field(name="📍 Level", value=final_levels or f"**0**\n"*len(all_names))
+        em.set_thumbnail(url=ctx.guild.icon_url)
+        await ctx.send(embed=em)
+
 
     @commands.command(help="See your rank card according to the guild where you execute this command.\nThis will return `0`, `0` if not **xp** / **level**", aliases=["rank", "lvl"])
     async def level(self, ctx, member: discord.Member = None):
@@ -98,7 +169,6 @@ class Levelling(commands.Cog):
         buffer = await self.bot.loop.run_in_executor(None, RankCard.level_func, avatar, name, disc, int(level), int(xp), int(needed), str(rank))
         file=discord.File(fp=buffer, filename="level.png")
         await ctx.send(file=file)
-
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -147,7 +217,7 @@ class Levelling(commands.Cog):
 
         if self.xp_users[message.guild.id][str(message.author.id)]["xp"] >= self.xp_users[message.guild.id][str(message.author.id)]["next_level"]:
             self.xp_users[message.guild.id][str(message.author.id)]["xp"] = 0
-            self.xp_users[message.guild.id][str(message.author.id)]["next_level"] = self.xp_users[message.guild.id][str(message.author.id)]["xp_earned"] + 301
+            self.xp_users[message.guild.id][str(message.author.id)]["next_level"] = self.xp_users[message.guild.id][str(message.author.id)]["next_level"] + 301
             
             if str(message.author.id) not in self.levels_users[message.guild.id]:
                 self.levels_users[message.guild.id][str(message.author.id)] = {
@@ -192,6 +262,8 @@ class Levelling(commands.Cog):
                     buffer = await self.bot.loop.run_in_executor(None, RankCard.levelup_func, avatar, level)
                     file=discord.File(fp=buffer, filename="levelup_member.png")
                     await ch.send(msg, file=file)
+                else:
+                    await ch.send(msg)
             except Exception:
                 return
 
@@ -210,7 +282,7 @@ class Levelling(commands.Cog):
 
     @setleveling.command()
     @commands.has_permissions(manage_guild=True)
-    async def settings(self, ctx, mode, *, set=None):
+    async def settings(self, ctx):
         db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
         if not db:
             return await ctx.send("<:4318crossmark:848857812565229601> This guild has no leveling settings yet.")
@@ -223,8 +295,12 @@ class Levelling(commands.Cog):
 
         chd = self.bot.get_channel(chs)
         if not chd:
-            gfc = chs
-        gfc = chd.mention
+            gfc = "N/A"
+        else:
+            gfc = chd.mention
+
+        if tog is None:
+            tog = "Unknown"
 
         if tog.lower() in ["off", "disable"]:
             tog = "Disabled"
@@ -246,7 +322,7 @@ class Levelling(commands.Cog):
         if not tog:
             tog = "No modality set"
 
-        em = discord.Embed(title = "Leveling Settings", description = f"The leveling in this guild is **{tog.title()}**", color = 0xffcff1)
+        em = discord.Embed(title = "Leveling Settings", description = f"The leveling in this guild is **{tog.title()}**", color = self.bot.color)
         em.add_field(name=f"{ctx.guild.name} options", value = f"{d1}\n{d2}\n\n**Channel** : {gfc}\n**Message** : {mexs}")
         em.set_thumbnail(url=ctx.guild.icon_url)
         em.set_footer(text="Check `ami help setleveling` for more things.")
@@ -273,12 +349,9 @@ class Levelling(commands.Cog):
                 del self.modality[ctx.guild.id]
                 return await ctx.message.add_reaction("<:4318crossmark:848857812565229601>")
 
-            await self.bot.db.execute("UPDATE levelling_settings SET toggle = $1 WHERE guild_id = $2", mode, str(ctx.guild.id))
-            del self.modality[ctx.guild.id]
-            return await ctx.message.add_reaction("<:4318crossmark:848857812565229601>")
-
     @setleveling.command(name="levelup-image")
     @commands.has_permissions(manage_guild=True)
+    @premium(override=True)
     async def levelup_image(self, ctx, set):
         modescf = ["enable", "disable"]
         if set.lower() not in modescf:
@@ -296,22 +369,25 @@ class Levelling(commands.Cog):
 
     @setleveling.command()
     @commands.has_permissions(manage_guild=True)
-    async def message(self, ctx, set):    
+    async def message(self, ctx, *, message):    
         db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
         if not db:
-            await self.bot.db.execute("INSERT INTO levelling_settings (guild_id, message) VALUES ($1, $2)", str(ctx.guild.id), set)
+            await self.bot.db.execute("INSERT INTO levelling_settings (guild_id, message) VALUES ($1, $2)", str(ctx.guild.id), message)
             return await ctx.send(f"<:4430checkmark:848857812632076314> Levelup message succesfully set!")
     
-        await self.bot.db.execute("UPDATE levelling_settings SET message = $1 WHERE guild_id = $2", set, str(ctx.guild.id))
+        await self.bot.db.execute("UPDATE levelling_settings SET message = $1 WHERE guild_id = $2", message, str(ctx.guild.id))
         return await ctx.send(f"<:4430checkmark:848857812632076314> Levelup message succesfully set!")
 
     @setleveling.command()
     @commands.has_permissions(manage_guild=True)
-    async def channel(self, ctx, set):
-        d = set.strip("<#>")
+    async def channel(self, ctx, channel_mention):
+        if channel_mention.startswith("<#") is False:
+            return await ctx.send(f"{ctx.author.mention} please mention the channel.")
+
+        d = channel_mention.strip("<#>")
         v = self.bot.get_channel(int(d))
         if not v:
-            return await ctx.send(f"{set} is not a valid channel.")
+            return await ctx.send(f"{channel_mention} is not a valid channel.")
 
         db = await self.bot.db.fetch("SELECT * FROM levelling_settings WHERE guild_id = $1", str(ctx.guild.id))
         if not db:
