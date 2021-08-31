@@ -4,10 +4,6 @@ from discord import client
 from discord.ext import commands, tasks, ipc
 import logging
 from collections import Counter
-import time
-import datetime
-import random
-import asyncio
 import humanize
 
 import util.config as config
@@ -16,33 +12,14 @@ from util.subclasses import Ami
 
 client = Ami()
 
-class LoggerHandler(logging.Handler):
-    def setBot(self, bot: commands.Bot):
-        self._bot = bot 
-
-    def send_via_hook(self, log: str):
-        try:
-            _ = self._bot
-        except AttributeError:
-            print("No bot logging set")
-            return
-
-        self._bot.loop.create_task(self._bot.send_via_hook("https://discord.com/api/webhooks/868112473511833670/J3RoOiJbwqQUBZvzsL0ePhwyTBGIcgueiyydLJGyKPKPIFnUYAkS_NRlULiFpqmwhlLf", log)) # create task to send data through webhook
-
-    def handle(self, record: logging.LogRecord):
-        fmted_string = self.formatter.format(record)
-        self.send_via_hook(f"```sh\n{fmted_string}\n```")
-
-
 logger = logging.getLogger("discord")
 logger.setLevel(logging.INFO)
 
-handler = LoggerHandler(logging.INFO)
-handler.setFormatter(logging.Formatter('%(asctime)s\n%(name)s :: %(levelname)s\n%(message)s'))
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
+handler.setFormatter(logging.Formatter('[%(levelname)s] -> %(name)s: %(message)s'))
 logger.addHandler(handler)
-handler.setBot(client)
 
-start_time = datetime.datetime.utcnow()
 os.environ["JISHAKU_NO_DM_TRACEBACK"] = "True"
 os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
 os.environ["JISHAKU_FORCE_PAGINATOR"] = "True"
@@ -52,7 +29,6 @@ client.ipc = ipc.Server(client, secret_key="thisisverysuspisousandinvitebobobott
 
 client.socket_receive = 0
 client.socket_stats = Counter()
-client.start_time = time.time()
 
 client.codes = {
       1: "HEARTBEAT",
@@ -88,6 +64,10 @@ async def status():
 @client.check
 def check_commands(ctx):
     return ctx.guild
+
+@client.check
+def check_if_ready(ctx):
+    return client.is_ready()
 
 @client.event
 async def on_ready():
@@ -127,20 +107,6 @@ async def is_blacklisted(ctx):
         await ctx.send(f"{ctx.author.mention} you are permanently banned from using the bot.")
         return False
     return True
-
-@client.command(help="See the ami uptime from the last reboot", pass_context=True)
-async def uptime(ctx: commands.Context):
-    now = datetime.datetime.utcnow() # Timestamp of when uptime function is run
-    delta = now - start_time
-    hours, remainder = divmod(int(delta.total_seconds()), 3600)
-    minutes, seconds = divmod(remainder, 60)
-    days, hours = divmod(hours, 24)
-    if days:
-        time_format = "for {d}d {h}h {m}m {s}s so far"
-    else:
-        time_format = "for {h}h {m}m {s}s so far"
-    uptime_stamp = time_format.format(d=days, h=hours, m=minutes, s=seconds)
-    await ctx.send(uptime_stamp)
 
 # RUN CLIENT -- IF U DELETE THIS, THE BOT DON'T WORK!!
 client.ipc.start()
