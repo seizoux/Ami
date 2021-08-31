@@ -14,6 +14,7 @@ import humanize
 import aiohttp
 import sr_api
 import aiofiles
+from util.defs import is_team
 
 srclient = sr_api.Client() 
 
@@ -30,6 +31,22 @@ class IncorrectChannelError(commands.CommandError):
     """Error raised when commands are issued outside of the players session channel."""
     pass
 
+
+def premium(override=False):
+    async def predicate(ctx):
+        premium_users = await ctx.bot.db.fetch("SELECT * FROM premium")
+        if ctx.author.id not in [dict(record)["user_id"] for record in premium_users]:
+            if override and ctx.author.id in [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302, 343019667511574528]:
+                return True
+            await ctx.send(embed = discord.Embed(
+                description = "If you wish to use some neat features, hurry up and go buy Ami [premium!](https://amidiscord.xyz/premium)",
+                color = ctx.bot.color,
+                timestamp = datetime.datetime.utcnow()
+            ).set_author(name=f"{ctx.author.name}, you are not Premium!", icon_url=ctx.author.avatar_url))
+            return False
+        else:
+            return True
+    return commands.check(predicate)
 
 class Track(wavelink.Track):
     __slots__ = ("requester",)
@@ -54,10 +71,10 @@ class Player(wavelink.Player):
         self.looped = False
         self.looped_track = None
 
-        self.unlimit = False
-
         self.waiting = False
         self.updating = False
+
+        self.unlimit = False
 
         self.pause_votes = set()
         self.resume_votes = set()
@@ -65,6 +82,9 @@ class Player(wavelink.Player):
         self.shuffle_votes = set()
         self.stop_votes = set()
         self.loop_votes = set()
+
+        self.query = ""
+        self.track = None
 
     async def do_next(self) -> None:
         if self.is_playing or self.waiting:
@@ -88,17 +108,17 @@ class Player(wavelink.Player):
         try:
             if self.unlimit is True:
                 self.waiting = True
-                track = await self.queue.get()
+                self.track = await self.queue.get()
                 return
-            
+
             self.waiting = True
             with async_timeout.timeout(300):
-                track = await self.queue.get()
+                self.track = await self.queue.get()
         except asyncio.TimeoutError:
             # No music has been played for 5 minutes, cleanup and disconnect...
             return await self.teardown()
 
-        await self.play(track)
+        await self.play(self.track)
         self.time = time.time()
         self.waiting = False
 
@@ -125,7 +145,10 @@ class Player(wavelink.Player):
             self.controller.stop()
 
             self.controller = InteractiveController(embed=self.build_embed(), player=self)
-            await self.controller.start(self.context)
+            try:
+                await self.controller.start(self.context)
+            except Exception:
+                pass
 
         else:
             embed = self.build_embed()
@@ -139,7 +162,7 @@ class Player(wavelink.Player):
         if not track:
             return
 
-        embed = discord.Embed(title="Now playing", description=f'[{track.title}]({track.uri}) | {track.requester.mention}', color = 0xffcff1)
+        embed = discord.Embed(title="Now playing", description=f'[{track.title}]({track.uri}) | {track.requester.mention}', color = self.bot.color)
 
         return embed
 
@@ -170,9 +193,10 @@ class Player(wavelink.Player):
                 next_in = "Nothing played next this one."
 
 
-        embed = discord.Embed(title=f'**{track.title}**', url=f'{track.uri}', description=f'**Requester**: {track.requester.mention}\n**Duration**: {final}\n**Artist**: {track.author}\n\n**Up Next**: {next_in}', color = 0xffcff1)
+        embed = discord.Embed(title=f'**{track.title}**', url=f'{track.uri}', description=f'**Requester**: {track.requester.mention}\n**Duration**: {final}\n**Artist**: {track.author}\n\n**Up Next**: {next_in}', color = self.bot.color)
         embed.set_footer(text=f"Playing in {channel.name} | Songs in queue : {qsize}", icon_url=track.requester.avatar_url)
-        embed.set_thumbnail(url=track.thumb)
+        if track.thumb:
+            embed.set_thumbnail(url=track.thumb)
 
         return embed
 
@@ -195,12 +219,15 @@ class Player(wavelink.Player):
             pass
 
         if self.controller:
-            self.controller.stop()
+            try:
+                self.controller.stop()
+            except Exception:
+                pass
 
         try:
             await self.destroy()
-        except KeyError:
-            pass
+        except Exception:
+            await self.destroy(force=True)
 
 
 class InteractiveController(menus.Menu):
@@ -246,7 +273,7 @@ class PaginatorSource(menus.ListPageSource):
 
     async def format_page(self, menu: menus.Menu, page):
         player: Player = menu.bot.wavelink.get_player(guild_id=menu.ctx.guild.id, cls=Player, context=menu.ctx)
-        embed = discord.Embed(color = 0xffcff1)
+        embed = discord.Embed(color = 0xb81217)
         embed.set_author(name=f"{menu.ctx.guild.name} queue ({player.queue.qsize()} songs)", icon_url="https://cdn.discordapp.com/emojis/846314042120470528.gif?v=1")
         embed.description = '\n'.join(page)
 
@@ -270,17 +297,25 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
     async def destroy_players(self):
         for i in self.bot.wavelink.players.values():
-            await i.destroy()
+            try:
+                await i.destroy()
+            except Exception:
+                await i.destroy(force=True)
+
+        for i in self.bot.wavelink.nodes.values():
+            try:
+                await i.destroy()
+            except Exception:
+                await i.destroy(force=True)
 
     async def start_nodes(self):
-        await self.bot.wait_until_ready()
-        node = await self.bot.wavelink.initiate_node(
-                        host="127.0.0.1",
-                        port=2333,
-                        rest_uri="http://127.0.0.1:2333",
+        await self.bot.wavelink.initiate_node(
+                        host="lava.link",
+                        port=80,
+                        rest_uri="http://lava.link:80",
                         password="youshallnotpass",
                         identifier="Ami",
-                        region="us_central",
+                        region="germany",
                         heartbeat=60,
                     )
 
@@ -310,11 +345,20 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 )
                 await player.queue.put(track)
                 await player.do_next()
-                await player.context.send(embed=self.build_embed)
+                try:
+                    await player.context.send(embed=Player.build_embed())
+                except Exception:
+                    return
             else:
-                await player.context.send("<:4318crossmark:848857812565229601> No results was found for your query, try again.")
+                try:
+                    await player.context.send("<:4318crossmark:848857812565229601> No results was found for your query, try again.")
+                except Exception:
+                    return
         else:
-            await event.player.context.send(f"<:4318crossmark:848857812565229601> {event.error}")
+            try:
+                await event.player.context.send(f"<:4318crossmark:848857812565229601> {event.error}")
+            except Exception:
+                return
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -322,7 +366,10 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if member.bot:
             return
 
-        player: Player = self.bot.wavelink.get_player(member.guild.id, cls=Player)
+        try:
+            player: Player = self.bot.wavelink.get_player(member.guild.id, cls=Player)
+        except wavelink.ZeroConnectedNodes or wavelink.errors.InvalidIDProvided:
+            return
 
         if not player.channel_id or not player.context:
             player.node.players.pop(member.guild.id)
@@ -333,8 +380,11 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if len(channel.members) < 2:
             if player.unlimit:
                 return
-            em = discord.Embed(description=f"<:4318crossmark:848857812565229601> Leaving {channel.mention} because **all** leaved me alone...", color = 0xffcff1)
-            await player.context.channel.send(embed=em, delete_after=20)
+            em = discord.Embed(description=f"<:4318crossmark:848857812565229601> Leaving {channel.mention} because **all** leaved me alone...", color = self.bot.color)
+            try:
+                await player.context.channel.send(embed=em, delete_after=20)
+            except discord.Forbidden:
+                pass
             return await player.teardown()
 
         if member == player.dj and after.channel is None:
@@ -363,15 +413,21 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         """Coroutine called before command invocation.
         We mainly just want to check whether the user is in the players controller channel.
         """
-        player: Player = self.bot.wavelink.get_player(ctx.guild.id, cls=Player, context=ctx)
+        try:
+            player: Player = self.bot.wavelink.get_player(ctx.guild.id, cls=Player, context=ctx)
+        except wavelink.ZeroConnectedNodes:
+            return False
 
         if not player.context.channel:
            return False
 
         if player.context:
             if player.context.channel != ctx.channel:
-                em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention}, i am already in {player.context.channel.mention}", color = 0xffcff1)
-                await ctx.send(embed=em)
+                em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention}, i am already in {player.context.channel.mention}", color = self.bot.color)
+                try:
+                    await ctx.send(embed=em)
+                except Exception:
+                    pass
                 return False
 
         if ctx.command.name == 'join' and not player.context:
@@ -388,8 +444,11 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if player.is_connected:
             if ctx.author not in channel.members:
-                em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention} join in {channel.mention} to use __music__ commands.", color = 0xffcff1)
-                await ctx.send(embed=em)
+                em = discord.Embed(description=f"<:4318crossmark:848857812565229601> {ctx.author.mention} join in {channel.mention} to use __music__ commands.", color = self.bot.color)
+                try:
+                    await ctx.send(embed=em)
+                except Exception:
+                    pass
                 return False
 
         return True
@@ -430,7 +489,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             await player.teardown()
         except Exception:
             await player.disconnect()
-        em = discord.Embed(description=f"<:4318crossmark:848857812565229601> | Disconnected from {channel.mention}", color = 0xffcff1)
+        em = discord.Embed(description=f"<:4318crossmark:848857812565229601> | Disconnected from {channel.mention}", color = self.bot.color)
         await ctx.send(embed=em)
 
     @commands.command(help="Make me join in a voice channel to play some music ^^")
@@ -462,7 +521,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 except:
                     return await ctx.send("<:4318crossmark:848857812565229601> I need the `Request To Speak` / `Manage Stage` permission to play here.")
 
-        await self.bot.ws.voice_state(ctx.guild.id, channel.id, self_deaf=True)
+        await ctx.guild.change_voice_state(channel=channel, self_deaf=True)
 
     @commands.command(help="Retrive the lyrics for the current playing song if there's one, else specify the `song` argument with a song name to retrive the lyrics for that song.")
     async def lyrics(self, ctx: commands.Context, *, song=None):
@@ -484,7 +543,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return await ctx.send(f"<:4318crossmark:848857812565229601> Something went wrong while searching lyrics for **{c}**")
 
         try:
-            em = discord.Embed(title=f"{lyrics.title}", description=f"{lyrics.lyrics}", color = 0xffcff1)
+            em = discord.Embed(title=f"{lyrics.title}", description=f"{lyrics.lyrics}", color = self.bot.color)
             em.set_thumbnail(url=lyrics.thumbnail)
             await ctx.send(embed=em)
         except Exception:
@@ -500,7 +559,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
         if SPOTIFY_URL_REG.match(query):
-            em = discord.Embed(title="⚠ Spotify URL Detected", description=f"<:4318crossmark:848857812565229601> | {ctx.author.mention} __spotify__ is not supported yet.", color = 0xffcff1)
+            em = discord.Embed(title="⚠ Spotify URL Detected", description=f"<:4318crossmark:848857812565229601> | {ctx.author.mention} __spotify__ is not supported yet.", color = self.bot.color)
             return await ctx.send(embed=em)
 
         if not player.is_connected:
@@ -511,6 +570,8 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         query = query.strip('<>')
 
+        player.query = query
+
         if not URL_REG.match(query):
             if query.endswith("--sc"):
                 query = f'scsearch:{query}'
@@ -518,7 +579,10 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 query = f'ytsearch:{query}'
 
 
-        tracks = await self.bot.wavelink.get_tracks(query)
+        try:
+            tracks = await self.bot.wavelink.get_tracks(query)
+        except wavelink.ZeroConnectedNodes:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> | {ctx.author.mention} looks like the music server is actually down, please try again later.")
         if not tracks:
             return await ctx.send('<:4318crossmark:848857812565229601> | No **results** was found for your query, try again.')
 
@@ -526,11 +590,11 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             for track in tracks.tracks:
                 track = Track(track.id, track.info, requester=ctx.author)
                 await player.queue.put(track)
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Added **{len(tracks.tracks)}** songs to the queue from **{tracks.data['playlistInfo']['name']}** playlist.", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Added **{len(tracks.tracks)}** songs to the queue from **{tracks.data['playlistInfo']['name']}** playlist.", color = self.bot.color)
             await ctx.send(embed=em)
         else:
             track = Track(tracks[0].id, tracks[0].info, requester=ctx.author)
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Queued [{track.title}]({track.uri}) | {track.requester.mention}", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> Queued [{track.title}]({track.uri}) | {track.requester.mention}", color = self.bot.color)
             await ctx.send(embed=em)
             await player.queue.put(track)
 
@@ -547,7 +611,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has paused the player.", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has paused the player.", color = self.bot.color)
             await ctx.send(embed=em)
             player.pause_votes.clear()
 
@@ -575,7 +639,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has resumed the player.", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has resumed the player.", color = self.bot.color)
             await ctx.send(embed=em)
             player.resume_votes.clear()
 
@@ -602,15 +666,18 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if not player.is_connected:
             return
 
+        if not player.current:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Nothing playing right now.")
+
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has skipped the song.", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has skipped the song.", color = self.bot.color)
             await ctx.send(embed=em)
             player.skip_votes.clear()
 
             return await player.stop()
 
         if ctx.author == player.current.requester:
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has skipped the song.", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has skipped the song.", color = self.bot.color)
             await ctx.send(embed=em)
             player.skip_votes.clear()
 
@@ -638,7 +705,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if self.is_privileged(ctx):
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has stopped the player.", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | **{ctx.author.name}** has stopped the player.", color = self.bot.color)
             await ctx.send(embed=em)
             return await player.teardown()
 
@@ -658,6 +725,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to stop the player.')
 
     @commands.command(help="Set/change the volume of the current player.",aliases=['vol'])
+    @premium(override=True)
     async def volume(self, ctx: commands.Context, *, vol: int=None):
         """Change the players volume, between 1 and 250."""
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
@@ -666,7 +734,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
 
         if not vol:
-            em = discord.Embed(description=f"🌹 Player volume is **`{player.volume}%`**", color = 0xffcff1)
+            em = discord.Embed(description=f"🌹 Player volume is **`{player.volume}%`**", color = self.bot.color)
             return await ctx.send(embed=em)
 
         if not self.is_privileged(ctx):
@@ -708,6 +776,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to shuffle the playlist.')
 
     @commands.command(help="Set the equalizer, a filter for the current playing song.\nSet the `[equalizer]` argument as `list` to see all available equalizers.\nLeave `[equalizer]` blank to reset the base equalizer.", aliases=['eq'])
+    @premium(override=True)
     async def equalizer(self, ctx: commands.Context, *, equalizer: str=None):
         """Change the players equalizer."""
         if equalizer == None:
@@ -718,7 +787,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                                            "`bass` : Optimal for songs with high 808.\n"
                                            "`metal` : High reveerb on voice, optimal for singed songs.\n"
                                            "`piano` : Perfect for chilling, works well with voice.\n"
-                                           "`rave` : Optimal for psytrance / acid.", color = 0xffcff1)
+                                           "`rave` : Optimal for psytrance / acid.", color = self.bot.color)
             em.set_footer(text="The equalizer can take up to 5 seconds to set.")
             return await ctx.send(embed=em)
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
@@ -741,35 +810,15 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if not eq:
             joined = ", ".join(eqs.keys())
-            em = discord.Embed(title="<:4318crossmark:848857812565229601> | Invalid EQ provided.", description=f"You've provided an invalid equalizer, available equalizers are:\n**`{joined}`**", color = 0xffcff1)
+            em = discord.Embed(title="<:4318crossmark:848857812565229601> | Invalid EQ provided.", description=f"You've provided an invalid equalizer, available equalizers are:\n**`{joined}`**", color = self.bot.color)
             return await ctx.send(embed=em)
 
-        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has set the equalizer to **`{equalizer}`**.", color = 0xffcff1)
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has set the equalizer to **`{equalizer}`**.", color = self.bot.color)
         await ctx.send(embed=em)
         await player.set_eq(eq)
 
-
-    @commands.command(help="Remove a song from the queue using the song number in queue.\nIf `[queue_numbr]` not specified, it will remove the first song.")
-    async def remove(self, ctx: commands.Context, queue_number: int=1):
-        """Remove a song from the queue"""
-        player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
-
-        if not player.is_connected:
-            return
-
-        if player.queue.qsize() == 0:
-            return await ctx.send('<:4318crossmark:848857812565229601> | The queue is empty.')
-
-        if not self.is_privileged(ctx):
-            return await ctx.send('<:4318crossmark:848857812565229601> | Only the **DJ** or **admins** may remove songs from the queue.')
-
-        if not player.queue._queue[queue_number-1]:  # Account for 0-index.
-            return await ctx.send(f"<:4318crossmark:848857812565229601> Track **#{queue_number}** not found.")
-
-        await ctx.reply(f'<:4430checkmark:848857812632076314> | Removed **{player.queue._queue[queue_number-1]}** from the queue.')
-        del player.queue._queue[queue_number-1]
-
     @commands.command(help="Move the player seek to the given position (in seconds).\nIf seek is not specified, it set the seek to 0")
+    @premium(override=True)
     async def seek(self, ctx: commands.Context, seek_number: int = None):
         """Set the seek position for the current playing song.
         This must be an int or float, raise SeekErrorNotValid if <seek_number> invalid."""
@@ -788,7 +837,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         seeky = seek_number*1000
         scd = "{}".format(humanize.precisedelta(seek_number))
         await player.seek(seeky)
-        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | Player seek moved to **{scd}**", color = 0xffcff1)
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | Player seek moved to **{scd}**", color = self.bot.color)
         await ctx.send(embed=em)
 
 
@@ -835,7 +884,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         await ctx.send(embed=player.now_playing())
 
     @commands.command(help="Swap the song DJ to another member.\nIf member not specified, it choose a random member in the voice channel.\nIf the members in the vc are 2 or less, the dj can't be swapped without member specified.", aliases=['swap'])
-    async def swapdj(self, ctx: commands.Context, *, member: discord.Member = None):
+    async def swapdj(self, ctx: commands.Context, *, member: discord.Member):
         """Swap the current DJ to another member in the voice channel."""
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
@@ -856,17 +905,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if len(members) <= 2:
             return await ctx.send('<:4318crossmark:848857812565229601> | No more members for **auto-swap**.')
 
-        if member:
-            player.dj = member
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has gave the **DJ** to {member.mention}.", color = 0xffcff1)
-            return await ctx.send(embed=em)
-
-        for m in members:
-            if m == player.dj or m.bot:
-                continue
-            else:
-                player.dj = m
-                return await ctx.send(f'<:4430checkmark:848857812632076314> | {member.mention} is now the **DJ**.')
+        player.dj = member
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has gave the **DJ** to {member.mention}.", color = self.bot.color)
+        return await ctx.send(embed=em)
 
 
     @commands.command(help="Loop the current playing song to make me play it in loop!\nWorks in bool, send 1 time this command to loop, resend to unloop.")
@@ -881,12 +922,12 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             if not player.looped:
                 player.looped = True
                 player.looped_track = player.current
-                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has enabled the **loop** for `{player.current}`.", color = 0xffcff1)
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has enabled the **loop** for `{player.current}`.", color = self.bot.color)
                 return await ctx.send(embed=em)
             else:
                 player.looped = False
                 player.looped_track = None
-                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has disabled the **loop** for `{player.current}`.", color = 0xffcff1)
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has disabled the **loop** for `{player.current}`.", color = self.bot.color)
                 return await ctx.send(embed=em)
 
         if ctx.author in player.loop_votes:
@@ -909,6 +950,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 await ctx.send(f'<:4430checkmark:848857812632076314> | {ctx.author.mention} has voted to unloop the player.')
 
     @commands.command(name="24/7", help="Enable the **24/7** mode for the music, this mode will keep me 24h/7 in the vc without make me leave!")
+    @premium(override=True)
     async def tfs(self, ctx: commands.Context):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
 
@@ -921,16 +963,17 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if self.is_privileged(ctx):
             if player.unlimit is True:
                 player.unlimit = False
-                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has disabled the **24/7** mode.", color = 0xffcff1)
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has disabled the **24/7** mode.", color = self.bot.color)
                 return await ctx.send(embed=em)
 
             if player.unlimit is False:
                 player.unlimit = True
-                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has enabled the **24/7** mode.", color = 0xffcff1)
+                em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has enabled the **24/7** mode.", color = self.bot.color)
                 return await ctx.send(embed=em)
 
     @commands.command(help="Apply custom filters to the actual playing song with up to 5 filters!\nType `ami filter list` to see the availables filters.\nUse `ami filter reset` to reset the standard filter.\nOnly DJ & Admins can apply filters.", aliases=["ft"])
     @commands.cooldown(1, 5, commands.BucketType.user)
+    @premium(override=True)
     async def filter(self, ctx: commands.Context, *, filter:str):
         player: Player = self.bot.wavelink.get_player(guild_id=ctx.guild.id, cls=Player, context=ctx)
         apply_filter = player.node._websocket._send
@@ -951,12 +994,12 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if filter == "reset":
             payload = base
             await apply_filter(**payload)
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has reset the filter to standard.", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has reset the filter to standard.", color = self.bot.color)
             return await ctx.send(embed=em)
 
         if filter == "list":
             joined = ", ".join(filters.keys())
-            em = discord.Embed(title="<:catgirluppies:839518621767172106> | Filters", description=f"Here it is all availables filters:\n**`{joined}`**", color = 0xffcff1)
+            em = discord.Embed(title="<:catgirluppies:839518621767172106> | Filters", description=f"Here it is all availables filters:\n**`{joined}`**", color = self.bot.color)
             return await ctx.send(embed=em)
 
         if not player.current:
@@ -967,14 +1010,48 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
         if not filt:
             joined = ", ".join(filters.keys())
-            em = discord.Embed(title="<:4318crossmark:848857812565229601> | Invalid filter provided.", description=f"You've provided an invalid filter, available filters are:\n**`{joined}`**", color = 0xffcff1)
+            em = discord.Embed(title="<:4318crossmark:848857812565229601> | Invalid filter provided.", description=f"You've provided an invalid filter, available filters are:\n**`{joined}`**", color = self.bot.color)
             return await ctx.send(embed=em)
 
         payload = filters[filter.lower()]
         await apply_filter(**payload)
-        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has set the `{filter.title()}` filter.", color = 0xffcff1)
+        m = await ctx.send(f"<:4430checkmark:848857812632076314> Applying the filter...")
+        await asyncio.sleep(5)
+        await m.delete()
+        em = discord.Embed(description=f"<:4430checkmark:848857812632076314> | {ctx.author.mention} has set the `{filter.title()}` filter.", color = self.bot.color)
         await ctx.send(embed=em)
 
+    @commands.command()
+    @is_team()
+    async def waveinfo(self, ctx):
+        player = self.bot.wavelink.get_player(ctx.guild.id)
+        node = player.node
+
+        used = humanize.naturalsize(node.stats.memory_used)
+        total = humanize.naturalsize(node.stats.memory_allocated)
+        free = humanize.naturalsize(node.stats.memory_free)
+        cpu = node.stats.cpu_cores
+        version = wavelink.__version__
+
+        await ctx.send(embed = discord.Embed(
+            title = "Wavelink / Lavalink Server Info",
+            description = f"**WaveLink:** `{version}`\n\nConnected to `{len(self.bot.wavelink.nodes)}` nodes.\nBest available Node `{self.bot.wavelink.get_best_node().__repr__()}`\n`{len(self.bot.wavelink.players)}` players are distributed on nodes.\n`{node.stats.players}` players are distributed on server.\n`{node.stats.playing_players}` players are playing on server.\n\nServer Memory: `{used}/{total}` | `({free} free)`\nServer CPU: `{cpu}`\n\nServer Uptime: `{datetime.timedelta(milliseconds=node.stats.uptime)}`\n\n**Node Info**:\nHost: `{node.host}`\nRest URI: `{node.rest_uri}`\nHeartbeat: `{node.heartbeat}`\n",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()).
+            set_thumbnail(url=self.bot.user.avatar_url))
+        pass
+
+    @commands.Cog.listener()
+    async def on_guild_remove(self, guild):
+        try:
+            player: Player = self.bot.wavelink.get_player(guild_id=guild.id, cls=Player, context=commands.Context)
+            if player:
+                await player.destroy()
+
+            if player.controller:
+                await player.controller.stop()
+        except Exception:
+            pass
 
 def setup(bot: commands.Bot):
     bot.add_cog(Music(bot))
