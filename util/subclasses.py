@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, ipc
 import aiohttp, re, sys, ujson, signal, asyncio, asyncpg, os, datetime, humanize
 from ratelimiter import RateLimiter
 from io import BytesIO
@@ -38,31 +38,34 @@ def _cleanup_loop(loop):
     finally:
         loop.close()
 
-class Ami(commands.Bot):
+
+class Ami(commands.AutoShardedBot):
     def __init__(self):
         self.connector = aiohttp.TCPConnector(limit=200)
         self._logging_ratelimiter = RateLimiter(max_calls=2, period=5)
         intents = discord.Intents.default()
         intents.members = True
         super().__init__(
-            command_prefix=["ami ", "Ami ", "a!", "<@801742991185936384> "],
+            command_prefix=["ami ", "Ami ", "a;"],
             max_messages=500,
             connector=self.connector,
             intents=intents,
-            description=r"""A multipropuse discord bot, with over 200 commands.""",
-            chunk_guilds_at_startup=True,
+            description=r"""a discord bot""",
+            chunk_guilds_at_startup=False,
             case_insensitive=False,
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=discord.AllowedMentions(everyone=False),
         )
 
     async def send_via_hook(self, url: str, *args, **kwargs):
-        async with self._logging_ratelimiter:
+        with self._logging_ratelimiter:
             webhook = discord.Webhook.from_url(url, adapter=AsyncWebhookAdapter(self.session))
             await webhook.send(*args, **kwargs)
 
     async def run_constants(self):
         self.default_prefix = ["ami "]
         self.context = AmiCtx
+        self.color = 0xb81217
+        self.launch_time = datetime.datetime.utcnow()
 
         db = await asyncpg.create_pool('postgres://postgres1:postgres@localhost:5432/ami')
 
