@@ -26,6 +26,22 @@ from spongebobcase import tospongebob
 kitsu_client = kitsu.Client()
 twitch = TwitchClient(client_id=config.TWITCH_CLIENT)
 
+def premium(override=False):
+    async def predicate(ctx):
+        premium_users = await ctx.bot.db.fetch("SELECT * FROM premium")
+        if ctx.author.id not in [dict(record)["user_id"] for record in premium_users]:
+            if override and ctx.author.id in [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302, 343019667511574528]:
+                return True
+            await ctx.send(embed = discord.Embed(
+                description = "If you wish to use some neat features, hurry up and go buy Ami [premium!](https://amidiscord.xyz/premium)",
+                color = ctx.bot.color,
+                timestamp = datetime.datetime.utcnow()
+            ).set_author(name=f"{ctx.author.name}, you are not Premium!", icon_url=ctx.author.avatar_url))
+            return False
+        else:
+            return True
+    return commands.check(predicate)
+
 class Fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -34,7 +50,7 @@ class Fun(commands.Cog):
         self.category = "Fun"
         self.session = aiohttp.ClientSession()
         bot.loop.create_task(self.cache_langs())
-    
+
     async def cache_langs(self):
         await self.bot.wait_until_ready()
         db = await self.bot.db.fetch("SELECT * FROM tts")
@@ -49,7 +65,9 @@ class Fun(commands.Cog):
 
     @commands.command(help="ConvErT the GIvEN tEXT intO thIS WeiRD aNd HArD-TO-rEaD foRmAT")
     async def mock(self, ctx, *, text):
-        return await ctx.send(f"{tospongebob(text)}")
+        if text.isalpha():
+            return await ctx.send(f"{tospongebob(text)}" if len(text) > 1 else f"{ctx.author.mention} the text must be at least 2 characters.")
+        return await ctx.send(f"{ctx.author.mention} the text must be only letters.")
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -61,11 +79,12 @@ class Fun(commands.Cog):
         async with self.session as session:
             res = await session.post("https://captionbot.azurewebsites.net/api/messages", json={"Content": url, "Type": "CaptionRequest"}, headers={"Content-Type": "application/json; charset=utf-8"})
         text = await res.text()
-        em=discord.Embed(description=text, color=0xffcff1)
+        em=discord.Embed(description=text, color=self.bot.color)
         em.set_image(url=url)
         await ctx.send(embed=em)
 
     @commands.command(help="Search a twitch stream directly with this command, see if it is in live, check followers and total views, and some other info!", aliases=["ttv", "tw"])
+    @premium(override=True)
     async def twitch(self, ctx, *, name:str):
         """Gets a twitch channel's statistics."""
         if twitch is None:
@@ -102,11 +121,11 @@ class Fun(commands.Cog):
         embed.url = channel["url"]
         if streaming == "<:online:859131538058641418>":
             embed.set_image(url=stream["preview"]["large"] + "?v={}".format(random.randint(0, 10000)))
-            embed.color = 0xffcff1
+            embed.color = self.bot.color
         else:
             if channel["video_banner"] is not None:
                 embed.set_image(url=channel["video_banner"])
-            embed.color = 0xffcff1
+            embed.color = self.bot.color
         await ctx.send(embed=embed)
 
     @commands.command(help="Reverse the given phrase, e.g:\n`ami reverse \"hi mom\"` will return `\"mom ih\"`", aliases=["rev", "rv"])
@@ -123,7 +142,7 @@ class Fun(commands.Cog):
         size = random.randint(0, 32)
 
         final_pp_size = f"8{(''.join('=' * size))}D"
-        await ctx.send(embed=discord.Embed(description=final_pp_size, color = 0xffcff1).set_author(name=f"{member.name}'s pp ({size}cm)", icon_url = member.avatar_url))
+        await ctx.send(embed=discord.Embed(description=final_pp_size, color = self.bot.color).set_author(name=f"{member.name}'s pp ({size}cm)", icon_url = member.avatar_url))
 
     @commands.command(help="Get a random fact, you can also pass some arguments to retrive innapropriate facts (they are excluded by default), or exclude them, e.g:\n`ami fact --unsafe` to retrive inappropriate facts.")
     async def fact(self, ctx, flags=None):
@@ -170,7 +189,7 @@ class Fun(commands.Cog):
             if ctx.guild.id not in self.languages:
                 return await ctx.send("<:4318crossmark:848857812565229601> This guild has not a language set for tts, set one with `ami tts setlang`.")
 
-            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> TTS language for this guild is `{self.languages[ctx.guild.id]}`", color = 0xffcff1)
+            em = discord.Embed(description=f"<:4430checkmark:848857812632076314> TTS language for this guild is `{self.languages[ctx.guild.id]}`", color = self.bot.color)
             return await ctx.send(embed=em)
 
         if ctx.guild.id not in self.languages:
@@ -264,6 +283,7 @@ class Fun(commands.Cog):
 
     @commands.command(help="Start a simple counting game in the channel where you use this command!\n\n`ami count` to start a normal counting game\n`ami count --m-a` to start a game where wrong messages will not stop the game\n`ami count --r @members` to start a game where only messages from members mentioned will be counted\n`ami count --r-m-a @members` same as `--r` but with messages allowed\n`ami count --d-w` to start a game where all wrong messages will be deleted\n\nYou can see the counting stats for the guild with `ami count stats`, `ami count score` or `ami count restarts`.")
     @commands.max_concurrency(1, BucketType.channel)
+    @premium(override=True)
     async def count(self, ctx, option=None, whitelist: commands.Greedy[discord.Member]=None):
         if option:
             if option == "stats":
@@ -274,7 +294,7 @@ class Fun(commands.Cog):
                 higher_score = db[0]["higher_score"]
                 restarts = db[0]["restarts"]
                 
-                em = discord.Embed(title=f"Counting Stats", color = 0xffcff1)
+                em = discord.Embed(title=f"Counting Stats", color = self.bot.color)
                 em.set_author(name=f"{ctx.guild.name}", icon_url=ctx.guild.icon_url)
                 em.add_field(name="<:7343exclamationmark:848857813252833290> Higher Score", value=f"<a:4484pinkarrow:848857813085716520> The higher score registered for this guild is : **{higher_score}**")
                 em.add_field(name="<:7343exclamationmark:848857813252833290> Restarts", value=f"<a:4484pinkarrow:848857813085716520> The counting game in this guild has been restarted : **{restarts}** times.")
@@ -583,10 +603,7 @@ class Fun(commands.Cog):
         if message.author == self.bot.user:
             return
 
-        if message.content.startswith("ami afk"):
-            return self.afk
-
-        if message.content.startswith("Ami afk"):
+        if message.content.lower().startswith("ami afk"):
             return self.afk
 
         if message.author.id in self.afks:
@@ -601,11 +618,13 @@ class Fun(commands.Cog):
             id2 = "None"
         if id2 in self.afks.keys():
             reasons = self.afks[id2]
-            return await message.channel.send(f'<:nani:819694934491004937> {message.author.mention}, **{str(message.mentions[0].name)}** is afk for: {reasons}', allowed_mentions=discord.AllowedMentions.none())
+            return await message.channel.send(f'<:nani:819694934491004937> {message.author.mention}, **{str(message.mentions[0].name)}** is afk for: {reasons}')
 
 
     @commands.command(help="Choose between multiple choices.\nAdd quotemarks at the start & end of something to mark a long phrase as a possible choice, e.g: `ami choose sky \"watch anime\" netflix`")
     async def choose(self, ctx, *choices: str):
+        if len(choices) < 2:
+            return await ctx.send(f"{ctx.author.mention} please provide at least 2 choices.")
         choi = random.choice(choices)
         await ctx.send(choi, allowed_mentions = discord.AllowedMentions.none())
 
@@ -623,7 +642,7 @@ class Fun(commands.Cog):
             await ctx.send(embed=em)
             return
 
-        embed=discord.Embed(description=f"Try to click on reaction at {number} seconds.", color=0xffcff1)
+        embed=discord.Embed(description=f"Try to click on reaction at {number} seconds.", color=self.bot.color)
         embed.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar_url)
         message = await ctx.send(embed=embed)
         await message.add_reaction("<a:nono:819694934189277214>")
@@ -639,7 +658,7 @@ class Fun(commands.Cog):
             return await ctx.send(f"<:alert:819704994612904017> No reaction detected from **{ctx.author.name}**.")
 
         end = time.time()
-        embed=discord.Embed(title=f"{number} second(s) reaction",description=f"<:vea:819703490703523860> Your result is: `{round(end-start, 2)}` seconds", color=0xffcff1)
+        embed=discord.Embed(title=f"{number} second(s) reaction",description=f"<:vea:819703490703523860> Your result is: `{round(end-start, 2)}` seconds", color=self.bot.color)
         embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
         await message.edit(embed=embed)
 
@@ -787,7 +806,7 @@ class Fun(commands.Cog):
         dt_today = datetime.datetime.today()   # Local time
         dt_India = dt_today.astimezone(pytz.timezone(t)) 
         t3 = (dt_India.strftime(fmt))
-        em = discord.Embed(title=f"<a:9932_zero_two:819689873870946395> Time for {member.name}", description = f"{t3}", color = 0xffcff1)
+        em = discord.Embed(title=f"<a:9932_zero_two:819689873870946395> Time for {member.name}", description = f"{t3}", color = self.bot.color)
         em.set_footer(text=f"{t}", icon_url=f"{member.avatar_url}")
         await ctx.send(embed=em)
         return
@@ -812,9 +831,7 @@ class Fun(commands.Cog):
     @commands.command()
     @commands.is_owner()
     async def setzone(self,ctx,member:discord.Member, *, args):
-        member_id = str(member.id)
-        guild_id = str(ctx.guild.id)
-        user = await self.bot.db.fetch("SELECT * FROM users WHERE user_id = $1", member_id)
+        member_id = member.id
         timezone = args
 
         if timezone == None:
@@ -823,12 +840,21 @@ class Fun(commands.Cog):
             await ctx.send(embed=em)
             return
 
+        data = await self.bot.db.fetch("SELECT * FROM timezone WHERE user_id = $1", member_id)
+        if not data:
+            if timezone in all_timezones:
+                zone1 = timezone
+                await self.bot.db.execute("INSERT INTO timezone (user_id, tz) VALUES ($1, $2)", member_id, zone1)
+                return await ctx.send(f"Set **{timezone}** for `{member}`!")
+            else:
+                return await ctx.send("Zone not found.")
+
         if timezone in all_timezones:
             zone1 = timezone
-            await self.bot.db.execute("UPDATE users SET tz = $1 WHERE user_id = $2", zone1, member_id)
-            await ctx.send(f"Set **{timezone}** for `{member}`!")
+            await self.bot.db.execute("UPDATE timezone SET tz = $1 WHERE user_id = $2", zone1, member_id)
+            return await ctx.send(f"Set **{timezone}** for `{member}`!")
         else:
-            await ctx.send("Zone not found.")
+            return await ctx.send("Zone not found.")
 
 
     @commands.command(help="Convert the discord markdown into html format")
@@ -853,7 +879,7 @@ class Fun(commands.Cog):
         syno = anime[0].synopsis.strip("[Written by MAL Rewrite]")
         syno = anime[0].synopsis.strip("(Source: Crunchyroll)")
         syno = anime[0].synopsis.strip("(Source: ANN")
-        em = discord.Embed(title=f"{anime[0].title}", url=f"{link}", description=f"{syno}", color=0xffcff1)
+        em = discord.Embed(title=f"{anime[0].title}", url=f"{link}", description=f"{syno}", color=self.bot.color)
         em.set_thumbnail(url=anime[0].poster_image_url)
         em.set_footer(text=f"Episodes: {anime[0].episode_count} | Status: {anime[0].status.title()} | Nsfw: {anime[0].nsfw} | {anime[0].age_rating_guide}")
         if anime[0].ended_at:
