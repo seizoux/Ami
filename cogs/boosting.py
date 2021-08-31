@@ -21,8 +21,7 @@ class Boosting(commands.Cog):
                             "`ami setboost channel [set]` to set the channel where send the message (you can mention it or use the ID)\n"
                             "`ami setboost embed-title [set]` to set the title of the embed\n"
                             "`ami setboost embed-image` to set the image to use in the embed\n"
-                            "`ami setboost embed-footer` to set the footer of the embed\n\n"
-                            "**You can also use some variables in the boosting message:**```py\n{name} : return the member name\n{member} : return the complete member name\n{mention} : return the member mention\n{boosts} : return the boosts of the guild\n{guild_level} : return the level of the guild\n```", invoke_without_command=True)
+                            "`ami setboost embed-footer` to set the footer of the embed\n", invoke_without_command=True)
     async def setboost(self, ctx):
         await ctx.invoke(self.bot.get_command("help"), **{"command":"setboost"})
 
@@ -31,11 +30,11 @@ class Boosting(commands.Cog):
     async def modality(self, ctx, option):
 
         if option.lower() == "disable":
-            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET toggle = $2", ctx.guild.id, False)
+            await self.bot.db.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET toggle = $2", ctx.guild.id, False)
             return await ctx.send("<:4430checkmark:848857812632076314> Boosting module disabled!")
 
         if option.lower() == "enable":
-            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET toggle = $2", ctx.guild.id, True)
+            await self.bot.db.execute("INSERT INTO boosting (guild_id, toggle) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET toggle = $2", ctx.guild.id, True)
             return await ctx.send("<:4430checkmark:848857812632076314> Boosting module enabled!")
 
 
@@ -44,7 +43,7 @@ class Boosting(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def settings(self, ctx):
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
+        db = await self.bot.db.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
         if not db:
             return await ctx.send("<:4318crossmark:848857812565229601> This guild has no boosting module configuration yet.")
 
@@ -88,7 +87,7 @@ class Boosting(commands.Cog):
             elif emb is False:
                 s6 = f"Embed: **Disabled**"
 
-        em = discord.Embed(title="Boosting Panel", description=f"Boosting feature in this guild is **{dcf}**", color=0xffcff1)
+        em = discord.Embed(title="Boosting Panel", description=f"Boosting feature in this guild is **{dcf}**", color=self.bot.color)
         em.add_field(name=f"{ctx.guild.name} settings", value=f"{s1}\n\n{s2}")
         em.add_field(name="Embed Settings", value=f"{s3}\n{s4}\n{s5}\n{s6}")
         em.set_thumbnail(url=ctx.guild.icon_url)
@@ -98,7 +97,7 @@ class Boosting(commands.Cog):
     @setboost.command()
     @commands.has_permissions(manage_guild=True)
     async def preview(self, ctx):
-        db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
+        db = await self.bot.db.fetch("SELECT * FROM boosting WHERE guild_id = $1", ctx.guild.id)
         if not db:
             return await ctx.send("<:4318crossmark:848857812565229601> This guild has no boosting module configuration yet.")
 
@@ -108,6 +107,9 @@ class Boosting(commands.Cog):
         tit = db[0]["embed_title"]
         im = db[0]["embed_image"]
         emb = db[0]["embed"]
+
+        if not mex:
+            return await ctx.send("<:4318crossmark:848857812565229601> This guild has no boosting message set.")
 
         namespace = {"{name}": ctx.author.name,
                     "{member}": f"{ctx.author.name}#{ctx.author.discriminator}",
@@ -123,12 +125,10 @@ class Boosting(commands.Cog):
         msg = replace_all(mex)
 
         if emb is False or not emb:
-            if not mex:
-                return await ctx.send("<:4318crossmark:848857812565229601> This guild has no boosting message set.")
             return await ctx.send(msg)
 
         elif emb is True:
-            em = discord.Embed(description=msg, color=0xffcff1)
+            em = discord.Embed(description=msg, color=self.bot.color)
             if tit:
                 namespace = {"{name}": ctx.author.name,
                             "{member}": f"{ctx.author.name}#{ctx.author.discriminator}",
@@ -164,22 +164,25 @@ class Boosting(commands.Cog):
 
     @setboost.command()
     @commands.has_permissions(manage_guild=True)
-    async def message(self, ctx, set):
-        if len(set) > 500:
+    async def message(self, ctx, *, message):
+        if len(message) > 500:
             return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **500** characters, your is **{len(set)}.**")
 
-        await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, message) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET message = $2", ctx.guild.id, set)
+        await self.bot.db.execute("INSERT INTO boosting (guild_id, message) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET message = $2", ctx.guild.id, message)
         return await ctx.send("<:4430checkmark:848857812632076314> Message succesfully edited for boosting message!")
 
     @setboost.command()
     @commands.has_permissions(manage_guild=True)
     async def channel(self, ctx, set):
+        if set.startswith("<#") is False:
+            return await ctx.send(f"{ctx.author.mention} you need to mention a valid channel.")
+        
         d = set.strip("<#>")
         c = self.bot.get_channel(int(d))
         if not c:
             return await ctx.send("<:4318crossmark:848857812565229601> This isn't a valid channel.")
 
-        await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2", ctx.guild.id, int(d))
+        await self.bot.db.execute("INSERT INTO boosting (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2", ctx.guild.id, int(d))
         return await ctx.send("<:4430checkmark:848857812632076314> Channel succesfully edited for boosting message!")
 
     @setboost.command()
@@ -187,11 +190,11 @@ class Boosting(commands.Cog):
     async def embed(self, ctx, set):
         
         if set.lower() == "enable":
-            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed = $2", ctx.guild.id, True)
+            await self.bot.db.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed = $2", ctx.guild.id, True)
             return await ctx.send("<:4430checkmark:848857812632076314> Embed succesfully enabled for boosting message!")
 
         if set.lower() == "disable":
-            await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed = $2", ctx.guild.id, False)
+            await self.bot.db.execute("INSERT INTO boosting (guild_id, embed) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed = $2", ctx.guild.id, False)
             return await ctx.send("<:4430checkmark:848857812632076314> Embed succesfully disabled for boosting message!")
 
     @setboost.command(name="embed-image")
@@ -201,26 +204,26 @@ class Boosting(commands.Cog):
         if not url:
             return await ctx.send("<:4318crossmark:848857812565229601> This isn't a valid url schema for embed image.")
 
-        await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_image) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_image = $2", ctx.guild.id, set)
+        await self.bot.db.execute("INSERT INTO boosting (guild_id, embed_image) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_image = $2", ctx.guild.id, set)
         return await ctx.send("<:4430checkmark:848857812632076314> Embed image succesfully edited for boosting message!")
 
     @setboost.command(name="embed-title")
     @commands.has_permissions(manage_guild=True)
-    async def embed_title(self, ctx, set):
-        if len(set) > 120:
-            return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **50** characters, your is **{len(set)}.**")
+    async def embed_title(self, ctx, *, embed_title):
+        if len(embed_title) > 120:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **50** characters, your is **{len(embed_title)}.**")
 
-        await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_title) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_title = $2", ctx.guild.id, set)
+        await self.bot.db.execute("INSERT INTO boosting (guild_id, embed_title) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_title = $2", ctx.guild.id, embed_title)
         return await ctx.send("<:4430checkmark:848857812632076314> Embed title succesfully edited for boosting message!")
 
     @setboost.command(name="embed-footer")
     @commands.has_permissions(manage_guild=True)
-    async def embed_footer(self, ctx, set):
+    async def embed_footer(self, ctx, *, footer_text):
 
-        if len(set) > 100:
-            return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **50** characters, your is **{len(set)}.**")
+        if len(footer_text) > 100:
+            return await ctx.send(f"<:4318crossmark:848857812565229601> Message too long, max. is **50** characters, your is **{len(footer_text)}.**")
 
-        await self.bot.pg_con.execute("INSERT INTO boosting (guild_id, embed_footer) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_footer = $2", ctx.guild.id, set)
+        await self.bot.db.execute("INSERT INTO boosting (guild_id, embed_footer) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET embed_footer = $2", ctx.guild.id, footer_text)
         return await ctx.send("<:4430checkmark:848857812632076314> Embed footer succesfully edited for boosting message!")
     
 
@@ -229,7 +232,7 @@ class Boosting(commands.Cog):
         if before.guild.premium_subscriber_role not in before.roles and after.guild.premium_subscriber_role not in after.roles:
             return
 
-        db = await self.bot.pg_con.fetch("SELECT * FROM boosting WHERE guild_id = $1", after.guild.id)
+        db = await self.bot.db.fetch("SELECT * FROM boosting WHERE guild_id = $1", after.guild.id)
         if not db:
             return
 
@@ -268,7 +271,7 @@ class Boosting(commands.Cog):
             msg = replace_all(mex)
 
             if emb == True:
-                em = discord.Embed(description = msg, color = 0xffcff1)
+                em = discord.Embed(description = msg, color = self.bot.color)
                 if tit:
                     em.title = tit
                 if foot:
