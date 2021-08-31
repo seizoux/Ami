@@ -14,7 +14,8 @@ import humanize
 from twemoji_parser import emoji_to_url
 from nudenet import NudeClassifier
 import aiofiles
-
+import datetime
+    
 MAX_FILE_SIZE = 15000000
 
 Image_Union = typing.Union[
@@ -114,7 +115,7 @@ class Admin(commands.Cog):
                 if resp.status != 200:
                     return False
 
-                if "image" not in resp.content_type:
+                if not any(f in resp.content_type for f in ["image", "video"]):
                     return False
 
                 if checktype:
@@ -148,19 +149,32 @@ class Admin(commands.Cog):
     async def on_ready(self):
         print(f"Admin Loaded")
 
+    @commands.command(help="Take a screenshot of the page on the given url.",aliases=['ss'])
+    @is_team()
+    async def screenshot(self, ctx, *, url: str):
+        url = url.strip('<>')
+        if not re.match(self.bot.url_regex, url):
+            return await ctx.send('The url must contain any of http/https.')
+            
+        res = await self.bot.session.get(f'https://image.thum.io/get/{url}')
+        byt = BytesIO(await res.read())
 
-    @commands.command(help="Upload png/gif/jpg/tiff/mp4/mp3/html or whatever you want on amidiscord.xyz cdn, open for all (files are been deleted each month)")
+        em = discord.Embed(description=f'`URL:` {url}\n`Author:` {ctx.author.mention}')
+        em.set_image(url=f'attachment://{ctx.command.name}.png')
+        await ctx.send(embed=em, file=discord.File(byt, filename=f'{ctx.command.name}.png'))
+
+    @commands.command(help="Upload png/gif/jpg files or whatever you want on amidiscord.xyz cdn, open for all to share instantly files with friends!")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def upload(self, ctx, *, data: typing.Union[Image_Union]=None):
-        data = await self.get_url(ctx, data)
+        dat = await self.get_url(ctx, data)
 
-        if data is False:
+        if dat is False:
             return await ctx.reply(f":x: Unable to acquire a valid file type for the `data` argument value passed in.")
 
-        async with self.bot.session.get(str(data)) as resp:
+        async with self.bot.session.get(str(dat)) as resp:
             b = await resp.read()
 
-            if resp.status == 200:
+            if resp.status == 200 and "image" in resp.content_type:
                 f = await aiofiles.open('upload_check.png', mode='wb')
                 await f.write(b)
                 await f.close()
@@ -171,7 +185,6 @@ class Admin(commands.Cog):
             unsafe = dict1['unsafe']
             unsafec = ((unsafe)*100)/200
             unsafep = round(unsafec*200, 2)
-
 
             if int(unsafep) >= 50:
                 os.remove("upload_check.png")
@@ -290,7 +303,7 @@ class Admin(commands.Cog):
         text = "\n".join(f"<:4430checkmark:848857812632076314> {module}" if module not in errors else f"<:4318crossmark:848857812565229601> {module}\n{errors[module]}" for module in check)
         title = "Reloaded all." if len(check)-len(list(errors)) == len(extensions) else f"{len(check)-len(list(errors))}/{len(extensions)} cogs reloaded."
                     
-        await ctx.send(embed=discord.Embed(title=title, description=text, color = 0xffcff1))
+        await ctx.send(embed=discord.Embed(title=title, description=text, color = self.bot.color))
 
     @developer.command()
     async def reload(self, ctx, *file):
@@ -357,7 +370,7 @@ class Admin(commands.Cog):
         if not command.enabled:
                 return await ctx.send("This command is disabled for now.")
         command.enabled = False
-        em = discord.Embed(description=f"• `{command.name}` disabled.\n• Use `ami enable <command>` to re-enable it.", color = 0xffcff1)
+        em = discord.Embed(description=f"• `{command.name}` disabled.\n• Use `ami enable <command>` to re-enable it.", color = self.bot.color)
         await ctx.send(embed=em)
 
     @commands.command(help="Enable a command (globally)")
@@ -367,7 +380,7 @@ class Admin(commands.Cog):
         if command.enabled:
             return await ctx.send("This command is already enabled.")
         command.enabled = True
-        em = discord.Embed(description=f"• `{command.name}` enabled.\n• Use `ami disable <command>` to disable it.", color = 0xffcff1)
+        em = discord.Embed(description=f"• `{command.name}` enabled.\n• Use `ami disable <command>` to disable it.", color = self.bot.color)
         await ctx.send(embed=em)
 
 
@@ -382,9 +395,9 @@ class Admin(commands.Cog):
 
     @commands.command(help="Check the socket")
     async def socket(self, ctx):
-        current_time = time.time()
+        current_time = datetime.datetime.utcnow()
         lists = []
-        difference = int(current_time - self.bot.start_time)/60
+        difference = ((current_time - self.bot.launch_time).seconds)/60
         lists.append(f"Received {self.bot.socket_receive} / {self.bot.socket_receive//difference} sockets per minute")
         for i, (n, v) in enumerate(self.bot.socket_stats.most_common()):
             lists.append(f"{n:<30} {v:<15} {round(v/difference, 3)} /minute")
