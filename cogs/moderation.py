@@ -3,6 +3,7 @@ from discord.ext import commands, menus
 import asyncio
 import re
 import humanize
+import typing
 
 class Paginate(menus.ListPageSource):
 
@@ -11,7 +12,7 @@ class Paginate(menus.ListPageSource):
         super().__init__(entries, per_page=per_page)
 
     async def format_page(self, menu: menus.Menu, page):
-        embed = discord.Embed(color = 0xffcff1)
+        embed = discord.Embed(color = 0xb81217)
         embed.set_author(name=f"{menu.ctx.guild.name} member list ({len(menu.ctx.guild.members)})")
         embed.description = '\n'.join(page)
 
@@ -24,7 +25,7 @@ class Paginate2(menus.ListPageSource):
         super().__init__(entries, per_page=per_page)
 
     async def format_page(self, menu: menus.Menu, page):
-        embed = discord.Embed(color = 0xffcff1)
+        embed = discord.Embed(color = 0xb81217)
         embed.description = '\n'.join(page)
 
         return embed
@@ -32,14 +33,13 @@ class Paginate2(menus.ListPageSource):
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self._cd = commands.CooldownMapping.from_cooldown(10, 12.0, commands.BucketType.user)
+        self._cd = commands.CooldownMapping.from_cooldown(17, 12.0, commands.BucketType.user)
         self.category = "Moderation"
         self.lock = asyncio.Lock()
         self.guilds_dict = {}
         self.bad_words = {}
         self.bad_links = {}
-        self.bot.loop.create_task(self.cache())
-
+        self.bot.loop.create_task(self.cache())   
 
     async def cache(self):
         await self.bot.wait_until_ready()
@@ -58,7 +58,7 @@ class Moderation(commands.Cog):
     async def on_ready(self):
         print(f"Moderation Loaded")
 
-    @commands.command(help="Retrive a paginated list with all members in the guild, and the member top role (returns `No Roles` if no roles).",aliases=["ml"])
+    @commands.command(help="Retrive a paginated list with all members in the guild, and the member top role (returns `No Roles` if no roles).",aliases=["memlist"])
     async def memberlist(self, ctx):
         p = sorted(ctx.guild.members, key=lambda m: m.top_role.position, reverse=True)
         entries = [f"**{member.name}#{member.discriminator}** | `{member.id}` | {f'<@&{member.top_role.id}>' if member.roles[1:] else 'No Roles'}" for member in p]
@@ -153,7 +153,7 @@ class Moderation(commands.Cog):
     @commands.bot_has_permissions(manage_channels=True)
     async def createchannel(self, ctx, channel_name):
         await ctx.guild.create_text_channel(channel_name)
-        await asyncio.sleep(2)
+        await asyncio.sleep(4)
         d = discord.utils.get(ctx.guild.channels, name=channel_name)
         await ctx.send(f"<:greenTick:596576670815879169> Created {d.mention} channel!")
 
@@ -234,8 +234,7 @@ class Moderation(commands.Cog):
                 if i in word["bad_words"]:
                     return await ctx.reply(f"<:redTick:596576672149667840> {i} is already set as a __bad word__.")
             d = await self.bot.db.fetchval("UPDATE antispam SET bad_words = array_append(bad_words, $1) WHERE guild_id = $2 RETURNING bad_words", i, str(ctx.guild.id))
-
-        self.bad_words[ctx.guild.id] = d
+            self.bad_words[ctx.guild.id] = d
         await ctx.send(f"<:greenTick:596576670815879169> Set **{', '.join(words)}** as bad words to detect.")
 
     @commands.command(help="Remove words from the bad words list set before, you can see the words with `ami automod badwords`.\nYou can remove also multiple words at same time.")
@@ -253,67 +252,20 @@ class Moderation(commands.Cog):
                 return await ctx.send(f"<:redTick:596576672149667840> {i} isn't in the __bad words__ list.")
         
             d = await self.bot.db.fetchval("UPDATE antispam SET bad_words = array_remove(bad_words, $1) WHERE guild_id = $2 RETURNING bad_words", i, str(ctx.guild.id))
-
-        self.bad_words[ctx.guild.id] = d
+            self.bad_words[ctx.guild.id] = d
         await ctx.send(f"<:greenTick:596576670815879169> Removed **{', '.join(words)}** as bad words to detect.")
 
 
 # Clear Command
-    @commands.command(help="Clear messages in `<amount>` range from the channel sent by the member specified.\nLeave `[target]` (member) blank to delete ami messages.")
-    async def cleanup(self, ctx, amount: int, target: discord.Member=None):
-        if amount > 500 or amount < 0:
-            return await ctx.send("<:redTick:596576672149667840> Maximum is `500` due to __Discord API Limitations__.")
+    @commands.command(help="Clear messages in `<amount>` range from the channel.")
+    @commands.cooldown(1, 15, commands.BucketType.user)
+    @commands.has_permissions(manage_messages=True)
+    @commands.bot_has_permissions(manage_messages=True)
+    async def clear(self, ctx, amount: int):
+        if amount >= 250:
+            return
 
-        if not target:
-            target = ctx.me
-
-        team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302]
-
-        for i in team:
-            if ctx.author.id in team:
-                continue
-            elif not ctx.author.id in team:
-                if not ctx.author.guild_permissions.manage_messages:
-                    return await ctx.send("<:redTick:596576672149667840> You don't have the `Manage Messages` permission to run this command.")
-
-
-        if target.id == ctx.me.id:
-            deleted = 0
-
-            deleted = 0
-            messages = []
-            async for m in ctx.channel.history(limit=amount):
-                messages.append(m)
-                if m.author == ctx.me:
-                    try:
-                        deleted += 1
-                        await m.delete()
-                    except Exception:
-                        pass
-                    else:
-                        deleted += 1
-
-            await ctx.send(f'<:greenTick:596576670815879169> Cleared **{deleted}/{amount}** messages.', delete_after=10)
-        else:
-            if not ctx.me.guild_permissions.manage_messages:
-                return await ctx.send("<:redTick:596576672149667840> I need the `Manage Messages` permission to run this command.")
-
-            deleted = 0
-
-            deleted = 0
-            messages = []
-            async for m in ctx.channel.history(limit=amount):
-                messages.append(m)
-                if m.author == target:
-                    try:
-                        deleted += 1
-                        await m.delete()
-                    except Exception:
-                        pass
-                    else:
-                        deleted += 1
-
-            await ctx.send(f'<:greenTick:596576670815879169> Cleared **{deleted}/{amount}** messages.', delete_after=10)        
+        await ctx.channel.purge(limit=amount)
 
 # Ban Command
     @commands.command(help="Ban a member from the guild.\nThis supports multiple mentions.")
@@ -326,6 +278,9 @@ class Moderation(commands.Cog):
         if len(members) > limit:
             return await ctx.reply(f"<:redTick:596576672149667840> You can't ban more than `{limit}` people at same time.")
 
+        if not members:
+            return await ctx.send(f"{ctx.author.mention} please specify at least one valid member to ban.")
+
         for i in members:
             if isinstance(i, discord.Member):
                 if i.top_role >= ctx.author.top_role:
@@ -334,14 +289,16 @@ class Moderation(commands.Cog):
             try:
                 await ctx.guild.ban(discord.Object(id=id), reason=reason)
                 s = self.bot.get_user(i.id) or (await self.bot.fetch_user(i.id))
+                if not s:
+                    return await ctx.send(f"{ctx.author.mention} member `{i}` was not found.")
                 try:
                     await s.send(f"You got banned from **{ctx.guild.name}** for `{reason}`.")
                 except Exception:
                     pass
-            except discord.NotFound:
+            except Exception:
                 await ctx.send(f"<:redTick:596576672149667840> Member **{i.name}** not found.")
 
-        final = ", ".join([i.mention for i in members])
+        final = ", ".join([i.name for i in members])
         await ctx.send(f'<:greenTick:596576670815879169> Succesfully banned **{final}** for `{reason}`.')
 
 # Unban Command
@@ -380,6 +337,9 @@ class Moderation(commands.Cog):
             limit = 50
         if len(members) > limit:
             return await ctx.reply(f"<:redTick:596576672149667840> You can't kick more than `{limit}` people at same time.")
+
+        if not members:
+            return await ctx.send(f"{ctx.author.mention} please specify at least one valid member to kick.")
 
         for i in members:
             id = i.id
@@ -492,7 +452,7 @@ class Moderation(commands.Cog):
 
         if toggle == "badwords":
             if data["bad_words"]:
-                em = discord.Embed(title=f"{ctx.guild.name} bad words list", description=f"This is the list of the words you can't say in this guild:\n`{', '.join(data['bad_words'])}`", color = 0xffcff1)
+                em = discord.Embed(title=f"{ctx.guild.name} bad words list", description=f"This is the list of the words you can't say in this guild:\n`{', '.join(data['bad_words'])}`", color = self.bot.color)
                 v = "disabled"
                 if data["toggle"] == "on":
                     v = 'enabled'
@@ -529,11 +489,17 @@ class Moderation(commands.Cog):
         if message.author.id == self.bot.user.id:
             return
 
+        if isinstance(message.author, discord.User):
+            return
+
+        if message.author.top_role > message.guild.me.top_role:
+            return
+
         retry_after = self.ratelimit_check(message)
         if retry_after:
             try:
                 await message.guild.ban(discord.Object(id = message.author.id), reason = "Spam Detect (Auto-Mod ON)", delete_message_days = 7)
-                em = discord.Embed(description=f"<:redTick:596576672149667840> {message.author.mention} permanently banned for : `Spam Detect (Auto-Mod ON)`.", color = 0xffcff1)
+                em = discord.Embed(description=f"<:redTick:596576672149667840> {message.author.mention} permanently banned for : `Spam Detect (Auto-Mod ON)`.", color = self.bot.color)
                 em.set_author(name=f"Detected spam from {message.author.name}.")
                 await message.channel.send(embed=em, delete_after=60)
             except Exception:
@@ -547,7 +513,7 @@ class Moderation(commands.Cog):
     @commands.Cog.listener("on_message")
     async def bad_word_usage(self, message):
 
-        if message.guild == None:
+        if message.guild is None:
             return
 
         if message.guild.id not in self.guilds_dict:
@@ -559,19 +525,23 @@ class Moderation(commands.Cog):
         if message.guild.id not in self.bad_words:
             return
 
+        if isinstance(message.author, discord.User):
+            return
+
+        if message.author.top_role > message.guild.me.top_role:
+            return
         
         content = message.content
         bad_words = self.bad_words[message.guild.id]
         if any(i in content for i in bad_words):
-            if message.guild.me.top_role <= message.author.guild.top_role:
-                return
+
             await message.delete()
             if self.lock.locked(): # already send
                 return
 
             await self.lock.acquire()
             try:
-                em = discord.Embed(title="⚠ Bad Word Usage", description=f"{message.author.mention} don't use bad words here thanks.", color = 0xffcff1)
+                em = discord.Embed(title="⚠ Bad Word Usage", description=f"{message.author.mention} don't use bad words here thanks.", color = self.bot.color)
                 await message.channel.send(embed=em, delete_after = 5)
                 await asyncio.sleep(5)
             finally:
@@ -586,14 +556,30 @@ class Moderation(commands.Cog):
 
         if message.guild.id not in self.guilds_dict:
             return
+
+        if message.author.id == self.bot.user.id:
+            return
         
+        if isinstance(message.author, discord.User):
+            return
+
+        if message.author.top_role > message.guild.me.top_role:
+            return
+
         url = re.match("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+", message.content)
         if url:
-            if message.guild.me.top_role <= message.author.guild.top_role:
+            if re.match("http[s]?://(?:www)?tenor.com/view/.+$", message.content):
                 return
+
+            if re.match("(https?:\/\/)?(media|cdn)\.discord(app)?\.(com|net)\/attachments\/([0-9]+)\/([0-9]+)\/([\S]+)", message.content):
+                return
+
+            if re.match("http[s]?://(?:.+\.)?discord.com/channels/[0-9]+/[0-9]+/[0-9]+", message.content):
+                return
+
             try:
                 await message.delete()
-                em = discord.Embed(description=f"<:redTick:596576672149667840> {message.author.mention}, links are not allowed here.", color = 0xffcff1)
+                em = discord.Embed(description=f"<:redTick:596576672149667840> {message.author.mention}, links are not allowed here.", color = self.bot.color)
                 await message.channel.send(embed=em, delete_after=30)
             except Exception:
                 pass
