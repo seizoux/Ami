@@ -29,7 +29,7 @@ def welcome_func(pfp: discord.Member, member_name: str, member_disc: str, member
         draw = ImageDraw.Draw(wel_bg)
         h = "You are our {} member.".format(humanize.ordinal(member_count))
         s = h.upper()
-        tex = f"Welcome {member_name}#{member_disc}!"
+        tex = f"Welcome {member_name if len(member_name) <= 10 else member_name[:10] + '...'}#{member_disc}!"
         text = tex.upper()
         x, y = 722, 560
         x2, y2 = 742, 700
@@ -427,3 +427,9 @@ def lead_func(pfp: typing.List[BytesIO], user_name:str, user_bal:str):
         buffer.seek(0)
 
         return buffer
+
+def setup(bot):
+    print("[SETUP] Definitions")
+
+def teardown(bot):
+    print("[TEARDOWN] Definitions")
