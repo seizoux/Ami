@@ -11,11 +11,13 @@ class Chunk(commands.Cog):
     async def on_ready(self):
         print(f"Chunk Loaded")
 
-
-    @tasks.loop(minutes=1)
+    @tasks.loop(minutes=30)
     async def chunk(self):
         await self.bot.wait_until_ready()
-        await asyncio.gather(*[guild.chunk() for guild in self.bot.guilds if not guild.chunked])
+        try:
+            await asyncio.gather(*[guild.chunk() for guild in self.bot.guilds if not guild.chunked])
+        except Exception:
+            pass
 
 def setup(bot):
     bot.add_cog(Chunk(bot))
