@@ -309,15 +309,18 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 await i.destroy(force=True)
 
     async def start_nodes(self):
-        await self.bot.wavelink.initiate_node(
-                        host="lava.link",
-                        port=80,
-                        rest_uri="http://lava.link:80",
-                        password="youshallnotpass",
-                        identifier="Ami",
-                        region="germany",
-                        heartbeat=60,
-                    )
+        await self.bot.wait_until_ready()
+        for i in range(self.bot.shard_count):
+            await self.bot.wavelink.initiate_node(
+                            host="lava.link",
+                            port=80,
+                            rest_uri="http://lava.link:80",
+                            password="youshallnotpass",
+                            identifier=f"Ami-{i}",
+                            region="germany",
+                            heartbeat=60,
+                            shard_id=i)
+                        )
 
     @wavelink.WavelinkMixin.listener()
     async def on_node_ready(self, node: wavelink.Node):
