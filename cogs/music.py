@@ -345,11 +345,13 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
     async def ensure_node(self):
         while True:
-            try:
-                if not self.bot.wavelink.nodes["Ami"].is_available:
-                    await self.bot.wavelink.nodes["Ami"]._websocket._connect()
-            except:
-                pass
+            if self.bot.wavelink.nodes:
+                for node in self.bot.wavelink.nodes:
+                    try:
+                        if not node.is_available:
+                            await node._websocket._connect()
+                    except:
+                        pass
 
             await asyncio.sleep(1)
 
