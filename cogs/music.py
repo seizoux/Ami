@@ -15,6 +15,7 @@ import aiohttp
 import sr_api
 import aiofiles
 from util.defs import is_team
+from discord import Color
 
 srclient = sr_api.Client()
 
@@ -106,7 +107,7 @@ class Player(wavelink.Player):
         self.query = ""
         self.track = None
 
-    async def do_next(self) -> None:
+    async def do_next(self, context=None, color=None) -> None:
         if self.is_playing or self.waiting:
             return
 
@@ -138,12 +139,29 @@ class Player(wavelink.Player):
             # No music has been played for 5 minutes, cleanup and disconnect...
             return await self.teardown()
 
+        # If nothing goes wrong play track
         await self.play(self.track)
         self.time = time.time()
         self.waiting = False
+        if context is not None:
+            try: # Just in case if anything goes wron cause only tested on my bot :0
+                await self.send_new_song_embed(context=context, color=color, track=self.track)
+            except:
+                pass        
 
         # Invoke our players controller...
         await self.invoke_controller()
+    
+    async def send_new_song_embed(self,context, color, track)-> typing.Optional[discord.Embed]:
+        if track is not None:
+            embed = discord.Embed(
+                title=":musical_note: Now playing",
+                description=f"[{track.title}]({track.uri}) |",
+                color=color,
+            )
+            return await context.send(embed=embed)
+        else:
+            return
 
     async def invoke_controller(self) -> None:
         """Method which updates or sends a new player controller."""
@@ -377,7 +395,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
     @wavelink.WavelinkMixin.listener("on_track_end")
     @wavelink.WavelinkMixin.listener("on_track_exception")
     async def on_player_stop(self, node: wavelink.Node, payload):
-        await payload.player.do_next()
+        await payload.player.do_next(payload.player.context, Color.teal())
 
     @wavelink.WavelinkMixin.listener(
         "on_track_exception"
@@ -1468,6 +1486,50 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         except Exception:
             pass
 
+    # original idea of Groovy music bot
+    @commands.command(pass_context=True,help="Allowes to change server region to suit your latency, either use params or let the bot decide your region")
+    @commands.has_permissions(manage_roles=True, ban_members=True)
+    async def fix(self, ctx, *, region: str = None):
+        regions = ['sydney',
+                   'vip-us-west',
+                   'vip-us-east',
+                   'south-korea',
+                   'vip-amsterdam',
+                   'hongkong',
+                   'russia',
+                   'us-west',
+                   'eu-central',
+                   'us-south',
+                   'santa-clara',
+                   'st-pete',
+                   'atlanta',
+                   'us-central',
+                   'india',
+                   'london', 'amsterdam',
+                   'santiago', 'singapore', 'eu-west', 'newark', 'us-east',
+                   'brazil', 'frankfurt', 'southafrica', 'japan', 'seattle', 'europe', 'buenos-aires', 'dubai']
+        """Changes the server region."""
+        if not region:
+            region = random.choice(regions)
+            await ctx.message.guild.edit(region=region)
+            await ctx.send(f"Region changed to {region}")
+            return
+        if region.lower() not in regions:
+            embed = discord.Embed(title=":negative_squared_cross_mark: False region",
+                                  description="Pick regions from following regions",
+                                  color=ctx.author.color)
+            embed.add_field(name="Regions",
+                            value="`sydney` \n `vip-us-west` \n `vip-us-east` \n `south-korea` \n `vip-amsterdam`\n"
+                                  "`hongkong`\n `russia` \n `us-west` \n `eu-central` \n `us-south` \n `santa-clara` \n"
+                                  "`st-pete`\n `atlanta` \n `us-central` \n `india` \n `london` \n `amsterdam` \n"
+                                  "`santiago` \n `singapore` \n `eu-west` \n `newark` \n `us-east` \n `brazil` \n"
+                                  "`frankfurt` \n `southafrica` \n `japan` \n `seattle` \n `europe` \n `buenos-aires` "
+                                  "\n `dubai`",
+                            inline=False)
+            embed.set_author(name=f"{ctx.author.name}", icon_url=f"{ctx.author.avatar_url}")
+            return await ctx.send(embed=embed)
+        await ctx.message.guild.edit(region=region)
+        await ctx.send(f"Region changed to {region}")
 
 def setup(bot: commands.Bot):
     bot.add_cog(Music(bot))
