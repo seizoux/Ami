@@ -16,6 +16,7 @@ from nudenet import NudeClassifier
 import aiofiles
 import datetime
 import statcord
+import asyncio
 
 MAX_FILE_SIZE = 15000000
 
@@ -188,6 +189,22 @@ class Admin(commands.Cog):
     async def on_command(self,ctx):
         self.api.command_run(ctx)
 
+    @commands.command()
+    @is_team()
+    async def update(self, ctx, * name):
+        proc = await asyncio.create_subprocess_shell(
+            "git add . && git commit -m 'text here' && git push",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE)
+
+        stdout, stderr = await proc.communicate()
+
+        await ctx.reply(f'[{name!r} exited with {proc.returncode}]')
+        if stdout:
+            await ctx.reply(f'[stdout]\n{stdout.decode()}')
+        if stderr:
+            await ctx.reply(f'[stderr]\n{stderr.decode()}')
+
     @commands.command(
         help="Take a screenshot of the page on the given url.", aliases=["ss"]
     )
@@ -205,107 +222,6 @@ class Admin(commands.Cog):
         await ctx.send(
             embed=em, file=discord.File(byt, filename=f"{ctx.command.name}.png")
         )
-
-    @commands.command(
-        help="Upload png/gif/jpg files or whatever you want on amibot.gg cdn, open for all to share instantly files with friends!"
-    )
-    @commands.cooldown(1, 10, commands.BucketType.user)
-    async def upload(self, ctx, *, data: typing.Union[Image_Union] = None):
-        dat = await self.get_url(ctx, data)
-
-        if dat is False:
-            return await ctx.reply(
-                f":x: Unable to acquire a valid file type for the `data` argument value passed in."
-            )
-
-        async with self.bot.session.get(str(dat)) as resp:
-            b = await resp.read()
-
-            if resp.status == 200 and "image" in resp.content_type:
-                f = await aiofiles.open("upload_check.png", mode="wb")
-                await f.write(b)
-                await f.close()
-
-            classifier = NudeClassifier()
-            classs = classifier.classify("upload_check.png")
-            dict1 = classs["upload_check.png"]
-            unsafe = dict1["unsafe"]
-            unsafec = ((unsafe) * 100) / 200
-            unsafep = round(unsafec * 200, 2)
-
-            if int(unsafep) >= 50:
-                os.remove("upload_check.png")
-                return await ctx.send(
-                    f"{ctx.author.mention} this file was rated as **{unsafep}%** NSFW, upload refused."
-                )
-
-            auth = {"Authorization": "imagine"}
-            async with self.bot.session.post("https://amibot.gg/api/upload", data={"file": b}, headers=auth) as resp:
-                if int(resp.status) == 413:
-                    if (resp.headers.get("Content-Length")):
-                        return await ctx.send(f"{ctx.author.mention} your file (`{dat}`) size is over our limit ({humanize.naturalsize(int(resp.headers.get('Content-Length')))} >>> 16 MB).")
-                    else:
-                        return await ctx.send(f"{ctx.author.mention} your file (`{dat}`) size is over our limit (16 MB).")
-
-                elif int(resp.status) == 503:
-                    return await ctx.send(f"{ctx.author.mention} the service is temporary unavailable, try again later.")
-
-                final = await resp.json()
-                self.final = final
-                    
-                c = final["url"]
-                await ctx.send(
-                    embed=discord.Embed(
-                        description=f"You can find the uploaded file [here!]({c})\nAlso check out the complete [gallery!](https://amibot.gg/gallery)",
-                        color=self.bot.color,
-                    ).set_author(
-                        name=f"{ctx.author.name}, file uploaded!",
-                        icon_url=self.bot.user.avatar_url,
-                    )
-                )
-                await self.bot.db.execute("INSERT INTO cdn_images (user_id, image_name, date, avatar, author_name) VALUES ($1, $2, $3, $4, $5)", int(ctx.author.id), str(final['filename']), datetime.datetime.utcnow().strftime("%d/%m/%Y %I:%M %p"), str(ctx.author.avatar_url._url), f"{ctx.author.name}#{ctx.author.discriminator}")
-            """except Exception as e:
-                return await ctx.reply(f"Something broke while uploading the file.\nData: `{dat}`\nResponse: `{self.final}`\nError: `{e}`.")
-            """
-    @commands.group(
-        help="Update commands group, runnable only by team.",
-        invoke_without_command=True,
-    )
-    @is_team()
-    async def update(self, ctx):
-        await ctx.invoke(self.bot.get_command("help"), **{"command": "update"})
-
-    @update.command()
-    @is_team()
-    async def set(self, ctx, *, content):
-        if len(content) >= 2000:
-            return
-
-        db = await self.bot.db.fetch(
-            "SELECT * FROM updates WHERE sussybaka = $1", 144126010642792449
-        )
-        if not db:
-            await self.bot.db.execute(
-                "INSERT INTO updates (sussybaka, update_content) VALUES ($1, $2)",
-                144126010642792449,
-                content,
-            )
-            return await ctx.message.add_reaction("<:4430checkmark:848857812632076314>")
-
-        await self.bot.db.execute(
-            "UPDATE updates SET update_content = $1 WHERE sussybaka = $2",
-            content,
-            144126010642792449,
-        )
-
-        await ctx.message.add_reaction("<:4430checkmark:848857812632076314>")
-
-    @commands.command(help="Check the last updates done and changes.", aliases=["news"])
-    async def updates(self, ctx):
-        data = await self.bot.db.fetch(
-            "SELECT * FROM updates WHERE sussybaka = $1", 144126010642792449
-        )
-        await ctx.send(data[0]["update_content"])
 
     @commands.group(
         help="Developer commands group, runnable only by team.",
