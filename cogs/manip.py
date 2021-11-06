@@ -14,7 +14,7 @@ dagpi = Client(config.DAGPI_TOKEN)
 vac_api = vacefron.Client()
 alex_api = alexflipnote.Client(config.AFN_TOKEN)
 
-class ImagesManipulation(commands.Cog):
+class Manipulation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.category = "Image(s)"
@@ -391,4 +391,4 @@ class ImagesManipulation(commands.Cog):
         await ctx.send(file=file, embed=em)
 
 def setup(bot):
-    bot.add_cog(ImagesManipulation(bot))
+    bot.add_cog(Manipulation(bot))

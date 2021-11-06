@@ -1424,8 +1424,8 @@ class Fun(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.content == "<@!801742991185936384>" and not message.author.bot:
-            await message.add_reaction("<:AtriYES:819739315579912203>")
+        if re.fullmatch(rf"<@!?{self.bot.user.id}>", message.content) and not message.author.bot:
+            await message.channel.send("Hello! My prefixes are `Ami `, `ami ` and `a;`.")
 
         if message.content.startswith("::") and not message.author.bot:
             lists = []
