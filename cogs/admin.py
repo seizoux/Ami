@@ -200,10 +200,10 @@ class Admin(commands.Cog):
         stdout, stderr = await proc.communicate()
 
         await ctx.send(embed=discord.Embed(
-            description = f"```py\n{stdout.decode()}\n{stderr.decode()}\n\nExited with {proc.returncode}\n```",
+            description = f"```py\n{stdout.decode()}{stderr.decode()}\n\nExited with {proc.returncode}\n```",
             color = self.bot.color,
             timestamp = datetime.datetime.utcnow()
-        ).set_author(name=f"Spooky skeleton {str(ctx.author)}!"))
+        ).set_author(name=f"Spooky skeleton {str(ctx.author)}!", icon_url=ctx.author.avatar_url))
 
     @commands.command(
         help="Take a screenshot of the page on the given url.", aliases=["ss"]
