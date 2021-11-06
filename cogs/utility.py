@@ -342,7 +342,7 @@ class Utility(commands.Cog):
             if guild.description:
                 desc = guild.description
 
-            em = discord.Embed(title=f"{guild.name} (`{guild.id}`)", description=f"The guild owner is `{guild.owner}`\n{desc}\n\n<a:Casual_Crowe:853894751140446248> Members : {guild.member_count}\n<a:Casual_Crowe:853894751140446248> Emojis : {len(guild.emojis)}\n<a:Casual_Crowe:853894751140446248> Boosts & Tier : {guild.premium_subscription_count} / {guild.premium_tier}\n<a:Casual_Crowe:853894751140446248> Vanity URL : {vanity}\n<a:Casual_Crowe:853894751140446248> Text & Voice : <:text:843198832464625714> {len(guild.text_channels)} | <:voice:585783907673440266> {len(guild.voice_channels)}", color = self.bot.color)
+            em = discord.Embed(title=f"{guild.name} (`{guild.id}`)", description=f"The guild owner is `{guild.owner}`\n{desc}\n\nMembers : {guild.member_count}\nEmojis : {len(guild.emojis)}\nBoosts & Tier : {guild.premium_subscription_count} / {guild.premium_tier}\nVanity URL : {vanity}\nText & Voice : <:text:843198832464625714> {len(guild.text_channels)} | <:voice:585783907673440266> {len(guild.voice_channels)}", color = self.bot.color)
             em.set_thumbnail(url=guild.icon_url)
             if guild.banner_url:
                 em.set_image(url=guild.banner_url)
