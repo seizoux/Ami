@@ -191,19 +191,19 @@ class Admin(commands.Cog):
 
     @commands.command()
     @is_team()
-    async def update(self, ctx, * name):
+    async def update(self, ctx, *, name = 'update'):
         proc = await asyncio.create_subprocess_shell(
-            "git add . && git commit -m 'text here' && git push",
+            f"git add . && git commit -m '{name}' && git push",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE)
 
         stdout, stderr = await proc.communicate()
 
-        await ctx.reply(f'[{name!r} exited with {proc.returncode}]')
-        if stdout:
-            await ctx.reply(f'[stdout]\n{stdout.decode()}')
-        if stderr:
-            await ctx.reply(f'[stderr]\n{stderr.decode()}')
+        await ctx.send(embed=discord.Embed(
+            description = f"```py\n{stdout.decode()}\n\n{stderr.decode()}\n\nExited with {proc.returncode}\n```",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        ).set_author(name=f"Spooky skeleton {str(ctx.author)}!"))
 
     @commands.command(
         help="Take a screenshot of the page on the given url.", aliases=["ss"]
