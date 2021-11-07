@@ -12,12 +12,6 @@ class Websocket(commands.Cog):
         
         self.bot.loop.create_task(self.connect_ws())
 
-    async def send_and_retreive(self, json_data: dict, websocket = None):
-        if websocket:
-            await websocket.send_json(json_data)
-        else:
-            await self.bot.ws.send_json(json_data)
-
     async def connect_ws(self):
         """
         Connect to the client websocket to send data and open
