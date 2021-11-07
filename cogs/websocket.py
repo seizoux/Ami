@@ -3,6 +3,7 @@ import discord
 import random
 import aiohttp
 import logging
+import asyncio
 
 log = logging.getLogger("discord")
 
@@ -16,6 +17,13 @@ class Websocket(commands.Cog):
         else:
             self.bot.loop.create_task(self.connect_ws())
 
+    def cog_unload(self):
+        del self.bot.web_ws
+
+    async def handshake_handler_start(self):
+        await self.bot.web_ws.send_json({'text': 'ping'})
+        await asyncio.sleep(30)
+
     async def connect_ws(self):
         """
         Connect to the client websocket to send data and open
@@ -27,6 +35,7 @@ class Websocket(commands.Cog):
         log.info("Websocket Connected")
 
         while self.bot.web_ws.closed != True:
+            self.bot.loop.create_task(self.handshake_handler_start())
             log.info("Started receiving...")
             msg = await self.bot.web_ws.receive()
 
