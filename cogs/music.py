@@ -1380,11 +1380,13 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                     f"<:4430checkmark:848857812632076314> | Reached {len(player.loop_votes)}/{required} votes to loop. Looping player."
                 )
                 player.loop_votes.clear()
+                player.looped = True
             else:
                 await ctx.send(
                     f"<:4430checkmark:848857812632076314> | Reached {len(player.loop_votes)}/{required} votes to unloop. Unlooping player."
                 )
                 player.loop_votes.clear()
+                player.looped = False
         else:
             if not player.looped:
                 await ctx.send(

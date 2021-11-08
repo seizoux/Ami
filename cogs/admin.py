@@ -1,6 +1,6 @@
 import discord, os
 from discord.errors import NotFound
-from discord.ext import commands
+from discord.ext import commands, tasks
 from urllib.request import urlretrieve
 import time
 from jishaku.paginators import WrappedPaginator, PaginatorInterface
@@ -41,7 +41,7 @@ class Admin(commands.Cog):
         self.api = statcord.Client(self.bot,self.key)
         self.final = None
         self.api.start_loop()
-
+        self.guilds_task.start()
 
     async def get_url(
         self,
@@ -188,6 +188,19 @@ class Admin(commands.Cog):
     @commands.Cog.listener()
     async def on_command(self,ctx):
         self.api.command_run(ctx)
+
+    @tasks.loop(hours=24)
+    async def guilds_task(self):
+        db = await self.bot.db.fetch("SELECT * FROM guilds ORDER BY date DESC LIMIT 7")
+        if not db:
+            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3)", datetime.datetime.utcnow(), len(self.bot.guilds), 'N/A', sum([g.member_count for g in self.bot.guilds]))
+
+        if len(db) != 7:
+            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3)", datetime.datetime.utcnow(), len(self.bot.guilds), f"+ {len(self.bot.guilds) - db[len(db)-1]}" if (len(self.bot.guilds) - db[len(db)-1]) >= 0 else f"- {len(self.bot.guilds) - db[len(db)-1]}", sum([g.member_count for g in self.bot.guilds]))
+        else:
+            d = db[6]['date']
+            await self.bot.db.execute("DELETE FROM guilds WHERE date = $1", d)
+            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3)", datetime.datetime.utcnow(), len(self.bot.guilds), f"+ {len(self.bot.guilds) - db[len(db)-1]}" if (len(self.bot.guilds) - db[len(db)-1]) >= 0 else f"- {len(self.bot.guilds) - db[len(db)-1]}", sum([g.member_count for g in self.bot.guilds]))
 
     @commands.command()
     @is_team()
