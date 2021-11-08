@@ -189,18 +189,18 @@ class Admin(commands.Cog):
     async def on_command(self,ctx):
         self.api.command_run(ctx)
 
-    @tasks.loop(hours=24)
+    @tasks.loop(hours=6)
     async def guilds_task(self):
-        db = await self.bot.db.fetch("SELECT * FROM guilds ORDER BY date DESC LIMIT 7")
+        db = await self.bot.db.fetch("SELECT * FROM guilds ORDER BY date DESC LIMIT 8")
         if not db:
-            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3)", datetime.datetime.utcnow(), len(self.bot.guilds), 'N/A', sum([g.member_count for g in self.bot.guilds]))
+            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3, $4)", datetime.datetime.utcnow(), len(self.bot.guilds), 'N/A', sum([g.member_count for g in self.bot.guilds]))
 
         if len(db) != 7:
-            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3)", datetime.datetime.utcnow(), len(self.bot.guilds), f"+ {len(self.bot.guilds) - db[len(db)-1]}" if (len(self.bot.guilds) - db[len(db)-1]) >= 0 else f"- {len(self.bot.guilds) - db[len(db)-1]}", sum([g.member_count for g in self.bot.guilds]))
+            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3, $4)", datetime.datetime.utcnow(), len(self.bot.guilds), f"+ {len(self.bot.guilds) - db[len(db)-1]['guilds']}" if (len(self.bot.guilds) - db[len(db)-1]['guilds']) >= 0 else f"- {len(self.bot.guilds) - db[len(db)-1]['guilds']}", sum([g.member_count for g in self.bot.guilds]))
         else:
             d = db[6]['date']
             await self.bot.db.execute("DELETE FROM guilds WHERE date = $1", d)
-            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3)", datetime.datetime.utcnow(), len(self.bot.guilds), f"+ {len(self.bot.guilds) - db[len(db)-1]}" if (len(self.bot.guilds) - db[len(db)-1]) >= 0 else f"- {len(self.bot.guilds) - db[len(db)-1]}", sum([g.member_count for g in self.bot.guilds]))
+            return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3, $4)", datetime.datetime.utcnow(), len(self.bot.guilds), f"+ {len(self.bot.guilds) - db[len(db)-1]['guilds']}" if (len(self.bot.guilds) - db[len(db)-1]['guilds']) >= 0 else f"- {len(self.bot.guilds) - db[len(db)-1]['guilds']}", sum([g.member_count for g in self.bot.guilds]))
 
     @commands.command()
     @is_team()

@@ -279,11 +279,11 @@ class IpcRoutes(commands.Cog):
             else:
                 guilds[nam]['badge'] = 0
 
-        graph_data = await self.bot.db.fetch("SELECT * FROM guilds ORDER BY date DESC LIMIT 7")
+        graph_data = await self.bot.db.fetch("SELECT * FROM guilds ORDER BY date ASC LIMIT 10")
 
         graph = {}
         for i in graph_data:
-            converted_date = i['date'].strftime('%m/%d/%Y')
+            converted_date = i['date'].strftime('%m/%d/%Y %H:%M:%S %p')
             graph[converted_date] = {'guilds': i['guilds'], 'stat': i['stat'], 'users': i['users']}
 
         return {"guilds": len(self.bot.guilds), "users": sum([g.member_count for g in self.bot.guilds]), "players": len(self.bot.wavelink.players), "commands": humanize.intcomma(self.bot.command_counter), "uptime": final_date, "shards": shards, "usage": ram_usage, "topguilds": guilds, "graph_data": graph}

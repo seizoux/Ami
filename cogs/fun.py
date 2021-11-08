@@ -111,24 +111,6 @@ class Fun(commands.Cog):
             )
         return await ctx.send(f"{ctx.author.mention} the text must be only letters.")
 
-    @commands.command()
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def caption(self, ctx, member: discord.Member = None):
-        if member is None:
-            member = ctx.author
-
-        url = f"{member.avatar_url}"
-        async with self.session as session:
-            res = await session.post(
-                "https://captionbot.azurewebsites.net/api/messages",
-                json={"Content": url, "Type": "CaptionRequest"},
-                headers={"Content-Type": "application/json; charset=utf-8"},
-            )
-        text = await res.text()
-        em = discord.Embed(description=text, color=self.bot.color)
-        em.set_image(url=url)
-        await ctx.send(embed=em)
-
     @commands.command(
         help="Search a twitch stream directly with this command, see if it is in live, check followers and total views, and some other info!",
         aliases=["ttv", "tw"],
