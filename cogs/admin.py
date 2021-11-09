@@ -43,6 +43,9 @@ class Admin(commands.Cog):
         self.api.start_loop()
         self.guilds_task.start()
 
+    def cog_unload(self):
+        self.guilds_task.cancel()
+
     async def get_url(
         self,
         ctx: commands.Context,
