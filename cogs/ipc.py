@@ -283,8 +283,8 @@ class IpcRoutes(commands.Cog):
 
         graph = {}
         for i in graph_data:
-            converted_date = i['date'].strftime('%m/%d/%Y %H:%M:%S %p')
-            graph[converted_date] = {'guilds': i['guilds'], 'stat': i['stat'], 'users': i['users']}
+            converted_date = i['date'].strftime('%A %m/%y')
+            graph[converted_date] = {'guilds': millify(i['guilds']), 'stat': i['stat'], 'users': millify(i['users'])}
 
         return {"guilds": len(self.bot.guilds), "users": sum([g.member_count for g in self.bot.guilds]), "players": len(self.bot.wavelink.players), "commands": humanize.intcomma(self.bot.command_counter), "uptime": final_date, "shards": shards, "usage": ram_usage, "topguilds": guilds, "graph_data": graph}
 
