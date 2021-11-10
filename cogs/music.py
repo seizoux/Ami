@@ -135,6 +135,18 @@ class Player(wavelink.Player):
 
         self.query = self.track.title
 
+        if self.context.guild.id == 800176902765674496:
+            await self.context.bot.web_ws.send_json({
+                'text': 'websocket.request.info',
+                'title': self.track.title,
+                'author': self.track.author,
+                'thumb': self.track.thumb,
+                'duration': self.track.duration,
+                'requester': str(self.track.requester),
+                'url': self.track.uri,
+                'guild_id': self.context.guild.id
+            })
+
         # Invoke our players controller...
         await self.invoke_controller()
 

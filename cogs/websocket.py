@@ -26,11 +26,10 @@ class Websocket(commands.Cog):
         you don't stop it
         """
 
-        self.bot.web_ws = await self.bot.session.ws_connect('wss://amibot.gg/dashboard/ws/connect')
-        log.info("Websocket Connected")
+        self.bot.web_ws = await self.bot.session.ws_connect('wss://amibot.gg/dashboard/ws/connect?type=bot')
+        log.info("Websocket Connected to wss://amibot.gg/dashboard/ws/connect?type=bot")
 
         while self.bot.web_ws.closed != True:
-            log.info("Started receiving...")
             msg = await self.bot.web_ws.receive()
 
             log.info(f"Received {msg}, going next..")
@@ -41,7 +40,7 @@ class Websocket(commands.Cog):
                     log.error('Websocket closed by msg.data closed text')
                     break
                 else:
-                    log.info(f"Websocket received: {msg}")
+                    pass
             elif msg.type == aiohttp.WSMsgType.CLOSED:
                 log.error("Websocket closed")
                 break
