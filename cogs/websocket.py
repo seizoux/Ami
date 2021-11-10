@@ -26,7 +26,7 @@ class Websocket(commands.Cog):
         you don't stop it
         """
 
-        self.bot.web_ws = await self.bot.session.ws_connect('wss://amibot.gg/dashboard/ws/playing')
+        self.bot.web_ws = await self.bot.session.ws_connect('wss://amibot.gg/dashboard/ws/connect')
         log.info("Websocket Connected")
 
         while self.bot.web_ws.closed != True:
