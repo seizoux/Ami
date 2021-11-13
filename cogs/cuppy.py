@@ -2079,10 +2079,11 @@ class Cuppy(commands.Cog):
                 f"{ctx.author.mention} {emoji} **{item.title()}** is not an usable item."
             )
 
-        if amount > data[0][f"{item.lower()}"] and amount != "all":
-            return await ctx.send(
-                f"{ctx.author.mention} you have {emoji} **{data[0][f'{item.lower()}']}x {item.title()}**, buy some others to can use them."
-            )
+        if amount != 'all':
+            if amount > data[0][f"{item.lower()}"]:
+                return await ctx.send(
+                    f"{ctx.author.mention} you have {emoji} **{data[0][f'{item.lower()}']}x {item.title()}**, buy some others to can use them."
+                )
 
         await self.bot.db.execute(
             f"UPDATE cuppy SET {item.lower()} = $1, {item.lower()}_uses = $2 WHERE user_id = $3",

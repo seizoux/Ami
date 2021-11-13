@@ -140,10 +140,12 @@ class Player(wavelink.Player):
                 'text': 'websocket.request.info',
                 'title': self.track.title,
                 'author': self.track.author,
-                'thumb': self.track.thumb,
-                'duration': self.track.duration,
+                'thumb': self.track.thumb if self.track.thumb else 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Antu_spotify.svg/1200px-Antu_spotify.svg.png',
+                'duration': int(self.track.duration),
+                'current': 1000,
                 'requester': str(self.track.requester),
                 'url': self.track.uri,
+                'queue': [{"track": track.title, "thumb": track.thumb if track.thumb else 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Antu_spotify.svg/1200px-Antu_spotify.svg.png', "author": track.author, "url": track.uri, "requester": str(track.requester), "duration": convertMillis(int(track.length))} for track in self.queue._queue],
                 'guild_id': self.context.guild.id
             })
 

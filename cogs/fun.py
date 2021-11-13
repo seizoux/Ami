@@ -24,9 +24,84 @@ import util.config as config
 from spongebobcase import tospongebob
 import re
 from util.defs import is_team, premium
+import asyncpg
+import typing
 
 kitsu_client = kitsu.Client()
 twitch = TwitchClient(client_id=config.TWITCH_CLIENT)
+
+class Clock:
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot 
+        self.endtime: typing.Optional[datetime.datetime] = None
+        self.id: typing.Optional[int] = None
+        self.channel: typing.Optional[int] = None
+        self.user: discord.Member = None
+        self.message: typing.Optional[str] = None
+        self.message_link: typing.Optional[str] = None
+        self._task: typing.Optional[asyncio.Task] = None
+        self.bot.loop.create_task(self.update())
+
+    async def get_closest_reminder(self) -> asyncpg.Record:
+        return await self.bot.db.fetchrow("SELECT * FROM reminds ORDER BY endtime ASC LIMIT 1")
+
+    async def create(self, reminder: str, channel_id: int, message_id: int, user_id: int, endtime: datetime.datetime, message_link: str) -> int:
+
+        id = await self.bot.db.fetchval("INSERT INTO reminds (channel_id, message_id, user_id, reminder, endtime, message_link) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", channel_id, message_id, user_id, reminder, endtime, message_link)
+        if (not self._task or self._task.done()) or endtime < self.endtime:
+            if self._task and not self._task.done():
+                self._task.cancel()
+
+            self._task = self.bot.loop.create_task(self.end_timer())
+
+            self.endtime = endtime
+            self.id = id
+            self.channel = channel_id
+            self.user = self.bot.get_user(user_id) or (await self.bot.fetch_user(user_id))
+            self.message = reminder
+            self.message_link = message_link
+        return id
+
+    async def update(self):
+        reminder = await self.get_closest_reminder()
+        if not reminder:
+            return
+        if not self._task or self._task.done(): # if the task is done or no task exists we just create the task
+            self._task = self.bot.loop.create_task(self.end_timer())
+
+            self.endtime = reminder["endtime"] # store the endtime
+            self.id = reminder["id"] # store the id
+            self.channel = reminder['channel_id']
+            self.message = reminder['reminder']
+            self.user = self.bot.get_user(reminder['user_id']) or (await self.bot.fetch_user(reminder['user_id']))
+            self.message_link = reminder['message_link']
+            return
+
+        if reminder["endtime"] < self.endtime: # Otherwise, if the reminder ends sooner then the current closest endtime
+            self._task.cancel() # cancel the task
+            self._task = self.bot.loop.create_task(self.end_timer())
+            
+            self.endtime = reminder["endtime"] # store the endtime
+            self.id = reminder["id"] # store the id
+            self.channel = reminder['channel_id'] # store the channel id
+            self.message = reminder['reminder']
+            self.user = self.bot.get_user(reminder['user_id']) or (await self.bot.fetch_user(reminder['user_id']))
+            self.message_link = reminder['message_link']
+
+    async def end_timer(self):
+        await discord.utils.sleep_until(self.endtime) # sleeping until the endtime
+
+        chan = await self.bot.get_channel(self.channel)
+        await chan.send(
+            f"{self.user.mention}, <t:{int((self.endtime - datetime.datetime.utcnow()).timestamp())}:R>: {self.message}\n{self.message_link}"
+        )
+
+        await self.bot.db.execute("DELETE FROM reminds WHERE id = $1", id) # remove from database
+
+        self.bot.loop.create_task(self.update()) # re update
+
+    def stop(self):
+        self._task.cancel()
 
 class Fun(commands.Cog):
     def __init__(self, bot):
@@ -35,6 +110,7 @@ class Fun(commands.Cog):
         self.languages = {}
         self.category = "Fun"
         self.session = aiohttp.ClientSession()
+        self.clock = Clock(bot) # create our timer stuff
         bot.loop.create_task(self.cache_langs())
         bot.loop.create_task(self.cache_afks())
 
@@ -54,6 +130,14 @@ class Fun(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Fun Loaded")
+
+    @commands.command()
+    @is_team()
+    async def remind(self, ctx, when: int, reminder):
+        time = datetime.datetime.utcnow() + datetime.timedelta(seconds=when)
+        id = await self.clock.create(reminder, ctx.channel.id, ctx.message.id, ctx.author.id, time, ctx.message.jump_url)
+
+        return await ctx.reply(f"Alright {ctx.author.mention}, in <t:{int(time.timestamp())}:R>: {reminder}")
 
     @commands.command(help="Solve the math problem in the prestablished time", aliases=["sm"])
     @commands.max_concurrency(1, commands.BucketType.channel)
@@ -316,80 +400,6 @@ class Fun(commands.Cog):
 
         await ctx.send(file=discord.File(f"{f}.mp3"))
         return os.remove(f"{f}.mp3")
-
-    @commands.command(
-        help="Set a custom reminder, and get pinged when it's time!\nExample usage: **ami remind 1s hi** - 1s = <time>, 'hi' = [message]\nYou can't delete a reminder set."
-    )
-    async def remind(self, ctx, time, *, message=None):
-        if message == None:
-            message = ". . ."
-
-        if message == "@everyone":
-            message = ". . ."
-
-        if message == "@here":
-            message = ". . ."
-
-        def convert(time):
-            pos = ["s", "m", "h", "d"]
-
-            time_dict = {"s": 1, "m": 60, "h": 3600, "d": 3600 * 24}
-
-            unit = time[-1]
-
-            if unit not in pos:
-                return -1
-            try:
-                val = int(time[:-1])
-            except:
-                return -2
-
-            return val * time_dict[unit]
-
-        converted_time = convert(time)
-
-        if converted_time == -1:
-            return await ctx.reply(
-                "Time unit not valid, valid units are: `s`, `m`, `h`, `d`."
-            )
-
-        if converted_time == -2:
-            return await ctx.reply("Time not valid.")
-
-        time_format = ""
-        ttt = time[-1]
-        abc = time[:-1]
-        if ttt == "s":
-            if int(abc) <= 1:
-                time_format = "second"
-            else:
-                time_format = "seconds"
-        elif ttt == "m":
-            if int(abc) <= 1:
-                time_format = "minute"
-            else:
-                time_format = "minutes"
-        elif ttt == "h":
-            if int(abc) <= 1:
-                time_format = "hour"
-            else:
-                time_format = "hours"
-        elif ttt == "d":
-            if int(abc) <= 1:
-                time_format = "day"
-            else:
-                time_format = "days"
-
-        final_time = f"{time[:-1]} " + time_format
-
-        await ctx.reply(f"Alright {ctx.author.mention}, in {final_time}: {message}")
-        date_time = datetime.datetime.utcnow() + datetime.timedelta(
-            seconds=converted_time
-        )
-        await discord.utils.sleep_until(date_time)
-        await ctx.send(
-            f"{ctx.author.mention}, {final_time} ago: {message}\n{ctx.message.jump_url}"
-        )
 
     @commands.group(
         help="Start a simple counting game in the channel where you use this command! There is different modes of counting, check subcommands for more!",
