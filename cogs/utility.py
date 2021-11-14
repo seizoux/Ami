@@ -19,6 +19,10 @@ import googletrans
 from twemoji_parser import emoji_to_url
 import aiofiles
 import os
+import asyncpg
+import logging
+
+log = logging.getLogger('discord')
 
 MAX_FILE_SIZE = 15000000
 MAX_INDEX = 1000
@@ -34,6 +38,124 @@ Image_Union = typing.Union[
 class InvalidImage(Exception):
     pass
 
+class Clock:
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot 
+        self.endtime: typing.Optional[datetime.datetime] = None
+        self.display_time: typing.Optional[datetime.datetime] = None
+        self.id: typing.Optional[int] = None
+        self.channel: typing.Optional[int] = None
+        self.user: discord.Member = None
+        self.message: typing.Optional[str] = None
+        self.message_link: typing.Optional[str] = None
+        self._task: typing.Optional[asyncio.Task] = None
+        self.bot.loop.create_task(self.update())
+
+    async def get_closest_reminder(self) -> asyncpg.Record:
+        return await self.bot.db.fetchrow("SELECT * FROM reminds ORDER BY endtime ASC LIMIT 1")
+
+    async def create(self, reminder: str, channel_id: int, message_id: int, user_id: int, display_time: datetime.datetime, endtime: datetime.datetime, message_link: str) -> int:
+
+        id = await self.bot.db.fetchval("INSERT INTO reminds (channel_id, message_id, user_id, reminder, endtime, message_link) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", channel_id, message_id, user_id, reminder, endtime, message_link)
+        if (not self._task or self._task.done()) or endtime < self.endtime:
+            if self._task and not self._task.done():
+                log.error(f"Task {self._task} canceled.")
+                self._task.cancel()
+
+            self.endtime = endtime
+            self.id = id
+            self.channel = channel_id
+            self.user = self.bot.get_user(user_id) or (await self.bot.fetch_user(user_id))
+            self.message = reminder
+            self.message_link = message_link
+            self.display_time = display_time
+
+            self._task = self.bot.loop.create_task(self.end_timer(
+                self.id,
+                self.channel,
+                self.user,
+                self.display_time,
+                self.endtime,
+                self.message,
+                self.message_link
+            ))
+            log.info(f"Created task {self._task}")
+
+        return id
+
+    async def update(self):
+        reminder = await self.get_closest_reminder()
+        if not reminder:
+            return
+        if not self._task or self._task.done(): # if the task is done or no task exists we just create the task
+
+            self.endtime = reminder["endtime"] # store the endtime
+            self.id = reminder["id"] # store the id
+            self.channel = reminder['channel_id']
+            self.message = reminder['reminder']
+            self.user = self.bot.get_user(reminder['user_id']) or (await self.bot.fetch_user(reminder['user_id']))
+            self.message_link = reminder['message_link']
+
+            self._task = self.bot.loop.create_task(self.end_timer(
+                self.id,
+                self.channel,
+                self.user,
+                self.display_time,
+                self.endtime,
+                self.message,
+                self.message_link
+            ))
+
+            log.info(f"Created task {self._task}")
+            return
+
+        if reminder["endtime"] < self.endtime: # Otherwise, if the reminder ends sooner then the current closest endtime
+            self._task.cancel() # cancel the task
+            
+            self.endtime = reminder["endtime"] # store the endtime
+            self.id = reminder["id"] # store the id
+            self.channel = reminder['channel_id'] # store the channel id
+            self.message = reminder['reminder']
+            self.user = self.bot.get_user(reminder['user_id']) or (await self.bot.fetch_user(reminder['user_id']))
+            self.message_link = reminder['message_link']
+
+            self._task = self.bot.loop.create_task(self.end_timer(
+                self.id,
+                self.channel,
+                self.user,
+                self.display_time,
+                self.endtime,
+                self.message,
+                self.message_link
+            ))
+            log.info(f"Created task {self._task}")
+
+    async def end_timer(self, id: int, channel: int, user: discord.Member, display_time: datetime.datetime, time: datetime.datetime, message: str, link: str):
+        try:
+            log.info(f"Invoked end_timer for sleeping for {time}")
+            
+            await discord.utils.sleep_until(time) # sleeping until the endtime
+
+            log.info(f"Sleep done for channel {channel}, user {user}, time {time}")
+
+            try:
+                chan = self.bot.get_channel(channel)
+                await chan.send(
+                    f"{user.mention}, <t:{int(datetime.datetime.fromisoformat(str(display_time)).timestamp())}:R>: {message}\n{link}"
+                )
+                log.info("Channel send invoked")
+            except Exception as e:
+                log.error(f"Exception in end_timer: {e}")
+
+            await self.bot.db.execute("DELETE FROM reminds WHERE id = $1", id) # remove from database
+
+            self.bot.loop.create_task(self.update()) # re update
+        except Exception as e:
+            log.error(f"Error in end_timer: {e}")
+
+    def stop(self):
+        self._task.cancel()
+
 class Utility(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -41,6 +163,7 @@ class Utility(commands.Cog):
         self.session = aiohttp.ClientSession()
         self.bot.commandsusages = Counter()
         self.trans = googletrans.Translator()
+        self.clock = Clock(bot) # create our timer stuff
 
         if not hasattr(bot, "command_counter"):
             bot.command_counter = 0
@@ -159,6 +282,70 @@ class Utility(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Utility Loaded")
+
+    @commands.command(help="Tell me to remind you something in x time.\n"
+                            "<when> parameter can be something like 1s (1 seconds) or some"
+                            "more readable format, like 'in a week'.\n\nIf you use"
+                            "readable formats, be sure to include them within quotes, e.g: `ami remind \"in a week\" buy new computer.\n\n"
+                            "Else just provide a normal time, valid formats are s,m,h,d,mo,y (seconds, minutes, hours, days, months, years), e.g: ami remind 10m restart discord")
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def remind(self, ctx, when, reminder):
+
+        suffixs = {
+            "s": 1,
+            "m": 60,
+            "h": 3600,
+            "d": 86400,
+            "mo": 2592000,
+            "y": 2592000*12
+        }
+
+        some_formats = {
+            'in a week': suffixs['d']*7,
+            'in a day': suffixs['d'],
+            'in a month': suffixs['mo'],
+            'in a few hours': suffixs['h']*2,
+            'in an hour': suffixs['h'],
+            'tomorrow': suffixs['d'],
+            'in half hour': suffixs['m']*30,
+            'in a year': suffixs['mo']*12,
+            'in a few weeks': suffixs['d']*14,
+            'in a few seconds': suffixs['s']*10
+        }
+
+        if not when[-1:] in suffixs:
+            return await ctx.send(f"{ctx.author.mention}, i can't understand the time you provided.")
+
+        if when[-1:] in suffixs and not when in some_formats:
+            if int(when[:-1]) > 2 and when[-1:] == 'y':
+                return await ctx.send(f"{ctx.author.mention} more than 2 years? I can't sorry.")
+            elif int(when[:-1]) > 12 and when[-1:] == 'mo':
+                return await ctx.send(f"{ctx.author.mention} more than 12 months? I can't sorry, use years instead.")
+            elif int(when[:-1]) > 31 and when[-1:] == 'd':
+                return await ctx.send(f"{ctx.author.mention} more than 31 days? I can't sorry, use months instead.")
+            elif int(when[:-1]) > 24 and when[-1:] == 'h':
+                return await ctx.send(f"{ctx.author.mention} more than 24 hours? I can't sorry, use days instead.")
+            elif int(when[:-1]) > 60 and when[-1:] == 'm':
+                return await ctx.send(f"{ctx.author.mention} more than 60 minutes? I can't sorry, use hours instead.")
+            elif int(when[:-1]) > 60 and when[-1:] == 's':
+                return await ctx.send(f"{ctx.author.mention} more than 60 seconds? I can't sorry, use minutes instead.")
+
+        parsed = suffixs[when[-1:]]
+
+        if when not in some_formats:
+            if not isinstance(when[:-1], int) or when[:-1] <= 0:
+                return await ctx.reply("Time can't be in past. Sorry.")
+
+        if when in some_formats:
+            final = some_formats[when]
+        else:
+            final = int((when[:-1] if when[-2:] != 'mo' else when[:-2]) * parsed)
+
+        time_display = datetime.datetime.now() + datetime.timedelta(seconds=final)
+        time = datetime.datetime.utcnow() + datetime.timedelta(seconds=final)
+        id = await self.clock.create(reminder, ctx.channel.id, ctx.message.id, ctx.author.id, time_display, time, ctx.message.jump_url)
+
+        return await ctx.reply(f"[{id}] Alright {ctx.author.mention}, <t:{int(time_display.timestamp())}:R>: {reminder}")
 
     @commands.command(help="Show the uptime of the bot since the last restart.")
     async def uptime(self, ctx):
