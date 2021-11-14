@@ -59,7 +59,6 @@ class Clock:
         id = await self.bot.db.fetchval("INSERT INTO reminds (channel_id, message_id, user_id, reminder, endtime, message_link) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", channel_id, message_id, user_id, reminder, endtime, message_link)
         if (not self._task or self._task.done()) or endtime < self.endtime:
             if self._task and not self._task.done():
-                log.error(f"Task {self._task} canceled.")
                 self._task.cancel()
 
             self.endtime = endtime
@@ -79,7 +78,6 @@ class Clock:
                 self.message,
                 self.message_link
             ))
-            log.info(f"Created task {self._task}")
 
         return id
 
@@ -106,7 +104,6 @@ class Clock:
                 self.message_link
             ))
 
-            log.info(f"Created task {self._task}")
             return
 
         if reminder["endtime"] < self.endtime: # Otherwise, if the reminder ends sooner then the current closest endtime
@@ -128,22 +125,16 @@ class Clock:
                 self.message,
                 self.message_link
             ))
-            log.info(f"Created task {self._task}")
 
     async def end_timer(self, id: int, channel: int, user: discord.Member, display_time: datetime.datetime, time: datetime.datetime, message: str, link: str):
         try:
-            log.info(f"Invoked end_timer for sleeping for {time}")
-            
             await discord.utils.sleep_until(time) # sleeping until the endtime
-
-            log.info(f"Sleep done for channel {channel}, user {user}, time {time}")
 
             try:
                 chan = self.bot.get_channel(channel)
                 await chan.send(
-                    f"{user.mention}, <t:{int(datetime.datetime.fromisoformat(str(display_time)).timestamp())}:R>: {message}\n{link}"
+                    f"{user.mention}, <t:{int(time.timestamp())}:F>: {message}\n{link}"
                 )
-                log.info("Channel send invoked")
             except Exception as e:
                 log.error(f"Exception in end_timer: {e}")
 
@@ -284,10 +275,10 @@ class Utility(commands.Cog):
         print(f"Utility Loaded")
 
     @commands.command(help="Tell me to remind you something in x time.\n"
-                            "<when> parameter can be something like 1s (1 seconds) or some"
-                            "more readable format, like 'in a week'.\n\nIf you use"
-                            "readable formats, be sure to include them within quotes, e.g: `ami remind \"in a week\" buy new computer.\n\n"
-                            "Else just provide a normal time, valid formats are s,m,h,d,mo,y (seconds, minutes, hours, days, months, years), e.g: ami remind 10m restart discord")
+                            "<when> parameter can be something like 1s (1 seconds) or some "
+                            "more readable format, like 'in a week'.\n\nIf you use "
+                            "readable formats, be sure to include them within quotes, e.g: `ami remind \"in a week\" buy new computer.`\n\n"
+                            "Else just provide a normal time, valid formats are s,m,h,d,mo,y (seconds, minutes, hours, days, months, years), e.g: `ami remind 10m restart discord`")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def remind(self, ctx, when, reminder):
 
@@ -333,16 +324,20 @@ class Utility(commands.Cog):
         parsed = suffixs[when[-1:]]
 
         if when not in some_formats:
-            if not isinstance(when[:-1], int) or when[:-1] <= 0:
+            if int(when[:-1]) <= 0:
                 return await ctx.reply("Time can't be in past. Sorry.")
 
         if when in some_formats:
             final = some_formats[when]
         else:
-            final = int((when[:-1] if when[-2:] != 'mo' else when[:-2]) * parsed)
+            if when[-2:] != 'mo':
+                c = int(when[:-1])
+            else:
+                c = int(when[-2:])
+            final = c*parsed
 
-        time_display = datetime.datetime.now() + datetime.timedelta(seconds=final)
-        time = datetime.datetime.utcnow() + datetime.timedelta(seconds=final)
+        time_display = datetime.datetime.now() + datetime.timedelta(seconds=int(final))
+        time = datetime.datetime.utcnow() + datetime.timedelta(seconds=int(final))
         id = await self.clock.create(reminder, ctx.channel.id, ctx.message.id, ctx.author.id, time_display, time, ctx.message.jump_url)
 
         return await ctx.reply(f"[{id}] Alright {ctx.author.mention}, <t:{int(time_display.timestamp())}:R>: {reminder}")
