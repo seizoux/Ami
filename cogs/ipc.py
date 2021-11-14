@@ -58,7 +58,7 @@ class IpcRoutes(commands.Cog):
                                 'github': 'https://github.com/Ali-TM-original',
                                 'discord': 'https://discord.com/users/410452466631442443',
                                 'email': None}},
-            343019667511574528: {'banner': None, 'status': "I’m just a Student", "position": "Banners Designer", "socials": 
+            343019667511574528: {'banner': None, 'status': "I’m just a Student", "position": "Designer & Developer", "socials": 
                                 {'twitter': "https://twitter.com/Mrdriveappst",
                                 'github': 'https://github.com/CnyAnime',
                                 'discord': 'https://discord.com/users/343019667511574528',
@@ -92,6 +92,11 @@ class IpcRoutes(commands.Cog):
                                 {'twitter': None,
                                 'github': "https://github.com/JeyyGit",
                                 'discord': 'https://discord.com/users/624026977191329803',
+                                'email': None}},
+            744316348078751914: {'banner': None, 'status': "...", "position": "Contributor", "socials": 
+                                {'twitter': None,
+                                'github': "https://github.com/DistortedPumpkin",
+                                'discord': "https://discord.com/users/744316348078751914",
                                 'email': None}},
         }
 
