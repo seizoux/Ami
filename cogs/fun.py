@@ -196,6 +196,20 @@ class Fun(commands.Cog):
 
         parsed = suffixs[when[-1:]]
 
+        some_formats = {
+            'in a week': suffixs['d']*7,
+            'in a day': suffixs['d'],
+            'in a month': suffixs['mo'],
+            'in a few hours': suffixs['h']*2,
+            'in an hour': suffixs['h'],
+            'tomorrow': suffixs['d'],
+            'in half hour': suffixs['m']*30,
+            'in a year': suffixs['mo']*12,
+            'in a few weeks': suffixs['d']*14,
+            
+        }
+
+
         final = int((when[:-1] if when[-1:] != 'mo' else when[:-2]) * parsed)
 
         time_display = datetime.datetime.now() + datetime.timedelta(seconds=final)
