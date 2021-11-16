@@ -19,10 +19,23 @@ import statcord
 import asyncio
 import traceback
 import time
+import selenium
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import io
 import re
+import multiprocessing.pool
+import functools
+
+def timeout(max_timeout):
+    def timeout_decorator(item):
+        @functools.wraps(item)
+        def func_wrapper(*args, **kwargs):
+            pool = multiprocessing.pool.ThreadPool(processes=1)
+            async_result = pool.apply_async(item, args, kwargs)
+            return async_result.get(max_timeout)
+        return func_wrapper
+    return timeout_decorator
 
 MAX_FILE_SIZE = 15000000
 
@@ -57,8 +70,13 @@ class Admin(commands.Cog):
     def cog_unload(self):
         self.guilds_task.cancel()
 
+    @timeout(30.0)
     def get_screenshot(self, url: str, sleeping: typing.Optional[int] = None):
-        self.bot.chrome.get(url)
+        try:
+            self.bot.chrome.get(url)
+        except Exception as e:
+            return f"{e}"
+
         self.bot.chrome.set_window_size(1920, 1080)
         if sleeping:
             time.sleep(sleeping)
@@ -215,6 +233,7 @@ class Admin(commands.Cog):
 
     @tasks.loop(minutes=30)
     async def guilds_task(self):
+        await self.bot.wait_until_ready()
         db = await self.bot.db.fetch("SELECT * FROM guilds ORDER BY date DESC LIMIT 8")
         if not db:
             return await self.bot.db.execute("INSERT INTO guilds (date, guilds, stat, users) VALUES ($1, $2, $3, $4)", datetime.datetime.utcnow(), len(self.bot.guilds), 'N/A', sum([g.member_count for g in self.bot.guilds]))
@@ -243,7 +262,7 @@ class Admin(commands.Cog):
         ).set_author(name=f"Spooky skeleton {str(ctx.author)}!", icon_url=ctx.author.avatar_url))
 
     @commands.command(
-        help="Take a screenshot of the page on the given url. Provide the `<delay>` parameter to wait x seconds before taking the screenshot.", aliases=["ss"]
+        help="Take a screenshot of the page on the given url. Provide the `[delay]` parameter to wait x seconds before taking the screenshot.", aliases=["ss"]
     )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def screenshot(self, ctx, url: str, delay: int = None):
@@ -265,16 +284,16 @@ class Admin(commands.Cog):
                 if c in r:
                     return await ctx.send(f"❌ This url has been detected as NSFW, I won't display it sorry.")
 
-        try:
-            async with self.bot.session.get(url) as resp:
-                r = (await resp.text()).splitlines()
-                if any(i.lower() in r for i in ['ip', 'ip address', 'address', 'adress', 'ip']):
-                    return await ctx.send(f"❌ This url seems to contain some sensitive info, I won't show it sorry.")
-        except Exception as e:
-            return await ctx.send(f"❌ An error occurred: {e}")
-
         await ctx.message.add_reaction("<a:loading:858048655051587645>")
-        f = await self.bot.loop.run_in_executor(None, self.get_screenshot, url, delay)
+        try:
+            f = await self.bot.loop.run_in_executor(None, self.get_screenshot, url, delay)
+        except multiprocessing.context.TimeoutError:
+            await ctx.message.delete()
+            return await ctx.send("❌ The page seems to be unresponsive, aborting.")
+
+        if type(f) is str:
+            return await ctx.send(f"❌ {f}")
+
         file=discord.File(f, filename='screenshot.png')
 
         embed = discord.Embed(
@@ -284,6 +303,7 @@ class Admin(commands.Cog):
         embed.set_image(url='attachment://screenshot.png')
 
         await ctx.send(file=file, embed=embed)
+        await ctx.message.remove_reaction("<a:loading:858048655051587645>", ctx.guild.me)
         await ctx.message.add_reaction("<a:check_1:877602001620443156>")
 
     @commands.group(

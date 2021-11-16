@@ -127,7 +127,10 @@ class Player(wavelink.Player):
             return await self.teardown()
             
         if self.track.id == "spotify": 
-            await self.play(spotify_track[0])
+            try:
+                await self.play(spotify_track[0])
+            except Exception:
+                pass
             self.waiting = False
         else:
             self.waiting = False

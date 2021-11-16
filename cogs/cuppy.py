@@ -76,16 +76,16 @@ class XpRoom:
         farm current level.
         """
         facts = {
-            1: list(range(1000, 4500)),
-            2: list(range(1500, 6500)),
-            3: list(range(2000, 8500)),
-            4: list(range(2500, 10500)),
-            5: list(range(3000, 12500)),
-            6: list(range(3500, 14500)),
-            7: list(range(4000, 16500)),
-            8: list(range(4500, 18500)),
-            9: list(range(5000, 20500)),
-            10: list(range(6000, 23000)),
+            1: list(range(1000, 3500)),
+            2: list(range(3000, 7500)),
+            3: list(range(5000, 16500)),
+            4: list(range(7000, 22500)),
+            5: list(range(9000, 28500)),
+            6: list(range(11000, 34500)),
+            7: list(range(13000, 40500)),
+            8: list(range(15000, 46000)),
+            9: list(range(17000, 52500)),
+            10: list(range(20000, 60000)),
         }
 
         return facts[farm_level]
@@ -1257,7 +1257,7 @@ class Team:
             vf = 3500
 
         for i in range(1, level):
-            vf += 750
+            vf += 2370
 
         return vf
 

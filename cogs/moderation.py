@@ -805,7 +805,7 @@ class Moderation(commands.Cog):
 
             data = await resp.json()
 
-            scam_type = data["matches"]["type"]
+            scam_type = data[0]["matches"]["type"]
         
             if message.guild.id not in self.warns:
                 self.warns[message.guild.id] = {}

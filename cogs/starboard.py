@@ -58,7 +58,7 @@ class Starboard(commands.Cog):
 
         lock = self.locks.get(guild.id)
         if lock is None:
-            self.locks[guild.id] = lock = asyncio.Lock(loop=self.bot.loop)
+            self.locks[guild.id] = lock = asyncio.Lock()
 
         async with lock:
             data = await self.bot.db.fetchrow('SELECT * FROM starboards WHERE message_id = $1', message.id)
@@ -90,11 +90,41 @@ class Starboard(commands.Cog):
     async def on_ready(self):
         print("Starboard loaded")
 
-    @commands.command()
-    @is_team()
-    async def starboard_setup(self, ctx, channel: discord.TextChannel):
+    @commands.group(help="Starboard commands, to manage the stardboard in the current guild", aliases=['star'])
+    async def starboard(self, ctx):
+        if not ctx.invoked_subcommand:
+            data = await self.bot.db.fetch("SELECT * FROM starboards_settings WHERE guild_id = $1", ctx.guild.id)
+            if not data:
+                return await ctx.reply("❌ This guild has not a starboard channel.")
+
+            ch = ctx.guild.get_channel(data[0]['channel_id'])
+            if not ch:
+                return await ctx.reply(f"❌ The starboard channel for this guild is unavailable")
+
+            await ctx.reply(f"⭐ {ch.mention}")
+
+    @starboard.command(help="Set the starboard channel for the guild. If already one is set, it'll be overriden by the new one.")
+    async def set(self, ctx, channel: discord.TextChannel):
         await self.bot.db.execute("INSERT INTO starboards_settings (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2", ctx.guild.id, channel.id)
-        await ctx.reply(f"Ok, starboard set for {channel.mention}")
+        await ctx.reply(f"Alright, {channel.mention} has been set as starboard channel for this guild.")
+
+    @starboard.command(help="Disable the starboard for the guild and deletes the starboard channel if permissions available.")
+    async def delete(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM starboards_settings WHERE guild_id = $1", ctx.guild.id)
+        if not data:
+            return await ctx.reply("❌ This guild has not a starboard channel yet.")
+
+        ch = ctx.guild.get_channel(data[0]['channel_id'])
+        if not ch:
+            return await ctx.reply(f"❌ Starboard channel {data[0]['channel_id']} not found in the guild.")
+
+        await self.bot.db.fetch("DELETE FROM starboards WHERE star_channel_id = $1", ch.id)
+        await self.bot.db.execute("DELETE FROM starboards_settings WHERE guild_id = $1", ctx.guild.id)
+
+        if ctx.me.guild_permissions.manage_channels:
+            await ch.delete()
+
+        await ctx.reply("All the starboard settings for this guild has been deleted.")
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
@@ -107,7 +137,7 @@ class Starboard(commands.Cog):
         chan = self.bot.get_channel(payload.channel_id)
 
         message = await chan.fetch_message(payload.message_id)
-        if message.reactions[0].emoji == '⭐' and message.reactions[0].count >= 1:
+        if message.reactions[0].emoji == '⭐' and message.reactions[0].count >= 4:
             starboard = await self.get_starboard(payload)
 
             if starboard is False:

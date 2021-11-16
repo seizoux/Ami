@@ -846,7 +846,14 @@ class Fun(commands.Cog):
                 author_id = str(mex.author.id)
                 await mex.add_reaction("<:4430checkmark:848857812632076314>")
             else:
-                await mex.delete()
+                try:
+                    if mex in self.bot.cached_messages:
+                        await mex.delete()
+                    else:
+                        self.bot.cached_messages.append(mex)
+                        await mex.delete()
+                except Exception:
+                    pass
 
     @commands.command(
         help="Set your AFK mode globally (it means only where i can see you).\nAFK is a modality where when you are in, if someone pings you, ami will advice who pinged you, you are afk for `[reason]`.\nOtherwise, when you send a message in a channel / guild where i can see your messages, your afk mode will be deleted."

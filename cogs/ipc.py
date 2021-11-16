@@ -116,7 +116,7 @@ class IpcRoutes(commands.Cog):
         c = {}
 
         for cog in self.bot.cogs.values():
-            if cog.__cog_name__ in ["Jishaku", "IpcRoutes", "Admin", "Chunk", "Handler", "TopGG", "Games", "RTFM", "Help", "Websocket", "Starboard"]:
+            if cog.__cog_name__ in ["Jishaku", "IpcRoutes", "Admin", "Chunk", "Handler", "TopGG", "Games", "RTFM", "Help", "Websocket"]:
                 continue
             
             c[cog.__cog_name__] = []
