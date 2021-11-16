@@ -10,6 +10,7 @@ import typing
 from captcha.image import ImageCaptcha
 from io import BytesIO
 import os
+from millify import millify
 
 from aiohttp import ClientSession
 from PIL import Image, ImageDraw, ImageFont
@@ -18,6 +19,10 @@ from discord import Color, File
 
 class XpRoom:
     def parse_upgrade(upgrade_type: str, upgrade_level: int):
+        """
+        Parse the cost upgrade for xpr stats based on
+        upgrade type and current level + 1, basic implementation.
+        """
         vfc = {
             "cost": {
                 2: 3000,
@@ -57,27 +62,38 @@ class XpRoom:
         return vfc[upgrade_type][upgrade_level]
 
     def time_parser(duration_level: int):
+        """
+        Parse the time that the xpr can run for the
+        current level.
+        """
         calcs = {1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 10: 11, 11: 12}
 
         return calcs[duration_level]
 
     def farm_parser(farm_level: int):
+        """
+        Returns a list(range()) object based on the
+        farm current level.
+        """
         facts = {
-            1: random.randint(1000, 4500),
-            2: random.randint(1500, 6500),
-            3: random.randint(2000, 8500),
-            4: random.randint(2500, 10500),
-            5: random.randint(3000, 12500),
-            6: random.randint(3500, 14500),
-            7: random.randint(4000, 16500),
-            8: random.randint(4500, 18500),
-            9: random.randint(5000, 20500),
-            10: random.randint(5500, 22500),
+            1: list(range(1000, 4500)),
+            2: list(range(1500, 6500)),
+            3: list(range(2000, 8500)),
+            4: list(range(2500, 10500)),
+            5: list(range(3000, 12500)),
+            6: list(range(3500, 14500)),
+            7: list(range(4000, 16500)),
+            8: list(range(4500, 18500)),
+            9: list(range(5000, 20500)),
+            10: list(range(6000, 23000)),
         }
 
         return facts[farm_level]
 
     def cost_parser(cost_level: int, duration: int):
+        """
+        Cost parser for xpr, basic implementation.
+        """
         base_cost = 1550
         return int((base_cost / cost_level) * (XpRoom.time_parser(duration) * 10) / 10)
 
@@ -2263,7 +2279,7 @@ class Cuppy(commands.Cog):
                 value=f"<:alert_pink:867758260707000380>`Level {data[0]['xp_room_cost_level']} / 10`\n{cost_upgrade}",
             )
             .add_field(
-                name=f"⚙ Farm | `*{humanize.intcomma(XpRoom.farm_parser(data[0]['xp_room_farm_level']))} EXP`",
+                name=f"⚙ Farm | `{millify(XpRoom.farm_parser(data[0]['xp_room_farm_level'])[0])} - {millify(XpRoom.farm_parser(data[0]['xp_room_farm_level'])[len(XpRoom.farm_parser(data[0]['xp_room_farm_level']))-1])} EXP`",
                 value=f"<:alert_pink:867758260707000380>`Level {data[0]['xp_room_farm_level']} / 10`\n{farm_upgrade}",
             )
             .add_field(
@@ -2272,7 +2288,7 @@ class Cuppy(commands.Cog):
             )
             .add_field(
                 name=f"<:cupcake:845632403405012992> You currently have {humanize.intcomma(data[0]['balance'])} Cupcakes!",
-                value=f"`Your 🏹 XP-Farm can run for {XpRoom.time_parser(data[0]['xp_room_duration_level'])}H earning approximated {humanize.intcomma(XpRoom.farm_parser(data[0]['xp_room_farm_level']))} EXP at the cost of {humanize.intcomma(XpRoom.cost_parser(data[0]['xp_room_cost_level'], XpRoom.time_parser(xp_room_duration_level)))} Cupcakes!`",
+                value=f"`Your 🏹 XP-Farm can run for {XpRoom.time_parser(data[0]['xp_room_duration_level'])}H earning maximum {millify(XpRoom.farm_parser(data[0]['xp_room_farm_level'])[len(XpRoom.farm_parser(data[0]['xp_room_farm_level']))-1])} EXP at the cost of {humanize.intcomma(XpRoom.cost_parser(data[0]['xp_room_cost_level'], XpRoom.time_parser(xp_room_duration_level)))} Cupcakes!`",
             )
             .set_author(
                 name=f"{ctx.author.name}'s XP-Room Info",
@@ -2387,7 +2403,7 @@ class Cuppy(commands.Cog):
                 f"{ctx.author.mention} your 🏹 **XP-Room** is not ended yet, try again later."
             )
 
-        earns = XpRoom.farm_parser(data[0]["xp_room_farm_level"])
+        earns = random.choice(XpRoom.farm_parser(data[0]['xp_room_farm_level']))
 
         name = Team.name(data[0]["team_name"])
         emoji = Team.emoji(data[0]["team_name"])

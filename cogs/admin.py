@@ -17,6 +17,7 @@ import aiofiles
 import datetime
 import statcord
 import asyncio
+import traceback
 
 MAX_FILE_SIZE = 15000000
 
@@ -293,16 +294,15 @@ class Admin(commands.Cog):
                 f"<:4430checkmark:848857812632076314> Loaded cogs: **{', '.join(file)}**"
             )
         except Exception as e:
-            try:
-                for files in file:
-                    self.bot.load_extension(f"util.{files}")
-                return await ctx.send(
-                    f"<:4430checkmark:848857812632076314> Loaded cogs: **{', '.join(file)}**"
+            stack = 4
+            traceback_text = "".join(
+                traceback.format_exception(
+                    type(e), e, e.__traceback__, stack
                 )
-            except Exception as e:
-                return await ctx.send(
-                    f"<:4318crossmark:848857812565229601> Something went wrong while loading **{file}**:\n```py\n{e}\n```"
-                )
+            )
+            return await ctx.send(
+                f"<:4318crossmark:848857812565229601> Something went wrong while loading **{file}**:\n```py\n{traceback_text}\n```"
+            )
 
     @developer.command()
     @is_team()
@@ -314,16 +314,15 @@ class Admin(commands.Cog):
                 f"<:4430checkmark:848857812632076314> Unloaded cogs: **{', '.join(file)}**"
             )
         except Exception as e:
-            try:
-                for files in file:
-                    self.bot.unload_extension(f"util.{files}")
-                return await ctx.send(
-                    f"<:4430checkmark:848857812632076314> Unloaded util: **{', '.join(file)}**"
+            stack = 4
+            traceback_text = "".join(
+                traceback.format_exception(
+                    type(e), e, e.__traceback__, stack
                 )
-            except Exception as e:
-                return await ctx.send(
-                    f"<:4318crossmark:848857812565229601> Something went wrong while unloading **{file}**:\n```py\n{e}\n```"
-                )
+            )
+            return await ctx.send(
+                f"<:4318crossmark:848857812565229601> Something went wrong while unloading **{file}**:\n```py\n{traceback_text}\n```"
+            )
 
     @developer.command(name="reload all", aliases=["ra"])
     @is_team()
@@ -366,8 +365,14 @@ class Admin(commands.Cog):
                 f"<:4430checkmark:848857812632076314> Reloaded cogs: **{', '.join(file)}**"
             )
         except Exception as e:
+            stack = 4
+            traceback_text = "".join(
+                traceback.format_exception(
+                    type(e), e, e.__traceback__, stack
+                )
+            )
             return await ctx.send(
-                f"<:4318crossmark:848857812565229601> Something went wrong while reloading **{file}**:\n```py\n{e}\n```"
+                f"<:4318crossmark:848857812565229601> Something went wrong while reloading **{file}**:\n```py\n{traceback_text}\n```"
             )
 
     @commands.command(aliases=["exe", "run", "eval"])

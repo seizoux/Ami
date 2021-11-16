@@ -133,7 +133,7 @@ class Clock:
             try:
                 chan = self.bot.get_channel(channel)
                 await chan.send(
-                    f"{user.mention}, <t:{int(time.timestamp())}:F>: {message}\n{link}"
+                    f"{user.mention}, <t:{int(display_time.timestamp())}:F>: {message}\n{link}"
                 )
             except Exception as e:
                 log.error(f"Exception in end_timer: {e}")
@@ -280,7 +280,7 @@ class Utility(commands.Cog):
                             "readable formats, be sure to include them within quotes, e.g: `ami remind \"in a week\" buy new computer.`\n\n"
                             "Else just provide a normal time, valid formats are s,m,h,d,mo,y (seconds, minutes, hours, days, months, years), e.g: `ami remind 10m restart discord`")
     @commands.cooldown(1, 10, commands.BucketType.user)
-    async def remind(self, ctx, when, reminder):
+    async def remind(self, ctx, when, *, reminder):
 
         suffixs = {
             "s": 1,
