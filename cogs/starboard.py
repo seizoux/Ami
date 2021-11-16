@@ -50,6 +50,7 @@ class Starboard(commands.Cog):
             timestamp = datetime.datetime.utcnow()
         )
         embed.set_author(name=str(message.author), icon_url=message.author.avatar_url)
+        embed.add_field(name='Original Message', value=f"[Click here!]({message.jump_url})", inline=False)
         if atch:
             embed.set_image(url=atch)
 
