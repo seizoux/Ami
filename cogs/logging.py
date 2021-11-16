@@ -6,12 +6,13 @@ from util.defs import is_team
 import asyncio
 import typing
 import weakref
+from discord import Webhook, AsyncWebhookAdapter
 
 class Logging(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self._lock = weakref.WeakValueDictionary()
-        self._webhook = discord.WebhookAdapter()
+        self._webhook = Webhook.from_url
 
         self._cached = {}
 
@@ -34,15 +35,18 @@ class Logging(commands.Cog):
         
         async with lock:
             if webhook:
-                if type(content) is discord.Embed:
-                    return await self._webhook(webhook).send(embed=content)
-                return await self._webhook(webhook).send(content)
+                try:
+                    if type(content) is discord.Embed:
+                        return await self._webhook(webhook, adapter=AsyncWebhookAdapter(self.bot.session)).send(embed=content, wait=True)
+                    return await self._webhook(webhook, adapter=AsyncWebhookAdapter(self.bot.session)).send(content, wait=True)
+                except discord.NotFound:
+                    return
 
             ch = self.bot.get_channel(channel)
             if ch:
                 if type(content) is discord.Embed:
-                    return await ch.send(embed=content)
-                return await ch.send(embed=content)
+                    return await ch.send(embed=content, wait=True)
+                return await ch.send(embed=content, wait=True)
 
     @commands.Cog.listener()
     async def on_ready(self):
