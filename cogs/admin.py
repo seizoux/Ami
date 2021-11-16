@@ -18,6 +18,11 @@ import datetime
 import statcord
 import asyncio
 import traceback
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import io
+import re
 
 MAX_FILE_SIZE = 15000000
 
@@ -44,8 +49,23 @@ class Admin(commands.Cog):
         self.api.start_loop()
         self.guilds_task.start()
 
+        if not hasattr(self.bot, 'chrome'):
+            options = webdriver.ChromeOptions()
+            options.headless = True
+            self.bot.chrome = webdriver.Chrome(options=options)
+
     def cog_unload(self):
         self.guilds_task.cancel()
+
+    def get_screenshot(self, url: str, sleeping: typing.Optional[int] = None):
+        self.bot.chrome.get(url)
+        self.bot.chrome.set_window_size(1920, 1080)
+        if sleeping:
+            time.sleep(sleeping)
+
+        buffer = io.BytesIO(self.bot.chrome.get_screenshot_as_png())
+        buffer.seek(0)
+        return buffer
 
     async def get_url(
         self,
@@ -223,22 +243,48 @@ class Admin(commands.Cog):
         ).set_author(name=f"Spooky skeleton {str(ctx.author)}!", icon_url=ctx.author.avatar_url))
 
     @commands.command(
-        help="Take a screenshot of the page on the given url.", aliases=["ss"]
+        help="Take a screenshot of the page on the given url. Provide the `<delay>` parameter to wait x seconds before taking the screenshot.", aliases=["ss"]
     )
-    @is_team()
-    async def screenshot(self, ctx, *, url: str):
-        url = url.strip("<>")
-        if not re.match(self.bot.url_regex, url):
-            return await ctx.send("The url must contain any of http/https.")
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def screenshot(self, ctx, url: str, delay: int = None):
+        ur = re.findall("http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+", url)
+        if not ur:
+            return await ctx.send(f"❌ The url must start with http/https.")
+        
+        if delay and delay > 15:
+            return await ctx.send(f"❌ Delay must be under 15 seconds.")
 
-        res = await self.bot.session.get(f"https://image.thum.io/get/{url}")
-        byt = BytesIO(await res.read())
 
-        em = discord.Embed(description=f"`URL:` {url}\n`Author:` {ctx.author.mention}")
-        em.set_image(url=f"attachment://{ctx.command.name}.png")
-        await ctx.send(
-            embed=em, file=discord.File(byt, filename=f"{ctx.command.name}.png")
+        if not ctx.channel.is_nsfw():
+            async with self.bot.session.get("https://raw.githubusercontent.com/Bon-Appetit/porn-domains/master/block.txt") as resp:
+                r = (await resp.text()).splitlines()
+                if url.startswith('https://'):
+                    c = url.replace('https://', '')
+                else:
+                    c = url.replace('http://', '')
+                if c in r:
+                    return await ctx.send(f"❌ This url has been detected as NSFW, I won't display it sorry.")
+
+        try:
+            async with self.bot.session.get(url) as resp:
+                r = (await resp.text()).splitlines()
+                if any(i.lower() in r for i in ['ip', 'ip address', 'address', 'adress', 'ip']):
+                    return await ctx.send(f"❌ This url seems to contain some sensitive info, I won't show it sorry.")
+        except Exception as e:
+            return await ctx.send(f"❌ An error occurred: {e}")
+
+        await ctx.message.add_reaction("<a:loading:858048655051587645>")
+        f = await self.bot.loop.run_in_executor(None, self.get_screenshot, url, delay)
+        file=discord.File(f, filename='screenshot.png')
+
+        embed = discord.Embed(
+            description = f"`Author`: {ctx.author.mention}\n`URL`: [{url}]({url})",
+            color = self.bot.color
         )
+        embed.set_image(url='attachment://screenshot.png')
+
+        await ctx.send(file=file, embed=embed)
+        await ctx.message.add_reaction("<a:check_1:877602001620443156>")
 
     @commands.group(
         help="Developer commands group, runnable only by team.",

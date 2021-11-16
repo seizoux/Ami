@@ -78,7 +78,7 @@ class Starboard(commands.Cog):
                     message.author.id
                 )
             else:
-                if data['stars_count'] > count:
+                if data['stars_count'] >= count:
                     return
 
                 c = discord.utils.get(self.bot.cached_messages, id=data['star_message_id'])
