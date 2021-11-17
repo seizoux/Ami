@@ -7,6 +7,7 @@ import asyncio
 import typing
 import weakref
 from discord import Webhook, AsyncWebhookAdapter
+import io
 
 class Logging(commands.Cog):
     def __init__(self, bot):
@@ -45,19 +46,45 @@ class Logging(commands.Cog):
             ch = self.bot.get_channel(channel)
             if ch:
                 if type(content) is discord.Embed:
-                    return await ch.send(embed=content, wait=True)
-                return await ch.send(embed=content, wait=True)
+                    return await ch.send(embed=content)
+                return await ch.send(embed=content)
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("Logging loaded")
 
+    @commands.group(help="Setup modlogs for the current guilds, use subcommands.")
+    async def modlog(self, ctx):
+        if not ctx.invoked_subcommand:
+            await ctx.send_help()
+
+    @modlog.command()
+    async def config(self, ctx, channel: discord.TextChannel):
+        if ctx.me.guild_permissions.manage_webhooks:
+            if channel.permissions_for(ctx.guild.me).manage_webhooks:
+                wb = await channel.create_webhook(name='Ami Mod-Logs', avatar=await self.bot.user.avatar_url.read())
+                await self.bot.db.execute("INSERT INTO modlogs (guild_id, channel_id, webhook) VALUES ($1, $2, $3)", ctx.guild.id, channel.id, str(wb.url))
+                return await ctx.send(f"Alright, {channel.mention} has been set as modlog channel for this guild.")
+            else:
+                return await ctx.reply("❌ I need the `Manage Webhooks` permission in that channel to config the modlogs.")
+        else:
+            return await ctx.reply("❌ I need the `Manage Webhooks` permission to config the modlogs.")
+
+    @modlog.command()
+    async def delete(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM modlogs WHERE guild_id = $1", ctx.guild.id)
+        if not data:
+            return await ctx.reply("❌ This guild has not modlog setup.")
+
+        await self.bot.db.execute("DELETE FROM modlogs WHERE guild_id = $1", ctx.guild.id)
+        await ctx.send("Modlogs config deleted for this guild, config it again to receive all events in the channel.")
+
     @commands.Cog.listener()
     async def on_message_delete(self, message):
-        if message.guild.id != 800176902765674496:
+        if message.author.bot:
             return
 
-        if message.channel.id != 880917439179792574:
+        if message.guild.id != 800176902765674496:
             return
 
         d = await self.get_mod_logs(message.guild.id)
@@ -71,13 +98,304 @@ class Logging(commands.Cog):
             timestamp = datetime.datetime.utcnow()
         )
 
-        entries = await message.guild.audit_logs(action=discord.AuditLogAction.message_delete).flatten()
+        entries = await message.guild.audit_logs(limit=1, action=discord.AuditLogAction.message_delete).flatten()
         c = entries[0]
         em.add_field(name='Message', value=message.content)
         em.add_field(name="Channel", value=message.channel.mention)
         em.set_author(name=str(c.user), icon_url=c.user.avatar_url)
         em.set_thumbnail(url=c.user.avatar_url)
-        await self.send_log(message.guild.id, em, d[0]['channel_id'], d[0]['webhook'] and None)
+        await self.send_log(message.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_bulk_message_delete(self, messages):
+        if messages[0].author.bot:
+            return
+
+        if messages[0].guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(messages[0].guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Bulk Message Delete",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        entries = await messages[0].guild.audit_logs(limit=1, action=discord.AuditLogAction.message_bulk_delete).flatten()
+        c = entries[0]
+        em.add_field(name='Deleted', value=f"{c.extra.count} messages deleted")
+        em.add_field(name="Channel", value=c.target.mention)
+        await self.send_log(messages[0].guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before, after):
+        if after.author.bot:
+            return
+
+        if after.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(after.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Message Edited",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        em.add_field(name='Before', value=f"{before.content}")
+        em.add_field(name="After", value=f"{after.content}")
+        em.set_author(name=str(after.author), icon_url=after.author.avatar_url)
+        em.set_thumbnail(url=after.author.avatar_url)
+        await self.send_log(after.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_webhooks_update(self, channel):
+        if channel.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(channel.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Webhook Updated",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        entries = await channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.webhook_update).flatten()
+        c = entries[0]
+        em.add_field(name='Channel', value=f"{channel.mention}")
+        em.add_field(name="Channel ID", value=f"{channel.id}")
+        em.add_field(name="Webhook ID", value=f"{c.target.id}")
+        await self.send_log(channel.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        if member.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(member.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"New Member Joined",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        em.add_field(name='Member', value=f"{member.mention}")
+        em.add_field(name="Member ID", value=f"{member.id}")
+        em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles])}")
+        await self.send_log(member.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        if member.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(member.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Member Leaved",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        em.add_field(name='Member', value=f"{member.mention}")
+        em.add_field(name="Member ID", value=f"{member.id}")
+        em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles])}")
+        await self.send_log(member.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before, after):
+        if after.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(after.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Member Updated",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        r = before.roles
+        n = before.display_name
+
+        em.add_field(name='Member', value=f"{after.mention}")
+        em.add_field(name="Member ID", value=f"{after.id}")
+        if after.roles != r:
+            em.add_field(name="Roles", value=f"{''.join([r.mention for r in after.roles])}")
+        if after.display_name != n:
+            em.add_field(name="Nickname", value=f"{before.display_name} → {after.display_name}")
+        await self.send_log(after.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_user_update(self, before, after):
+        if after.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(after.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"User Updated",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        a = str(before.avatar_url)
+        u = before.name
+        dis = before.discriminator
+
+        em.add_field(name='User', value=f"{after.mention}")
+        em.add_field(name="User ID", value=f"{after.id}")
+        if str(after.avatar_url) != a:
+            em.add_field(name="New Avatar", value=f"{after.avatar_url}")
+        if after.name != u:
+            em.add_field(name="New Name", value=f"{before.name} → {after.name}")
+        if after.discriminator != dis:
+            em.add_field(name="New Discriminator", value=f"#{before.discriminator} → #{after.discriminator}")
+        await self.send_log(after.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_guild_update(self, before, after):
+        if after.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(after.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Guild Updated",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        a = str(before.icon_url)
+        u = before.name
+
+        if after.name != u:
+            em.add_field(name="New Name", value=f"{before.name} → {after.name}")
+        if after.icon_url != a:
+            em.add_field(name="New Icon", value=f"{before.icon_name} → {after.icon_name}")
+        await self.send_log(after.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_guild_role_create(self, role):
+        if role.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(role.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"New Role Created",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        em.add_field(name='Role', value=f"{role.mention}")
+        em.add_field(name="Role ID", value=f"{role.id}")
+        em.add_field(name="Role Permissions", value=f"{', '.join([str(p[0]).replace('_', ' ').title() for p in role.permissions if p[1]])}")
+        em.add_field(name="Role Color", value=f"{role.color}")
+        await self.send_log(role.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_guild_role_delete(self, role):
+        if role.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(role.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Role Deleted",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        em.add_field(name='Role', value=f"{role.mention}")
+        em.add_field(name="Role ID", value=f"{role.id}")
+        em.add_field(name="Role Permissions", value=f"{', '.join([str(p[0]).replace('_', ' ').title() for p in role.permissions if p[1]])}")
+        em.add_field(name="Role Color", value=f"{role.color}")
+        await self.send_log(role.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_guild_role_update(self, before, after):
+        if after.guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(after.guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Role Updated",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        name = before.name
+        color = before.color
+        permissions = before.permissions
+
+        em.add_field(name='Role', value=f"{after.mention}")
+        em.add_field(name="Role ID", value=f"{after.id}")
+        if after.permission != permissions:
+            em.add_field(name="New Permissions", value=f"{', '.join([str(p[0]).replace('_', ' ').title() for p in after.permissions if p[1]])}")
+        if after.color != color:
+            em.add_field(name="New Color", value=f"{before.color} → {after.color}")
+        if after.name != name:
+            em.add_field(name="New Name", value=f"{before.name} → {after.name}")
+        await self.send_log(after.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
+
+    @commands.Cog.listener()
+    async def on_guild_emojis_update(self, guild, before, after):
+        if guild.id != 800176902765674496:
+            return
+
+        d = await self.get_mod_logs(guild.id)
+
+        if d is False:
+            return
+
+        em = discord.Embed(
+            title = f"Emojis Updated",
+            color = self.bot.color,
+            timestamp = datetime.datetime.utcnow()
+        )
+
+        em.add_field(name='New Emojis', value=f"{''.join(str(e) for e in after.emojis if not e in before.emojis)}")
+        em.add_field(name="Total Emojis Now", value=f"{len(guild.emojis)}")
+        await self.send_log(guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
 def setup(bot):
     bot.add_cog(Logging(bot))
