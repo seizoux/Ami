@@ -405,8 +405,8 @@ class Moderation(commands.Cog):
                     await s.send(f"You got banned from **{ctx.guild.name}** for `{reason}`.")
                 except Exception:
                     pass
-            except Exception:
-                await ctx.send(f"<:redTick:596576672149667840> Member **{i.name}** not found.")
+            except Exception as e:
+                return await ctx.send(f"<:redTick:596576672149667840> Member **{i.name}** not found: {e}")
 
         final = ", ".join([i.name for i in members])
         await ctx.send(f'<:greenTick:596576670815879169> Succesfully banned **{final}** for `{reason}`.')
