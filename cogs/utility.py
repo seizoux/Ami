@@ -42,7 +42,6 @@ class Clock:
     def __init__(self, bot: commands.Bot):
         self.bot = bot 
         self.endtime: typing.Optional[datetime.datetime] = None
-        self.display_time: typing.Optional[datetime.datetime] = None
         self.id: typing.Optional[int] = None
         self.channel: typing.Optional[int] = None
         self.user: discord.Member = None
@@ -54,7 +53,7 @@ class Clock:
     async def get_closest_reminder(self) -> asyncpg.Record:
         return await self.bot.db.fetchrow("SELECT * FROM reminds ORDER BY endtime ASC LIMIT 1")
 
-    async def create(self, reminder: str, channel_id: int, message_id: int, user_id: int, display_time: datetime.datetime, endtime: datetime.datetime, message_link: str) -> int:
+    async def create(self, reminder: str, channel_id: int, message_id: int, user_id: int, endtime: datetime.datetime, message_link: str) -> int:
 
         id = await self.bot.db.fetchval("INSERT INTO reminds (channel_id, message_id, user_id, reminder, endtime, message_link) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id", channel_id, message_id, user_id, reminder, endtime, message_link)
         if (not self._task or self._task.done()) or endtime < self.endtime:
@@ -67,13 +66,11 @@ class Clock:
             self.user = self.bot.get_user(user_id) or (await self.bot.fetch_user(user_id))
             self.message = reminder
             self.message_link = message_link
-            self.display_time = display_time
 
             self._task = self.bot.loop.create_task(self.end_timer(
                 self.id,
                 self.channel,
                 self.user,
-                self.display_time,
                 self.endtime,
                 self.message,
                 self.message_link
@@ -98,7 +95,6 @@ class Clock:
                 self.id,
                 self.channel,
                 self.user,
-                self.display_time,
                 self.endtime,
                 self.message,
                 self.message_link
@@ -120,23 +116,18 @@ class Clock:
                 self.id,
                 self.channel,
                 self.user,
-                self.display_time,
                 self.endtime,
                 self.message,
                 self.message_link
             ))
 
-    async def end_timer(self, id: int, channel: int, user: discord.Member, display_time: datetime.datetime, time: datetime.datetime, message: str, link: str):
+    async def end_timer(self, id: int, channel: int, user: discord.Member, time: datetime.datetime, message: str, link: str):
         try:
             await discord.utils.sleep_until(time) # sleeping until the endtime
 
-            try:
-                chan = self.bot.get_channel(channel)
-                await chan.send(
-                    f"{user.mention}, <t:{int(display_time.timestamp())}:F>: {message}\n{link}"
-                )
-            except Exception as e:
-                log.error(f"Exception in end_timer: {e}")
+            chan = self.bot.get_channel(channel)
+
+            self.bot.dispatch('remind_complete', chan, user, time, message, link)
 
             await self.bot.db.execute("DELETE FROM reminds WHERE id = $1", id) # remove from database
 
@@ -274,14 +265,23 @@ class Utility(commands.Cog):
     async def on_ready(self):
         print(f"Utility Loaded")
 
-    @commands.command(help="Tell me to remind you something in x time.\n"
+    @commands.Cog.listener()
+    async def on_remind_complete(self, channel: discord.TextChannel, user: discord.Member, time: datetime.datetime, message: str, link: str):
+        try:
+            await channel.send(
+                f"{user.mention}, <t:{int(time.timestamp())}:F>: {message}\n{link}"
+            )
+        except Exception as e:
+            log.error(f"Exception in end_timer: {e}")
+
+    @commands.group(help="Tell me to remind you something in x time.\n"
                             "<when> parameter can be something like 1s (1 seconds) or some "
                             "more readable format, like 'in a week'.\n\nIf you use "
                             "readable formats, be sure to include them within quotes, e.g: `ami remind \"in a week\" buy new computer.`\n\n"
-                            "Else just provide a normal time, valid formats are s,m,h,d,mo,y (seconds, minutes, hours, days, months, years), e.g: `ami remind 10m restart discord`")
+                            "Else just provide a normal time, valid formats are s,m,h,d,mo,y (seconds, minutes, hours, days, months, years), e.g: `ami remind 10m restart discord`",
+                            invoke_without_command=True)
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def remind(self, ctx, when, *, reminder):
-
         suffixs = {
             "s": 1,
             "m": 60,
@@ -336,11 +336,31 @@ class Utility(commands.Cog):
                 c = int(when[-2:])
             final = c*parsed
 
-        time_display = datetime.datetime.now() + datetime.timedelta(seconds=int(final))
-        time = datetime.datetime.utcnow() + datetime.timedelta(seconds=int(final))
-        id = await self.clock.create(reminder, ctx.channel.id, ctx.message.id, ctx.author.id, time_display, time, ctx.message.jump_url)
+        time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=int(final))
+        id = await self.clock.create(reminder, ctx.channel.id, ctx.message.id, ctx.author.id, time, ctx.message.jump_url)
 
-        return await ctx.reply(f"[{id}] Alright {ctx.author.mention}, <t:{int(time_display.timestamp())}:R>: {reminder}")
+        return await ctx.reply(f"[{id}] Alright {ctx.author.mention}, <t:{int(time.timestamp())}:R>: {reminder}")
+
+    @remind.command(name='list', help='Show a list of all your reminders.', ignore_extra=False)
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def rem_list(self, ctx):
+        data = await self.bot.db.fetch("SELECT * FROM reminds WHERE user_id = $1 ORDER BY endtime ASC LIMIT 10", ctx.author.id)
+
+        if data:
+            em = discord.Embed(
+                description = f"{len(data)} upcoming reminders.",
+                timestamp = datetime.datetime.utcnow(),
+                color = self.bot.color
+            )
+
+            for i in data:
+                em.add_field(name=f"{data[0]['id']}: <t:{int(i['endtime'].timestamp())}:R>", value=i['reminder'], inline=False)
+
+            em.set_footer(text='Showing up to 10 reminders.')
+            em.set_author(name=f"{ctx.author} Remind List", icon_url=ctx.author.avatar_url)
+
+            return await ctx.send(embed=em)
+        return await ctx.send("You have no upcoming reminders.")
 
     @commands.command(help="Show the uptime of the bot since the last restart.")
     async def uptime(self, ctx):

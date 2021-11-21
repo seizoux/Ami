@@ -405,8 +405,8 @@ class Moderation(commands.Cog):
                     await s.send(f"You got banned from **{ctx.guild.name}** for `{reason}`.")
                 except Exception:
                     pass
-            except Exception as e:
-                return await ctx.send(f"<:redTick:596576672149667840> Member **{i.name}** not found: {e}")
+            except Exception:
+                return await ctx.send(f"<:redTick:596576672149667840> Member **{i.name}** not found.")
 
         final = ", ".join([i.name for i in members])
         await ctx.send(f'<:greenTick:596576670815879169> Succesfully banned **{final}** for `{reason}`.')
@@ -456,7 +456,7 @@ class Moderation(commands.Cog):
             try:
                 await ctx.guild.kick(discord.Object(id=id), reason=reason)
             except discord.NotFound:
-                await ctx.send(f"<:redTick:596576672149667840> Member(s) {i.name} not found.")
+                return await ctx.send(f"<:redTick:596576672149667840> Member(s) {i.name} not found.")
 
         await ctx.send(f'<:greenTick:596576670815879169> Succesfully kicked **{", ".join([i.mention for i in members])}** for `{reason}`.')
 
@@ -505,7 +505,7 @@ class Moderation(commands.Cog):
             try:
                 await i.add_roles(muted_role)
             except discord.NotFound:
-                await ctx.send(f"<:redTick:596576672149667840> Member(s) **{i.name}** not found.")
+                return await ctx.send(f"<:redTick:596576672149667840> Member(s) **{i.name}** not found.")
 
         await ctx.send(f'<:greenTick:596576670815879169> Succesfully muted **{", ".join([i.name for i in members])}**.')
 

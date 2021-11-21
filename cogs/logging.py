@@ -84,7 +84,7 @@ class Logging(commands.Cog):
         if message.author.bot:
             return
 
-        if message.guild.id != 800176902765674496:
+        if not message.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(message.guild.id)
@@ -97,13 +97,11 @@ class Logging(commands.Cog):
             color = self.bot.color,
             timestamp = datetime.datetime.utcnow()
         )
-
-        entries = await message.guild.audit_logs(limit=1, action=discord.AuditLogAction.message_delete).flatten()
-        c = entries[0]
+        
         em.add_field(name='Message', value=message.content)
         em.add_field(name="Channel", value=message.channel.mention)
-        em.set_author(name=str(c.user), icon_url=c.user.avatar_url)
-        em.set_thumbnail(url=c.user.avatar_url)
+        em.set_author(name=str(message.author), icon_url=message.author.avatar_url)
+        em.set_thumbnail(url=message.author.avatar_url)
         await self.send_log(message.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
     @commands.Cog.listener()
@@ -111,7 +109,7 @@ class Logging(commands.Cog):
         if messages[0].author.bot:
             return
 
-        if messages[0].guild.id != 800176902765674496:
+        if not messages[0].guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(messages[0].guild.id)
@@ -136,7 +134,7 @@ class Logging(commands.Cog):
         if after.author.bot:
             return
 
-        if after.guild.id != 800176902765674496:
+        if not after.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(after.guild.id)
@@ -158,7 +156,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_webhooks_update(self, channel):
-        if channel.guild.id != 800176902765674496:
+        if not channel.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(channel.guild.id)
@@ -181,7 +179,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        if member.guild.id != 800176902765674496:
+        if not member.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(member.guild.id)
@@ -197,12 +195,12 @@ class Logging(commands.Cog):
 
         em.add_field(name='Member', value=f"{member.mention}")
         em.add_field(name="Member ID", value=f"{member.id}")
-        em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles])}")
+        em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles[1:]])}")
         await self.send_log(member.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
-        if member.guild.id != 800176902765674496:
+        if not member.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(member.guild.id)
@@ -211,19 +209,19 @@ class Logging(commands.Cog):
             return
 
         em = discord.Embed(
-            title = f"Member Leaved",
+            title = f"Member Left",
             color = self.bot.color,
             timestamp = datetime.datetime.utcnow()
         )
 
         em.add_field(name='Member', value=f"{member.mention}")
         em.add_field(name="Member ID", value=f"{member.id}")
-        em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles])}")
+        em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles[1:]])}")
         await self.send_log(member.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        if after.guild.id != 800176902765674496:
+        if not after.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(after.guild.id)
@@ -240,17 +238,20 @@ class Logging(commands.Cog):
         r = before.roles
         n = before.display_name
 
+        if after.roles == r and after.display_name == n:
+            return
+
         em.add_field(name='Member', value=f"{after.mention}")
         em.add_field(name="Member ID", value=f"{after.id}")
         if after.roles != r:
-            em.add_field(name="Roles", value=f"{''.join([r.mention for r in after.roles])}")
+            em.add_field(name="Roles", value=f"{' '.join([r.mention for r in after.roles[1:]])}")
         if after.display_name != n:
             em.add_field(name="Nickname", value=f"{before.display_name} → {after.display_name}")
         await self.send_log(after.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
     @commands.Cog.listener()
     async def on_guild_update(self, before, after):
-        if after.id != 800176902765674496:
+        if not after.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(after.guild.id)
@@ -275,7 +276,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role):
-        if role.guild.id != 800176902765674496:
+        if not role.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(role.guild.id)
@@ -297,7 +298,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role):
-        if role.guild.id != 800176902765674496:
+        if not role.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(role.guild.id)
@@ -319,7 +320,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_role_update(self, before, after):
-        if after.guild.id != 800176902765674496:
+        if not after.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(after.guild.id)
@@ -340,7 +341,7 @@ class Logging(commands.Cog):
         em.add_field(name='Role', value=f"{after.mention}")
         em.add_field(name="Role ID", value=f"{after.id}")
         if after.permissions != permissions:
-            em.add_field(name="New Permissions", value=f"{', '.join([str(p[0]).replace('_', ' ').title() for p in after.permissions if p[1]])}")
+            em.add_field(name="New Permissions", value=f"{', '.join([str(p[0]).replace('_', ' ').title() for p in after.permissions if not p in permissions])}")
         if after.color != color:
             em.add_field(name="New Color", value=f"{before.color} → {after.color}")
         if after.name != name:
@@ -349,7 +350,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild, before, after):
-        if guild.id != 800176902765674496:
+        if not guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(guild.id)
@@ -371,7 +372,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_available(self, guild):
-        if guild.id != 800176902765674496:
+        if not guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(guild.id)
@@ -389,7 +390,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_unavailable(self, guild):
-        if guild.id != 800176902765674496:
+        if not guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(guild.id)
@@ -407,7 +408,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        if member.guild.id != 800176902765674496:
+        if not member.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(member.guild.id)
@@ -427,7 +428,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_ban(self, guild, user):
-        if guild.id != 800176902765674496:
+        if not guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(guild.id)
@@ -448,7 +449,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild, user):
-        if guild.id != 800176902765674496:
+        if not guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(guild.id)
@@ -467,7 +468,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
-        if channel.guild.id != 800176902765674496:
+        if not channel.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(channel.guild.id)
@@ -487,7 +488,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel):
-        if channel.guild.id != 800176902765674496:
+        if not channel.guild.id in [800176902765674496, 909527052070313984]:
             return
 
         d = await self.get_mod_logs(channel.guild.id)

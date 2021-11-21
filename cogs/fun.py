@@ -1339,7 +1339,7 @@ class Fun(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if re.fullmatch(rf"<@!?{self.bot.user.id}>", message.content) and not message.author.bot:
+        if message.content == message.guild.me.mention and not message.author.bot:
             await message.channel.send("Hello! My prefixes are `Ami `, `ami ` and `a;`.")
 
         if message.content.startswith("::") and not message.author.bot:

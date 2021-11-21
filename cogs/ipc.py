@@ -33,7 +33,7 @@ class IpcRoutes(commands.Cog):
     
     async def get_bot_contributors(self, data) -> dict:
         users = {
-            144126010642792449: {'banner': 'https://cdn.discordapp.com/banners/144126010642792449/a_18bf6c08bb6f0a875c3dcc2d3b9be544.gif?size=512', 'status': "Experienced in sleeping.", "position": "Lead Developer, CEO", "socials": 
+            144126010642792449: {'banner': 'https://cdn.discordapp.com/banners/144126010642792449/64c8a49ef96fbffbdf0fc5c4e1722326.png?size=1024', 'status': "https://daishiky.dev", "position": "Lead Developer, CEO", "socials": 
                                 {'twitter': 'https://twitter.com/Daishiky_',
                                 'github': 'https://github.com/Daishiky',
                                 'discord': 'https://discord.com/users/144126010642792449',
