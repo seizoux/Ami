@@ -195,7 +195,7 @@ class Logging(commands.Cog):
 
         em.add_field(name='Member', value=f"{member.mention}")
         em.add_field(name="Member ID", value=f"{member.id}")
-        em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles[1:]])}")
+        em.set_thumbnail(url=member.avatar_url)
         await self.send_log(member.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
     @commands.Cog.listener()
@@ -217,6 +217,7 @@ class Logging(commands.Cog):
         em.add_field(name='Member', value=f"{member.mention}")
         em.add_field(name="Member ID", value=f"{member.id}")
         em.add_field(name="Roles", value=f"{''.join([r.mention for r in member.roles[1:]])}")
+        em.set_thumbnail(url=member.avatar_url)
         await self.send_log(member.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
     @commands.Cog.listener()
@@ -312,10 +313,10 @@ class Logging(commands.Cog):
             timestamp = datetime.datetime.utcnow()
         )
 
-        em.add_field(name='Role', value=f"{role.mention}")
+        em.add_field(name='Role', value=f"{role.name}")
         em.add_field(name="Role ID", value=f"{role.id}")
-        em.add_field(name="Role Permissions", value=f"{', '.join([str(p[0]).replace('_', ' ').title() for p in role.permissions if p[1]])}")
         em.add_field(name="Role Color", value=f"{role.color}")
+        em.add_field(name="Role Permissions", value=f"{', '.join([str(p[0]).replace('_', ' ').title() for p in role.permissions if p[1]])}")
         await self.send_log(role.guild.id, em, d[0]['channel_id'], d[0]['webhook'] if d[0]['webhook'] else None)
 
     @commands.Cog.listener()
@@ -337,6 +338,9 @@ class Logging(commands.Cog):
         name = before.name
         color = before.color
         permissions = before.permissions
+
+        if before.position != after.position:
+            return
 
         em.add_field(name='Role', value=f"{after.mention}")
         em.add_field(name="Role ID", value=f"{after.id}")

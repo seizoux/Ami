@@ -106,10 +106,11 @@ class Player(wavelink.Player):
         self.loop_votes.clear()
 
         if self.looped == True:
-            self.waiting = False
-            await self.play(self.looped_track)
-            await self.invoke_controller()
-            return
+            if self.looped_track is not None:
+                self.waiting = False
+                await self.play(self.looped_track)
+                await self.invoke_controller()
+                return
 
         try:
             if self.unlimit is True:
