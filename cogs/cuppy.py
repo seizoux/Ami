@@ -2595,7 +2595,7 @@ class Cuppy(commands.Cog):
         )
 
     @commands.command(
-        help="That's you checklist, you can check here times before you can get the next rewards!",
+        help="That's your checklist, you can check here times before you can get the next rewards!",
         aliases=["cl"],
     )
     @commands.cooldown(1, 15, commands.BucketType.user)
@@ -2865,7 +2865,7 @@ class Cuppy(commands.Cog):
         await ctx.invoke(self.bot.get_command("help"), **{"command": "minerals"})
 
     @minerals.command(
-        name="inventory", help="Check you minerals in your inventory", aliases=["inv"]
+        name="inventory", help="Check your minerals in your inventory", aliases=["inv"]
     )
     @commands.cooldown(1, 7, commands.BucketType.user)
     async def min_inventory(self, ctx):

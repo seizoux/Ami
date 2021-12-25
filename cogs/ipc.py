@@ -38,15 +38,15 @@ class IpcRoutes(commands.Cog):
                                 'github': 'https://github.com/Daishiky',
                                 'discord': 'https://discord.com/users/144126010642792449',
                                 'email': 'mailto:daishikyds@gmail.com'}},
+            711057339360477184: {'banner': "https://cdn.discordapp.com/banners/711057339360477184/f0a3a22a519f14ed93a63ee651b85414.png?size=512", 'status': "I play VALORANT and game alot", "position": "Head Dev, Hosting Provider", "socials": 
+                                {'twitter': "https://twitter.com/Jadon_Ellis",
+                                'github': 'https://github.com/WhoTheOOF',
+                                'discord': 'https://discord.com/users/711057339360477184',
+                                'email': None}},
             590323594744168494: {'banner': "https://cdn.discordapp.com/banners/590323594744168494/a_63d89ea798f13732126012e8bf0b0443.gif?size=512", 'status': "i is the best", "position": "API Developer", "socials": 
                                 {'twitter': None,
                                 'github': 'https://github.com/Cryptex-github',
                                 'discord': 'https://discord.com/users/590323594744168494',
-                                'email': None}},
-            711057339360477184: {'banner': "https://cdn.discordapp.com/banners/711057339360477184/f0a3a22a519f14ed93a63ee651b85414.png?size=512", 'status': "I like gaming.", "position": "Hosting Provider", "socials": 
-                                {'twitter': "https://twitter.com/jadon_ellis",
-                                'github': 'https://github.com/WhoTheOOF',
-                                'discord': 'https://discord.com/users/711057339360477184',
                                 'email': None}},
             691406006277898302: {'banner': None, 'status': "I'm a cool dev. I also like mangoes", "position": "Website Builder", "socials": 
                                 {'twitter': None,
