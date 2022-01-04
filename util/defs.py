@@ -1,10 +1,11 @@
-from discord.ext import commands
-import discord
-import pathlib
-import typing
 import datetime
+import pathlib
+
+import discord
+from discord.ext import commands
 
 COOL_PEOPLE = []
+
 
 def premium(override=False):
     async def predicate(ctx):
@@ -41,17 +42,22 @@ def premium(override=False):
 
     return commands.check(predicate)
 
+
 def is_team():
     def predicate(ctx):
-        team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302, 343019667511574528]
+        team = [144126010642792449, 410452466631442443, 711057339360477184, 590323594744168494, 691406006277898302,
+                343019667511574528]
         return ctx.author.id in team
+
     return commands.check(predicate)
+
 
 def make_list_embed(fields):
     embed = discord.Embed(description="\u200b")
     for key, value in fields.items():
         embed.add_field(name=key, value=value, inline=True)
     return embed
+
 
 def line_count():
     p = pathlib.Path('./')
@@ -88,8 +94,10 @@ def get_size(bytes, suffix="B"):
             return f"{bytes:.2f}{unit}{suffix}"
         bytes /= factor
 
+
 def setup(bot):
     print("[INFO]: Definition SETUP")
+
 
 def teardown(bot):
     print("[INFO]: Definition TEARDOWN")
