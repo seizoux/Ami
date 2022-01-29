@@ -54,7 +54,7 @@ class Ami(commands.AutoShardedBot):
             description=r"""a discord bot""",
             chunk_guilds_at_startup=False,
             case_insensitive=False,
-            allowed_mentions=discord.AllowedMentions.all(),
+            allowed_mentions=discord.AllowedMentions(users=True, roles=True, everyone=False, replied_user=True),
         )
 
     async def send_via_hook(self, url: str, *args, **kwargs):
