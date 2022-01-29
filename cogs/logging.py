@@ -445,7 +445,7 @@ class Logging(commands.Cog):
         em = discord.Embed(
             color = self.bot.color,
             description = f"**Banned**: {user.mention} ({user.id})\n"
-            f"**Reason**: {c.reason}\n**Responsabile Moderator**: {c.user.mention}",
+            f"**Reason**: {c.reason}\n**Moderator**: {c.user.mention}",
             timestamp = datetime.datetime.utcnow()
         )
         em.set_author(name=f"{str(user)} has been banned!", icon_url=user.avatar_url)
