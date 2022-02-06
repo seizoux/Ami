@@ -367,7 +367,7 @@ class Moderation(commands.Cog):
 
 
 # Clear Command
-    @commands.command(help="Clear messages in `<amount>` range from the channel.")
+    @commands.command(help="Clear messages in `<amount>` range from the channel.", aliases=["purge"])
     @commands.cooldown(1, 15, commands.BucketType.user)
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
