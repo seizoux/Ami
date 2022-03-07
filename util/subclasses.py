@@ -41,11 +41,12 @@ def _cleanup_loop(loop):
 
 
 class Ami(commands.AutoShardedBot):
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.connector = aiohttp.TCPConnector(limit=200)
         self._logging_ratelimiter = RateLimiter(max_calls=2, period=5)
         intents = discord.Intents.default()
         intents.members = True
+        intents.presences = True
         super().__init__(
             command_prefix=["ami ", "Ami ", "a;"],
             max_messages=5000,
@@ -55,6 +56,7 @@ class Ami(commands.AutoShardedBot):
             chunk_guilds_at_startup=False,
             case_insensitive=False,
             allowed_mentions=discord.AllowedMentions(users=True, roles=True, everyone=False, replied_user=True),
+            **kwargs,
         )
 
     async def send_via_hook(self, url: str, *args, **kwargs):
@@ -99,9 +101,11 @@ class Ami(commands.AutoShardedBot):
 
     def run(self, *args, **kwargs):
         self.load_all_extensions()
-        self.loop.run_until_complete(self.run_constants()) 
+        #self.loop.run_until_complete(self.run_constants()) 
     
         loop = self.loop
+
+        loop.run_until_complete(self.run_constants())
 
         try:
             loop.add_signal_handler(signal.SIGINT, lambda: loop.stop())
