@@ -285,46 +285,6 @@ class Admin(commands.Cog):
             await ch.send(f"{content}")
             return await ctx.send(f"Sent to {ch.mention}.")
 
-    @developer.command()
-    @is_team()
-    async def load(self, ctx, *file):
-        try:
-            for files in file:
-                self.bot.load_extension(f"cogs.{files}")
-            return await ctx.send(
-                f"<:4430checkmark:848857812632076314> Loaded cogs: **{', '.join(file)}**"
-            )
-        except Exception as e:
-            stack = 4
-            traceback_text = "".join(
-                traceback.format_exception(
-                    type(e), e, e.__traceback__, stack
-                )
-            )
-            return await ctx.send(
-                f"<:4318crossmark:848857812565229601> Something went wrong while loading **{file}**:\n```py\n{traceback_text}\n```"
-            )
-
-    @developer.command()
-    @is_team()
-    async def unload(self, ctx, *file):
-        try:
-            for files in file:
-                self.bot.unload_extension(f"cogs.{files}" or f"util.{files}")
-            return await ctx.send(
-                f"<:4430checkmark:848857812632076314> Unloaded cogs: **{', '.join(file)}**"
-            )
-        except Exception as e:
-            stack = 4
-            traceback_text = "".join(
-                traceback.format_exception(
-                    type(e), e, e.__traceback__, stack
-                )
-            )
-            return await ctx.send(
-                f"<:4318crossmark:848857812565229601> Something went wrong while unloading **{file}**:\n```py\n{traceback_text}\n```"
-            )
-
     @developer.command(name="reload all", aliases=["ra"])
     @is_team()
     async def reload_all(self, ctx):
@@ -347,7 +307,7 @@ class Admin(commands.Cog):
             for module in check
         )
         title = (
-            "Reloaded all."
+            "Reloaded all on this CLUSTER ONLY!!!"
             if len(check) - len(list(errors)) == len(extensions)
             else f"{len(check)-len(list(errors))}/{len(extensions)} cogs reloaded."
         )
@@ -356,30 +316,11 @@ class Admin(commands.Cog):
             embed=discord.Embed(title=title, description=text, color=self.bot.color)
         )
 
-    @developer.command()
-    @is_team()
-    async def reload(self, ctx, *file):
-        try:
-            for files in file:
-                self.bot.reload_extension(f"cogs.{files}" or f"util.{files}")
-            return await ctx.send(
-                f"<:4430checkmark:848857812632076314> Reloaded cogs: **{', '.join(file)}**"
-            )
-        except Exception as e:
-            stack = 4
-            traceback_text = "".join(
-                traceback.format_exception(
-                    type(e), e, e.__traceback__, stack
-                )
-            )
-            return await ctx.send(
-                f"<:4318crossmark:848857812565229601> Something went wrong while reloading **{file}**:\n```py\n{traceback_text}\n```"
-            )
-
-    @commands.command(aliases=["exe", "run", "eval"])
-    @is_team()
-    async def evaluate(self, ctx, *, code: codeblock_converter):
-        await ctx.invoke(self.bot.get_command("jishaku python"), **{"argument": code})
+    #removed for clustering
+    #@commands.command(aliases=["exe", "run", "eval"])
+    #@is_team()
+    #async def evaluate(self, ctx, *, code: codeblock_converter):
+    #    await ctx.invoke(self.bot.get_command("jishaku python"), **{"argument": code})
 
     @commands.command()
     @is_team()
@@ -452,13 +393,13 @@ class Admin(commands.Cog):
         )
         await ctx.send(embed=em)
 
-    @commands.Cog.listener()
-    async def on_socket_response(self, msg):
-        self.bot.socket_receive += 1
-        if msg.get("op") != 0:
-            self.bot.socket_stats[self.bot.codes[msg.get("op")]] += 1
-        else:
-            self.bot.socket_stats[msg.get("t")] += 1
+    #@commands.Cog.listener()
+    #async def on_socket_response(self, msg):
+        #self.bot.socket_receive += 1
+        #if msg.get("op") != 0:
+            #self.bot.socket_stats[self.bot.codes[msg.get("op")]] += 1
+        #else:
+            #self.bot.socket_stats[msg.get("t")] += 1
 
     @commands.command(help="Check the socket")
     async def socket(self, ctx):
