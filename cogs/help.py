@@ -12,52 +12,28 @@ class Help(commands.Cog):
         print(f"Help Loaded")
 
 
-    @commands.command(help="Show the help menu about commands and features.", aliases=["commands"])
-    async def help(self, ctx, *, command=None):
-        if command is None:
-            return await ctx.send(f"<a:AGC_Wave:833708920086069300> To see all commands that Ami has, visit https://amibot.gg/commands\n🔎 Else use `ami help <command>` to get more info about commands.")
+	@commands.command(name='help')
+	async def _help(self, ctx, *, command: str = None):
+		"""Shows help about a command or the bot"""
+		try:
+			if command is None:
+				p = await HelpPaginator.from_bot(ctx)
+			else:
+				entity = bot.get_cog(command) or bot.get_command(command)
 
-        if len(command) >= 20:
-            return
-        command = self.bot.get_command(command)
-        if command == None:
-            return await ctx.send("<:redTick:596576672149667840> Command not found.")
-        hel = command.help
-        if not hel:
-            hel = "No help provided for this command."
-        
-        cmd_alias = command.aliases
-        if not cmd_alias:
-            cmd_alias = ["No aliases"]
+				if entity is None:
+					clean = command.replace('@', '@\u200b')
+					return await ctx.send(f'Command or category "{clean}" not found.')
+				elif isinstance(entity, commands.Command):
+					p = await HelpPaginator.from_command(ctx, entity)
+				else:
+					p = await HelpPaginator.from_cog(ctx, entity)
 
-        try:
-            if not cmd_alias[1]:
-                m = " ".join(cmd_alias)
-            else:
-                m = ", ".join(cmd_alias)
-        except IndexError:
-            m = " ".join(cmd_alias)
-            
-
-        SCmd = ""  # make an empty string to add the subcommands on
-
-        if isinstance(command, commands.Group):  # check if it has subcommands
-            for subcommmand in command.walk_commands():  # iterate through all of the command's parents/subcommands
-
-                if subcommmand.parents[0] == command:  # check if the latest parent of the subcommand is the command itself
-                    SCmd += "{0.name}, ".format(subcommmand)  # then add it in the string if it is.
-                else:  # the else statement is optional.
-                    continue
-
-        cd_mapping = command._buckets
-        cd = cd_mapping._cooldown
-        if cd:
-            s = f'{cd.rate}x{humanize.precisedelta(cd.per)} ({cd.type.name})'
-
-
-        em = discord.Embed(title=f"**ami {command.qualified_name} {command.signature}**", description = f"{hel}\n\n**Aliases**: {m}\n**Subcommands**: {SCmd or 'N/A'}\n**Cooldown**: {s if cd_mapping._cooldown else 'N/A'}", color = self.bot.color)
-        em.set_footer(text="[] = Optional | <> = Required | []... = Required (can be multiple)", icon_url=ctx.author.avatar_url)
-        await ctx.send(embed=em)
+			await p.paginate()
+		except Exception as error:
+		  print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
+		  traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+		  await ctx.send(error)
 
 
 def setup(bot):
