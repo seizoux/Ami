@@ -251,7 +251,7 @@ class ClusterBot(Ami):
                 elif command == "load":
                     if extension := data.get("extension"):
                         try:
-                            self.load_extension(extension)
+                            await self.load_extension(extension)
                             await ws.send_json(
                                 {
                                     "cmd": command,
@@ -279,7 +279,7 @@ class ClusterBot(Ami):
                 elif command == "unload":
                     if extension := data.get("extension"):
                         try:
-                            self.unload_extension(extension)
+                            await self.unload_extension(extension)
                             await ws.send_json(
                                 {
                                     "cmd": command,
