@@ -75,10 +75,16 @@ async def on_socket_response(data):
     print(data)
     print("merry christmas motherfuckers")
 
+@tasks.loop(minutes=5)
+async def status():
+    watcher = f'{humanize.intcomma(len(client.guilds))} guilds! | a;help'
+    await client.change_presence(status=discord.Status.online,activity=discord.Activity(type=discord.ActivityType.watching, name=watcher))
+
 
 @client.event
 async def on_ready():
     print(f"Name : {client.user.name}\nID : {client.user.id}\nLoading all cogs...")
+    await status.start()
 
 @client.group(invoke_without_command=True)
 @commands.is_owner()
@@ -135,7 +141,6 @@ class ClusterBot(Ami):
         log.handlers = [logging.FileHandler(f'cluster-{self.cluster_name}.log', encoding='utf-8', mode='a')]
         log.info(f'[Cluster#{self.cluster_name}] {kwargs["shard_ids"]}, {kwargs["shard_count"]}')
         self.log = log
-        self.load_extension('jishaku')
         self.loop.create_task(log_blacklist())
         self.ws_task = self.loop.create_task(self.start_ws())
         self.ws_waiter: Optional[asyncio.Future[Any]] = None
@@ -146,6 +151,10 @@ class ClusterBot(Ami):
         self.log.info(f'[Cluster#{self.cluster_name}] Ready called.')
         self.pipe.send(1)
         self.pipe.close()
+        self.load_extension('jishaku')
+        for file in os.listdir("./cogs"):
+            if file.endswith(".py"):
+                self.load_extension(f"cogs.{file[:-3]}")
 
     async def on_shard_ready(self, shard_id):
         self.log.info(f'[Cluster#{self.cluster_name}] Shard {shard_id} ready')
