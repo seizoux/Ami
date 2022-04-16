@@ -47,6 +47,7 @@ class Ami(commands.AutoShardedBot):
         intents = discord.Intents.default()
         intents.members = True
         intents.presences = True
+        intents.message_content = True
         super().__init__(
             command_prefix=["ami ", "Ami ", "a;"],
             max_messages=5000,
