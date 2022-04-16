@@ -62,13 +62,13 @@ class Logging(commands.Cog):
     async def config(self, ctx, channel: discord.TextChannel):
         if ctx.me.guild_permissions.manage_webhooks:
             if channel.permissions_for(ctx.guild.me).manage_webhooks:
-                wb = await channel.create_webhook(name='Ami Mod-Logs', avatar=await self.bot.user.avatar_url.read())
+                wb = await channel.create_webhook(name='Ami Mod Logs', avatar=await self.bot.user.avatar_url.read())
                 await self.bot.db.execute("INSERT INTO modlogs (guild_id, channel_id, webhook) VALUES ($1, $2, $3)", ctx.guild.id, channel.id, str(wb.url))
                 return await ctx.send(f"Alright, {channel.mention} has been set as modlog channel for this guild.")
             else:
-                return await ctx.reply("❌ I need the `Manage Webhooks` permission in that channel to config the modlogs.")
+                return await ctx.reply("❌ I need the `Manage Webhooks` permission in that channel to configure the mod logs.")
         else:
-            return await ctx.reply("❌ I need the `Manage Webhooks` permission to config the modlogs.")
+            return await ctx.reply("❌ I need the `Manage Webhooks` permission to configure the mod logs.")
 
     @modlog.command(help="Delete the modlog configuration for the current guild")
     async def delete(self, ctx):
@@ -77,7 +77,7 @@ class Logging(commands.Cog):
             return await ctx.reply("❌ This guild has not modlog setup.")
 
         await self.bot.db.execute("DELETE FROM modlogs WHERE guild_id = $1", ctx.guild.id)
-        await ctx.send("Modlogs config deleted for this guild, config it again to receive all events in the channel.")
+        await ctx.send("Modlog config deleted for this guild, configure it again to receive all events in the channel.")
 
     @commands.Cog.listener()
     async def on_message_delete(self, message):
