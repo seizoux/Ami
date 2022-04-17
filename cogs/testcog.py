@@ -54,6 +54,18 @@ class IpcTest(commands.Cog):
         js = await self.bot.ws_waiter
         await ctx.send("Reloaded!")
 
+    @commands.command()
+    @commands.is_owner()
+    async def testcogtest(self, ctx):
+        await self.bot.websocket.send_json(
+            {"cmd": "connected_clusters"}
+        )
+        self.bot.ws_waiter = asyncio.Future()
+        js = await self.bot.ws_waiter
+        await ctx.send(f"sent via `test` cmd: {js}")
+        await ctx.send(f"okay {self.js.shards}")
+
+
 
 def setup(bot: Ami) -> None:
     bot.add_cog(IpcTest(bot))
