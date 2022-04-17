@@ -419,10 +419,10 @@ class Utility(commands.Cog):
     @commands.command(help="Some info about Ami shards and usage.")
     async def botinfo(self, ctx):
 
-        shards_guilds = {i: {"guilds": 0, "users": 0} for i in range(len(self.bot.shards))}
-        for guild in self.bot.guilds:
-            shards_guilds[guild.shard_id]["guilds"] += 1
-            shards_guilds[guild.shard_id]["users"] += guild.member_count
+        #shards_guilds = {i: {"guilds": 0, "users": 0} for i in range(len(self.bot.shards))}
+        #for guild in self.bot.guilds:
+            #shards_guilds[guild.shard_id]["guilds"] += 1
+            #shards_guilds[guild.shard_id]["users"] += guild.member_count
 
         hdd = psutil.disk_usage('/')
         m = psutil.Process().memory_full_info()
@@ -430,11 +430,11 @@ class Utility(commands.Cog):
         total_ram = psutil.virtual_memory().total
         
         em = discord.Embed(
-            description=f"**Total Shards**: {len(self.bot.shards)}\n"
-            f"**Guild Shard**: #{ctx.guild.shard_id}\n"
-            f"**RAM Used**: {ram_usage} / {get_size(total_ram)}\n"
-            f"**Total Guilds**: {humanize.intcomma(len(self.bot.guilds))}\n"
-            f"**Total Users**: {humanize.intcomma(sum([g.member_count for g in self.bot.guilds]))}\n"
+            description=f"**Shards on this Cluster**: {len(self.bot.shards)}\n"
+            f"**Your Shard**: #{ctx.guild.shard_id}\n"
+            f"**Total RAM Used**: {ram_usage} / {get_size(total_ram)}\n"
+            f"**Total Guilds in Cluster**: {humanize.intcomma(len(self.bot.guilds))}\n"
+            f"**Total Users in Cluster**: {humanize.intcomma(sum([g.member_count for g in self.bot.guilds]))}\n"
             f"**Storage**: {get_size(hdd.used)} / {get_size(hdd.total)}\n",
             color = self.bot.color,
             timestamp = datetime.datetime.utcnow())
@@ -442,9 +442,28 @@ class Utility(commands.Cog):
         em.set_thumbnail(url=self.bot.user.avatar_url)
 
         for shard_id, shard in self.bot.shards.items():
-            em.add_field(name=f"Shard #{shard_id}", value = f"Latency: `{round(shard.latency*1000, 2)}`ms\n"
-            f"Guilds: {humanize.intcomma(shards_guilds[shard_id]['guilds'])}\n"
-            f"Users: {humanize.intcomma(shards_guilds[shard_id]['users'])}")
+            em.add_field(name=f"Shard #{shard_id}", value = f"Latency: `{round(shard.latency*1000, 2)}`ms\n")
+            #f"Guilds: {humanize.intcomma(shards_guilds[shard_id]['guilds'])}\n"
+            #f"Users: {humanize.intcomma(shards_guilds[shard_id]['users'])}")
+
+        await ctx.send(embed=em)
+
+    @commands.command(help="Some info about the clusters")
+    async def clusterinfo(self, ctx):
+        await self.bot.websocket.send_json(
+            {"cmd": "connected_clusters"}
+        )
+        self.bot.ws_waiter = asyncio.Future()
+        js = await self.bot.ws_waiter
+
+        em = discord.Embed(
+            description=f"**Total Clusters**: {len(self.bot.cluster_name)}\n"
+            f"**Your Cluster**: {self.bot.cluster_name}\n",
+            color = self.bot.color
+        )
+
+        for i, cluster_name in enumerate(self.bot.cluster_name):
+            em.add_field(name=f"{js.get('data')[i][-1]}", value = f"Latency: `{round(self.bot.latency*1000, 2)}`ms")
 
         await ctx.send(embed=em)
 
