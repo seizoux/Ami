@@ -463,7 +463,7 @@ class Utility(commands.Cog):
         )
 
         for i, cluster_name in enumerate(self.bot.cluster_name):
-            em.add_field(name=f"{js.get('data')[i][-1]}", value = f"Latency: `{round(self.bot.latency*1000, 2)}`ms")
+            em.add_field(name=f"{js.get('data')[i]}", value = f"Latency: `{round(self.bot.latency*1000, 2)}`ms")
 
         await ctx.send(embed=em)
 
